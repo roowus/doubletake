@@ -38,6 +38,7 @@ channel; the Instagram bot is optional and documented as fragile.
 | Auth | Owner password at setup + long-lived per-device tokens via QR pairing | [0010](adr/0010-auth-owner-password-device-tokens.md) |
 | Knowledge | Markdown export of every finished chat into `~/Doubletake`; FTS5 search; auto tags and collections | [0011](adr/0011-markdown-export-fts-tags.md) |
 | Structure | Every run also extracts a category and typed entities (places, recipes, products, tools, tips); collections are automatic per category and entity kind | [0014](adr/0014-structured-extraction-and-categories.md) |
+| Platforms | Server-side extractor registry, one file per platform, `web` fallback; v1: Instagram, TikTok, YouTube + Shorts, X, Reddit, AI-chat shares | [0015](adr/0015-platform-extractor-registry.md) |
 | Cost | Daily spend cap; runs queue as `capped` when hit; per-run cost shown in chat | [0012](adr/0012-cost-cap.md) |
 | License | AGPL-3.0, public repo from day one | [0013](adr/0013-agpl-public.md) |
 
@@ -70,8 +71,10 @@ channel; the Instagram bot is optional and documented as fragile.
 ## 4. Repository layout
 
 ```
-apps/server       Fastify + TS: channels/, ingest/, modes/, brains/, media/ (worker client),
-                  notify/, api/, auth/, db/ (drizzle + migrations), export/
+apps/server       Fastify + TS: api/ (REST + WebSocket), auth/, brains/ (adapters, prompts,
+                  tools), config/, db/ (drizzle + migrations, repo), export/ (Markdown),
+                  extract/ (platform extractor registry + HTTP with SSRF guard), ingest/
+                  (normalise + classify), queue/ (worker). Later: channels/, media/, notify/
 apps/web          Vite + React PWA: chats, chat view, compose, settings, pairing, service worker
 apps/mobile       Capacitor Android (ShareReceiverActivity, FCM); iOS scaffold later
 packages/shared   zod schemas + types (Item, Run, Message, events, API DTOs, untrusted wrappers)
@@ -113,12 +116,18 @@ Full column-level detail in [DATA-MODEL.md](DATA-MODEL.md).
    `deep dive`, `compare`, `research`), else one cheap classifier call through the configured
    brain returning `{ mode, question_type, needs_comments }`; default Standard
    ([Research modes](RESEARCH-MODES.md)).
-3. **Extract** in the media worker, with per-mode budgets: download (CDN URL from the IG
-   webhook first, yt-dlp second, cookies opt-in third), transcription (local Whisper family),
-   scene-change frame sampling, OCR (RapidOCR, Tesseract fallback), frame descriptions (cloud
-   via brain by default, local VLM opt-in), comments (IG Graph API, Reddit JSON, yt-dlp), page
-   text (trafilatura), AI-chat share pages (readable text). With `focus = thread:<id>` the
-   whole thread is fetched and marked primary; the rest of the comments are a sample.
+3. **Extract.** Two layers. The **platform extractor registry** in
+   `apps/server/src/extract/` (TypeScript, runs in the server, [ADR 0015](adr/0015-platform-extractor-registry.md))
+   recognises the URL, canonicalises it (tracking params stripped, short links resolved) and
+   pulls whatever text is reachable without media: captions via oEmbed or Open Graph, Reddit's
+   `.json` view, readable page text. Supported today: Instagram, TikTok, YouTube (incl. Shorts),
+   X/Twitter, Reddit, AI-chat share links, generic web. Adding a platform is one file plus one
+   registry line ([how-to](MEDIA-PIPELINE.md#adding-a-platform)). The **media worker** (M3) then
+   adds, with per-mode budgets: download (CDN URL from the IG webhook first, yt-dlp second,
+   cookies opt-in third), transcription (local Whisper family), scene-change frame sampling, OCR
+   (RapidOCR, Tesseract fallback), frame descriptions (cloud via brain by default, local VLM
+   opt-in), comments (IG Graph API, Reddit JSON, yt-dlp). With `focus = thread:<id>` the whole
+   thread is fetched and marked primary; the rest of the comments are a sample.
 4. **Research.** Build a `ResearchBrief`: system framing, untrusted content blocks, the owner's
    note, focus instructions, mode budget, tool policy. The adapter runs it, streaming
    `run_events`. Output = Markdown answer plus, when the question type calls for it, a
@@ -130,8 +139,10 @@ Full column-level detail in [DATA-MODEL.md](DATA-MODEL.md).
    `love` on the originating IG DM (nothing public for mentions), write `cost_ledger`.
 6. **Follow-up.** Default = cheap turn: same adapter, resume the session when the adapter can,
    `maxTurns` 1–3, no extraction. Escalate to a full run (Standard or Deep) when the owner taps
-   **Research this** or the model returns `{ "escalate": true }`; the session is resumed so
-   prior context carries.
+   **Research this** or the model returns `escalate: { mode, reason }`; the session is resumed
+   so prior context carries. A model-suggested escalation is surfaced as a status message, never
+   started automatically, and is dropped when it does not point at a strictly higher mode or its
+   own reason says no more research is needed (models misuse the field that way).
 
 ## 7. Brains
 
@@ -157,11 +168,32 @@ preamble for external CLI harnesses; the default adapter can be overridden per m
 
 ## 9. Clients
 
-One PWA. Chat list with unread badges, tag filter and FTS search; chat view with answer,
-claims table, sources, live run timeline over WebSocket, cost line, **Research this**, re-run
-with another mode; compose; settings (brains, Instagram connect, network, spend cap, paths,
-devices); pairing screen that shows a QR for new devices. Android wraps this in Capacitor and
-adds the native share activity and FCM. Desktop uses the installed PWA over Tailscale.
+One PWA (`apps/web`, Vite + React, served by the server at `/` from `apps/web/dist`, or by
+the Vite dev server with `/api` proxied). Chat list with unread badges, tag filter and FTS
+search; chat view with answer, entity cards, claims table, sources, live run timeline over the
+`/api/events` WebSocket, cost line, follow-up composer, **Research this** (Quick/Standard/Deep
+re-run); compose (URL or text + note + mode); `/share` receives Web Share Target requests;
+settings (status, spend vs cap, QR pairing, devices, sign out; brains/Instagram/network arrive
+with their milestones). First run asks for the owner password; other devices redeem a pairing
+code shown as a QR. Android wraps this in Capacitor and adds the native share activity and FCM.
+Desktop uses the installed PWA over Tailscale.
+
+### API surface (M1)
+
+All routes under `/api` take `Authorization: Bearer <device token>` except `health`,
+`setup/status`, `setup` (first run only), `login`, and `pair/redeem`.
+
+| route | purpose |
+|---|---|
+| `GET health`, `GET status` | liveness; brain id/model, spend today vs cap, notes dir, queue depth |
+| `POST setup`, `POST login` | create owner password once; exchange password for a device token |
+| `POST pair/start`, `POST pair/redeem`, `GET/DELETE devices[/:id]` | 10-minute single-use pairing codes; device list and revocation |
+| `POST ingest` | `{ url? , text?, note?, channel, mode? }` → `202 { itemId, chatId, runId }` |
+| `GET chats?q=&tag=`, `GET chats/:id`, `POST chats/:id/read` | list (FTS when `q`), detail with messages/runs/entities, clear unread |
+| `POST chats/:id/messages` | follow-up turn (cheap path) |
+| `POST chats/:id/research { mode?, note? }` | full re-run, session resumed |
+| `GET chats/:id/runs/:runId/events`, `POST runs/:id/cancel` | backfill run events; abort |
+| `GET events` (WebSocket, `?token=`) | `run_event` and `chat_updated` frames for live views |
 
 ## 10. Security model
 
@@ -190,7 +222,9 @@ Backup = copy `~/.doubletake` and `~/Doubletake`. See [DEPLOYMENT.md](DEPLOYMENT
 - Instagram `mentions` and `comments` webhooks under Standard Access may not fire reliably;
   polling fallback and DM-share are the mitigations (M4).
 - TTL of the signed CDN media URL in DM payloads is undocumented; download immediately (M4).
-- Claude Agent SDK result-message `subtype` names differ between doc versions; branch on
-  `is_error` and presence of `result` (M1).
+- ~~Claude Agent SDK result-message `subtype` names~~ — verified in M1 against SDK 0.3.x: the
+  adapter branches on `is_error` and the presence of `result`. New finding: a proxied or free
+  model can return `subtype: success` with an **empty** `result`; the adapter turns that into a
+  failed run with an explanatory error instead of storing a blank answer.
 - yt-dlp's Instagram extractor breaks periodically; pin the version and surface errors in chat
   (M3).

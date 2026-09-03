@@ -11,6 +11,18 @@ pnpm install && (cd workers/media && uv sync)
 pnpm dev                          # first run creates ~/.doubletake and asks for the owner password
 ```
 
+## Development
+`pnpm dev` (= `scripts/dev.sh`) loads `.env`, starts the server with `tsx watch` on
+`DOUBLETAKE_PORT` (default 7391) and the Vite dev server on 5173 with `/api` (including the
+WebSocket) proxied to the server. Open http://127.0.0.1:5173 for hot reload, or build the PWA
+with `pnpm --filter @doubletake/web build` and open the server port directly: the server serves
+`apps/web/dist` at `/` whenever that folder exists (`DOUBLETAKE_WEB_DIST` overrides the path).
+
+Server environment (all optional, see `.env.example`): `DOUBLETAKE_DATA_DIR`,
+`DOUBLETAKE_NOTES_DIR`, `DOUBLETAKE_READ_ROOTS`, `DOUBLETAKE_READ_DENY`, `DOUBLETAKE_BIND`,
+`DOUBLETAKE_PORT`, `DOUBLETAKE_PUBLIC_URL`, `DOUBLETAKE_WEB_DIST`, `DOUBLETAKE_LOG_LEVEL`,
+`DOUBLETAKE_BRAIN`, `DOUBLETAKE_BRAIN_MODEL`, `DOUBLETAKE_DAILY_CAP_USD`.
+
 ## Run as a service
 `scripts/install-service.sh` (M1) writes:
 

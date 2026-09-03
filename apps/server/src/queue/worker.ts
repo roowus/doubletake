@@ -11,6 +11,23 @@ import { extractUrl } from '../extract/registry.js';
 import type { ExtractResult } from '../extract/types.js';
 import { classifyItem } from '../ingest/classify.js';
 
+const MODE_RANK: Record<Mode, number> = { quick: 0, standard: 1, deep: 2 };
+const NO_MORE_RESEARCH =
+  /\bno (further|more|additional) (research|investigation|searching)\b|not (needed|necessary|required)\b|sufficient/i;
+
+/**
+ * Models sometimes misuse `escalate` to say "no further research needed". Only surface an
+ * offer that points at a strictly higher mode and whose reason does not negate itself.
+ */
+export function escalationIsMeaningful(
+  esc: { mode: Mode | string; reason: string },
+  current: Mode,
+): boolean {
+  const target = MODE_RANK[esc.mode as Mode];
+  if (target === undefined || target <= MODE_RANK[current]) return false;
+  return !NO_MORE_RESEARCH.test(esc.reason ?? '');
+}
+
 export interface WorkerEvents {
   run_event: (e: RunEvent) => void;
   chat_updated: (chatId: string) => void;
@@ -382,7 +399,7 @@ export class QueueWorker extends EventEmitter {
 
     // Escalation offer: surfaced as a status message; the user (or UI) decides.
     const esc = r.escalate ?? structured?.escalate;
-    if (esc) {
+    if (esc && escalationIsMeaningful(esc, run.mode as Mode)) {
       this.repo.addMessage({
         chatId,
         role: 'system',
@@ -434,6 +451,7 @@ export class QueueWorker extends EventEmitter {
         createdAt: fresh.createdAt,
         messages: messages.map((m) => ({
           role: m.role,
+          kind: m.kind,
           content: m.content,
           createdAt: m.createdAt,
         })),

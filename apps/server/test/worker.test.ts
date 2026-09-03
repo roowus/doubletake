@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { ingest } from '../src/ingest/index.js';
-import { QueueWorker } from '../src/queue/worker.js';
+import { escalationIsMeaningful, QueueWorker } from '../src/queue/worker.js';
 import { FakeBrain, tempEnv, waitFor } from './helpers.js';
 
 const env = tempEnv('dt-worker-');
@@ -65,7 +65,7 @@ describe('QueueWorker', () => {
     const files = fs.readdirSync(path.join(env.cfg.notesDir, year));
     expect(files).toHaveLength(1);
     const md = fs.readFileSync(path.join(env.cfg.notesDir, year, files[0] ?? ''), 'utf8');
-    expect(md).toContain('doubletake_id: ' + out.item.id);
+    expect(md).toContain(`doubletake_id: ${out.item.id}`);
     expect(md).toContain('Researched answer.');
     expect(md).toContain('**Widget** (tool)');
   });
@@ -139,5 +139,29 @@ describe('QueueWorker', () => {
     await waitFor(() => env.repo.getRun(out.run.id)?.status === 'failed');
     brain.delayMs = 0;
     expect(env.repo.getRun(out.run.id)?.error).toMatch(/cancelled/);
+  });
+});
+
+describe('escalationIsMeaningful', () => {
+  it('drops offers that negate themselves or do not go up a mode', () => {
+    expect(
+      escalationIsMeaningful(
+        { mode: 'standard', reason: 'Content from source; no further research needed' },
+        'quick',
+      ),
+    ).toBe(false);
+    expect(escalationIsMeaningful({ mode: 'quick', reason: 'compare more' }, 'standard')).toBe(
+      false,
+    );
+    expect(escalationIsMeaningful({ mode: 'standard', reason: 'x' }, 'standard')).toBe(false);
+    expect(escalationIsMeaningful({ mode: 'bogus', reason: 'x' }, 'quick')).toBe(false);
+  });
+  it('keeps genuine offers', () => {
+    expect(
+      escalationIsMeaningful(
+        { mode: 'deep', reason: 'Needs a price comparison across 5 vendors' },
+        'quick',
+      ),
+    ).toBe(true);
   });
 });

@@ -17,7 +17,9 @@ Rules:
    "claims": [{"claim": string, "verdict": true|false|mixed|unverified, "confidence": 0..1, "sources": [url]}],
    "recommendations": [string], "tags": [3-8 short lowercase tags],
    "escalate"?: {"mode": "standard"|"deep", "reason": string}}
-  Include \`escalate\` only when the question genuinely needs more research than this mode allows.`;
+  Include \`escalate\` ONLY when the owner's question genuinely needs more research than this mode allows
+  (more searching, more sources, a comparison you could not finish). Omit the key entirely otherwise —
+  never emit it to say that no further research is needed.`;
 
 export const OUTPUT_TEMPLATES: Record<QuestionType, string> = {
   is_it_true:

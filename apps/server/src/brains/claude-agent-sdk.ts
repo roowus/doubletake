@@ -30,6 +30,7 @@ export interface ClaudeAgentSdkConfig {
 }
 
 type EmitType = 'status' | 'tool_call' | 'tool_result' | 'text' | 'error';
+const CLASSIFY_TIMEOUT_MS = 45_000;
 const MCP_NAME = 'doubletake';
 const READ_TOOLS = ['mcp__doubletake__read_file', 'mcp__doubletake__list_dir'];
 const WRITE_TOOL = 'mcp__doubletake__write_sandbox_file';
@@ -72,6 +73,16 @@ export class ClaudeAgentSdkAdapter implements BrainAdapter {
   async classify(prompt: string, signal?: AbortSignal): Promise<string> {
     const ac = new AbortController();
     signal?.addEventListener('abort', () => ac.abort(), { once: true });
+    // A one-shot classification must never hold the queue: cap it independently of the run budget.
+    const timer = setTimeout(() => ac.abort(), CLASSIFY_TIMEOUT_MS);
+    try {
+      return await this.classifyInner(prompt, ac);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  private async classifyInner(prompt: string, ac: AbortController): Promise<string> {
     let text = '';
     const it = this.q({
       prompt,
@@ -352,6 +363,16 @@ export class ClaudeAgentSdkAdapter implements BrainAdapter {
     };
     if (m.subtype === 'success' && !m.is_error) {
       const { text, structured } = parseAnswerBlock(m.result || lastText);
+      if (!text.trim() && !structured) {
+        // A "successful" empty reply is what a misrouted or rate-limited model looks like; do not
+        // store it as an answer.
+        return {
+          ...base,
+          text: '',
+          stopReason: 'error',
+          error: `model returned no text (model=${this.cfg.model ?? 'default'}; check the brain model / API routing)`,
+        };
+      }
       return {
         ...base,
         text,

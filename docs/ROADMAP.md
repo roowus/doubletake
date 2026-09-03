@@ -3,22 +3,27 @@
 Milestones are sequential. Each has acceptance criteria that a person can check by hand;
 "done" means every criterion holds and the docs describe what shipped.
 
-## M0 — Docs before code (this phase)
+## M0 — Docs before code — DONE 2026-09-03
 
 - Repo scaffold green in CI (biome, tsc, vitest, ruff, pytest, link check).
 - Every document linked from the README exists and cross-links resolve.
 - ADRs 0001–0013 written; decisions table in `ARCHITECTURE.md` points at them.
 
-## M1 — Vertical slice
+## M1 — Vertical slice — code complete 2026-09-03, owner acceptance pending
 
 Paste a URL (or text) in the compose box → Claude Agent SDK researches it in Standard mode →
-answer appears in a chat.
+answer appears in a chat. Verified end to end against a real model (Haiku 4.5 through a local
+router): quick mode, structured answer with category, entities, tags, Markdown export, cost
+recorded. Beyond the original scope, M1 also shipped the server-side platform extractor
+registry with Instagram, TikTok, YouTube (incl. Shorts), X/Twitter, Reddit and AI-chat share
+links ([ADR 0015](adr/0015-platform-extractor-registry.md)).
 
 - `apps/server` boots, creates `~/.doubletake/doubletake.db` with migrations, serves the PWA.
 - `POST /api/ingest` creates item + chat + run; queue worker executes runs one at a time.
 - `claude-agent-sdk` adapter implements `run()` and `followUp()` with session resume;
   `canUseTool` enforces `ToolPolicy` (read roots/deny, notes-dir writes, no shell).
-- Web page extraction only (trafilatura in the worker, or a TS fallback) — no media yet.
+- Text-only extraction in the server (readable page text, oEmbed/Open Graph captions, Reddit
+  JSON) through the platform extractor registry — no media yet.
 - PWA shows chat list with unread badge, chat view with streamed run events and cost line,
   compose box, owner login and device pairing (QR).
 - Structured `Answer` parsed from the model output; category and entities stored and shown as

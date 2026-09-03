@@ -1,5 +1,7 @@
+import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 function env(name: string, fallback?: string): string | undefined {
   const v = process.env[name];
@@ -60,7 +62,14 @@ export function loadConfig(): Config {
     readRoots: list(env('DOUBLETAKE_READ_ROOTS', home)),
     readDeny: list(env('DOUBLETAKE_READ_DENY', DEFAULT_READ_DENY.join(','))),
     dailyCapUsd: Number(env('DOUBLETAKE_DAILY_CAP_USD', '5')),
-    webDist: env('DOUBLETAKE_WEB_DIST') ?? null,
+    webDist: env('DOUBLETAKE_WEB_DIST') ?? defaultWebDist(),
     logLevel: env('DOUBLETAKE_LOG_LEVEL', 'info') ?? 'info',
   };
+}
+
+/** The PWA build sits next to the server package inside the monorepo; use it when present. */
+function defaultWebDist(): string | null {
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const candidate = path.resolve(here, '../../../web/dist');
+  return fs.existsSync(path.join(candidate, 'index.html')) ? candidate : null;
 }
