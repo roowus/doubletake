@@ -24,8 +24,8 @@ echo "Optional (needed by specific milestones):"
 opt gh        "brew install gh (repo automation)"
 opt tailscale "brew install tailscale (default network path, DEPLOYMENT.md)"
 opt cloudflared "brew install cloudflared (public webhook tunnel alternative)"
-opt java      "JDK 17 for apps/mobile (Android Studio bundles one)"
-opt adb       "Android platform-tools (apps/mobile)"
+opt java      "JDK 21 for apps/mobile (Android Studio's JBR: export JAVA_HOME=\"/Applications/Android Studio.app/Contents/jbr/Contents/Home\")"
+opt adb       "Android platform-tools (apps/mobile; export ANDROID_HOME=~/Library/Android/sdk)"
 echo "Directories:"
 for d in "${DOUBLETAKE_DATA_DIR:-$HOME/.doubletake}" "${DOUBLETAKE_NOTES_DIR:-$HOME/Doubletake}"; do
   if [ -d "$d" ]; then echo "  ✓ $d"; else echo "  · $d will be created on first run"; fi

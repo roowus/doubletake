@@ -31,11 +31,15 @@ links ([ADR 0015](adr/0015-platform-extractor-registry.md)).
 - Markdown export written to `~/Doubletake` on completion.
 - Contract tests in `packages/brain-sdk` pass against the adapter with a mocked SDK.
 
-## M2 — Android share sheet + push (in progress, 2026-09-03)
+## M2 — Android share sheet + push (code complete 2026-09-03)
 
 Done: server push layer (Web Push + FCM notifiers, `NotificationHub`, `push/*` routes,
 notifications on answered/failed/capped, CORS for Capacitor); PWA service worker with push +
-click handlers and the Settings toggle. Remaining: Capacitor project, `ShareReceiverActivity`, FCM registration.
+click handlers and the Settings toggle; Capacitor 8 project in `apps/mobile` with
+`ShareReceiverActivity` and `Pairing` (Kotlin), pairing screen with server URL, pending-share
+replay, FCM registration and notification deep links in `apps/web/src/native.ts`.
+Not yet verified on a device: FCM delivery (needs a Firebase project) and the share sheet over
+real Instagram/Reddit/Chrome shares. Offline queue for the share sheet stays a v2 item.
 
 - Capacitor project builds a debug APK; QR pairing stores server URL + device token.
 - `ShareReceiverActivity` receives `text/plain` from Instagram, Reddit, Chrome, YouTube; shows

@@ -1,4 +1,5 @@
 import type { ChatDetail, ChatSummary, IngestRequest, Mode, RunEvent } from '@doubletake/shared';
+import { apiBase, mirrorToken } from './native';
 
 const TOKEN_KEY = 'doubletake.token';
 
@@ -8,6 +9,7 @@ export function getToken(): string | null {
 export function setToken(token: string | null): void {
   if (token) localStorage.setItem(TOKEN_KEY, token);
   else localStorage.removeItem(TOKEN_KEY);
+  mirrorToken(token);
 }
 
 export class ApiError extends Error {
@@ -24,7 +26,7 @@ async function call<T>(method: string, url: string, body?: unknown, auth = true)
   if (body !== undefined) headers['content-type'] = 'application/json';
   const token = getToken();
   if (auth && token) headers.authorization = `Bearer ${token}`;
-  const res = await fetch(url, {
+  const res = await fetch(apiBase() + url, {
     method,
     headers,
     ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
@@ -125,8 +127,10 @@ export function subscribeLive(onEvent: (e: LiveEvent) => void): () => void {
   const connect = () => {
     const token = getToken();
     if (!token || closed) return;
-    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-    ws = new WebSocket(`${proto}://${location.host}/api/events?token=${encodeURIComponent(token)}`);
+    const base = apiBase();
+    const origin = base ? new URL(base) : location;
+    const proto = origin.protocol === 'https:' ? 'wss' : 'ws';
+    ws = new WebSocket(`${proto}://${origin.host}/api/events?token=${encodeURIComponent(token)}`);
     ws.onmessage = (m) => {
       try {
         onEvent(JSON.parse(String(m.data)) as LiveEvent);
