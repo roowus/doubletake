@@ -52,6 +52,13 @@ export interface Status {
   dailyCapUsd: number;
   brain: string;
   notesDir: string;
+  push: { kinds: string[]; vapidPublicKey: string | null };
+}
+export interface PushSubscriptionRow {
+  id: string;
+  kind: string;
+  endpoint: string;
+  createdAt: string;
 }
 export interface Device {
   id: string;
@@ -94,6 +101,16 @@ export const api = {
     call<{ events: RunEvent[] }>('GET', `/api/chats/${chatId}/runs/${runId}/events`),
   cancelRun: (runId: string) => call<void>('POST', `/api/runs/${runId}/cancel`),
   status: () => call<Status>('GET', '/api/status'),
+  pushSubscribe: (body: {
+    kind: 'webpush' | 'fcm';
+    endpoint: string;
+    keys?: { p256dh: string; auth: string };
+  }) => call<{ id: string }>('POST', '/api/push/subscribe', body),
+  pushUnsubscribe: (endpoint: string) =>
+    call<{ removed: boolean }>('POST', '/api/push/unsubscribe', { endpoint }),
+  pushSubscriptions: () => call<PushSubscriptionRow[]>('GET', '/api/push/subscriptions'),
+  pushTest: () =>
+    call<{ sent: number; gone: number; failed: number; skipped: number }>('POST', '/api/push/test'),
 };
 
 export type LiveEvent =

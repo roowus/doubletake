@@ -10,6 +10,10 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      // Custom worker: precache + Web Push handlers (src/sw.ts).
+      strategies: 'injectManifest',
+      srcDir: 'src',
+      filename: 'sw.ts',
       includeAssets: ['icon.svg'],
       manifest: {
         name: 'Doubletake',
@@ -27,10 +31,9 @@ export default defineConfig({
           params: { title: 'title', text: 'text', url: 'url' },
         },
       },
-      workbox: {
-        // Never cache the API; the app must always talk to the live server.
-        navigateFallbackDenylist: [/^\/api\//],
-        runtimeCaching: [],
+      injectManifest: {
+        // Never precache anything under /api; the worker also denylists it for navigations.
+        globPatterns: ['**/*.{js,css,html,svg,webmanifest}'],
       },
     }),
   ],

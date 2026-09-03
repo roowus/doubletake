@@ -34,8 +34,8 @@ links ([ADR 0015](adr/0015-platform-extractor-registry.md)).
 ## M2 — Android share sheet + push (in progress, 2026-09-03)
 
 Done: server push layer (Web Push + FCM notifiers, `NotificationHub`, `push/*` routes,
-notifications on answered/failed/capped, CORS for Capacitor). Remaining: PWA service-worker
-subscription + Settings toggle, Capacitor project, `ShareReceiverActivity`, FCM registration.
+notifications on answered/failed/capped, CORS for Capacitor); PWA service worker with push +
+click handlers and the Settings toggle. Remaining: Capacitor project, `ShareReceiverActivity`, FCM registration.
 
 - Capacitor project builds a debug APK; QR pairing stores server URL + device token.
 - `ShareReceiverActivity` receives `text/plain` from Instagram, Reddit, Chrome, YouTube; shows

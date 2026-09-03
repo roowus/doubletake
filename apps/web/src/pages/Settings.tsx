@@ -1,6 +1,7 @@
 import { QRCodeSVG } from 'qrcode.react';
 import { useEffect, useState } from 'react';
 import { api, type Device, type Status, setToken } from '../api';
+import { disablePush, enablePush, pushEnabled, pushSupported } from '../push';
 import { navigate } from '../router';
 
 export function Settings() {
@@ -13,6 +14,10 @@ export function Settings() {
     qr: string;
   } | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [push, setPush] = useState<'unsupported' | 'off' | 'on' | 'busy'>(
+    pushSupported() ? 'busy' : 'unsupported',
+  );
+  const [pushMsg, setPushMsg] = useState<string | null>(null);
 
   const load = () => {
     api
@@ -25,6 +30,32 @@ export function Settings() {
       .catch(() => {});
   };
   useEffect(load, []);
+  useEffect(() => {
+    if (!pushSupported()) return;
+    pushEnabled()
+      .then((on) => setPush(on ? 'on' : 'off'))
+      .catch(() => setPush('off'));
+  }, []);
+
+  const togglePush = async () => {
+    setPushMsg(null);
+    setPush('busy');
+    try {
+      if (push === 'on') {
+        await disablePush();
+        setPush('off');
+      } else {
+        const key = status?.push.vapidPublicKey;
+        if (!key) throw new Error('The server has no Web Push key (is webpush configured?).');
+        await enablePush(key);
+        setPush('on');
+        setPushMsg('Notifications enabled on this device.');
+      }
+    } catch (e) {
+      setPush(push === 'on' ? 'on' : 'off');
+      setPushMsg(String((e as Error).message ?? e));
+    }
+  };
 
   return (
     <div className="page stack">
@@ -52,6 +83,51 @@ export function Settings() {
           </div>
         ) : (
           <div className="muted small">Loading…</div>
+        )}
+      </div>
+
+      <div className="card stack">
+        <b>Notifications</b>
+        <div className="small muted">
+          Get a push when an answer is ready. Requires HTTPS (Tailscale serve) and, on Android, the
+          installed app or PWA. The notification carries the title only, never the answer.
+        </div>
+        {push === 'unsupported' ? (
+          <div className="small muted">This browser does not support Web Push.</div>
+        ) : (
+          <div className="row">
+            <button type="button" disabled={push === 'busy'} onClick={togglePush}>
+              {push === 'on'
+                ? 'Disable on this device'
+                : push === 'busy'
+                  ? '…'
+                  : 'Enable on this device'}
+            </button>
+            {push === 'on' && (
+              <button
+                type="button"
+                className="ghost"
+                onClick={() =>
+                  api
+                    .pushTest()
+                    .then((r) =>
+                      setPushMsg(
+                        r.sent > 0
+                          ? 'Test sent.'
+                          : `Nothing sent (gone ${r.gone}, failed ${r.failed}). Try disabling and enabling again.`,
+                      ),
+                    )
+                    .catch((e) => setPushMsg(String(e.message ?? e)))
+                }
+              >
+                Send test
+              </button>
+            )}
+          </div>
+        )}
+        {pushMsg && <div className="small muted">{pushMsg}</div>}
+        {status && status.push.kinds.length > 0 && (
+          <div className="small muted">Server push: {status.push.kinds.join(', ')}</div>
         )}
       </div>
 

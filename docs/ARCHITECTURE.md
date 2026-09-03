@@ -176,8 +176,11 @@ the Vite dev server with `/api` proxied). Chat list with unread badges, tag filt
 search; chat view with answer, entity cards, claims table, sources, live run timeline over the
 `/api/events` WebSocket, cost line, follow-up composer, **Research this** (Quick/Standard/Deep
 re-run); compose (URL or text + note + mode); `/share` receives Web Share Target requests;
-settings (status, spend vs cap, QR pairing, devices, sign out; brains/Instagram/network arrive
-with their milestones). First run asks for the owner password; other devices redeem a pairing
+settings (status, spend vs cap, **Notifications** enable/disable + send test, QR pairing,
+devices, sign out; brains/Instagram/network arrive with their milestones). The service worker
+is a custom `src/sw.ts` (vite-plugin-pwa `injectManifest`): Workbox precache for the shell,
+never the API, plus `push` (shows the notification) and `notificationclick` (focuses an open
+window and navigates to `/chat/<id>`, else opens one) handlers. First run asks for the owner password; other devices redeem a pairing
 code shown as a QR. Android wraps this in Capacitor and adds the native share activity and FCM.
 Desktop uses the installed PWA over Tailscale.
 
