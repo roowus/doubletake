@@ -9,7 +9,9 @@
   "types": "./src/index.ts",
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run --passWithNoTests",
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^9.6.0",
