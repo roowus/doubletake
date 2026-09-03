@@ -38,8 +38,11 @@ notifications on answered/failed/capped, CORS for Capacitor); PWA service worker
 click handlers and the Settings toggle; Capacitor 8 project in `apps/mobile` with
 `ShareReceiverActivity` and `Pairing` (Kotlin), pairing screen with server URL, pending-share
 replay, FCM registration and notification deep links in `apps/web/src/native.ts`.
-Not yet verified on a device: FCM delivery (needs a Firebase project) and the share sheet over
-real Instagram/Reddit/Chrome shares. Offline queue for the share sheet stays a v2 item.
+Verified on a Galaxy S25 FE (2026-09-03): pairing (code and QR URL), share sheet for URL and
+text shares, failure toast + retry, unpaired share → pair → replay, no-FCM refusal in Settings
+(details in [android-share.md](channels/android-share.md)). Not yet verified: FCM delivery
+(needs a Firebase project) and shares from the real Instagram/Reddit/Chrome apps. Offline queue
+for the share sheet stays a v2 item.
 
 - Capacitor project builds a debug APK; QR pairing stores server URL + device token.
 - `ShareReceiverActivity` receives `text/plain` from Instagram, Reddit, Chrome, YouTube; shows

@@ -40,12 +40,15 @@ export function Welcome({ onAuthed }: { onAuthed: () => void }) {
     }
   }, [native]);
 
-  /** Pasting the QR URL (`https://host/?code=X`) or its JSON fills both fields at once. */
+  /**
+   * Pasting the QR URL (`https://host/?code=X`) or its JSON fills both fields at once. Only a
+   * complete payload (URL *and* code) splits; a partial `http://l` typed by hand stays put.
+   */
   function onCodeInput(raw: string) {
     const parsed = parsePairingInput(raw);
-    if (parsed.url && native) {
+    if (parsed.url && parsed.code && native) {
       setServerUrlState(parsed.url);
-      setCode(parsed.code ?? '');
+      setCode(parsed.code);
     } else setCode(raw);
   }
 
