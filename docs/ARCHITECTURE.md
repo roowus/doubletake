@@ -10,6 +10,18 @@ Turn "I saw something while scrolling" into a researched, personalised answer de
 asynchronously by push notification, with a per-item chat for follow-ups. One owner per
 instance, self-hosted on the owner's daily laptop.
 
+
+### Where this sits
+
+Surveyed 2026-09-03 against 31 products. Capture bots (SaveToList) extract into lists but
+never research; summarisers (SuperBrain, reel-summary apps) stop at a transcript; archives
+(Karakeep, Raindrop, Readwise) keep things findable but not answered; Recall has library chat
+but no reels and no local files. Doubletake sells **the answer**, keeps SaveToList-style
+structured extraction as a by-product of every run, treats the comment thread as a first-class
+object, reads the owner's files, and integrates with archives (Markdown export now, Karakeep
+import and an MCP server later) rather than replacing them. The share sheet is the primary
+channel; the Instagram bot is optional and documented as fragile.
+
 ## 2. Decisions table
 
 | Area | Decision | ADR |
@@ -25,6 +37,7 @@ instance, self-hosted on the owner's daily laptop.
 | Network | Bind loopback; Tailscale serve by default; Cloudflare Tunnel or Tailscale Funnel only for the IG webhook path | [0009](adr/0009-networking.md) |
 | Auth | Owner password at setup + long-lived per-device tokens via QR pairing | [0010](adr/0010-auth-owner-password-device-tokens.md) |
 | Knowledge | Markdown export of every finished chat into `~/Doubletake`; FTS5 search; auto tags and collections | [0011](adr/0011-markdown-export-fts-tags.md) |
+| Structure | Every run also extracts a category and typed entities (places, recipes, products, tools, tips); collections are automatic per category and entity kind | [0014](adr/0014-structured-extraction-and-categories.md) |
 | Cost | Daily spend cap; runs queue as `capped` when hit; per-run cost shown in chat | [0012](adr/0012-cost-cap.md) |
 | License | AGPL-3.0, public repo from day one | [0013](adr/0013-agpl-public.md) |
 
@@ -84,6 +97,8 @@ Full column-level detail in [DATA-MODEL.md](DATA-MODEL.md).
 - **run**: one brain execution with mode, adapter, model, status, cost, tokens; **run_event**s
   stream its steps to the UI.
 - **artifact**: files the brain wrote into the notes dir during a run.
+- **entity**: a typed thing extracted from the item (place, recipe, product, tool, tip, …) with
+  a free-form attribute map; items also carry one `category`.
 - **tag**, **collection**, **device**, **push_subscription**, **ig_account**, **ig_event**,
   **cost_ledger**, **settings**, and the `items_fts` FTS5 index.
 
@@ -107,7 +122,9 @@ Full column-level detail in [DATA-MODEL.md](DATA-MODEL.md).
 4. **Research.** Build a `ResearchBrief`: system framing, untrusted content blocks, the owner's
    note, focus instructions, mode budget, tool policy. The adapter runs it, streaming
    `run_events`. Output = Markdown answer plus, when the question type calls for it, a
-   structured `Verdict { summary, claims[], recommendations[], tags[] }`.
+   structured `Answer { summary, category, entities[], claims[], recommendations[], tags[] }`.
+   Entities are always extracted, even in `save_for_later`, so a run with no question still
+   files the thing it saw into the right collection ([ADR 0014](adr/0014-structured-extraction-and-categories.md)).
 5. **Finish.** Store the message, bump `unread_count`, export
    `~/Doubletake/<yyyy>/<yyyy-mm-dd> <slug>.md` with frontmatter, send Web Push + FCM, react
    `love` on the originating IG DM (nothing public for mentions), write `cost_ledger`.

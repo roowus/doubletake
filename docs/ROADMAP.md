@@ -21,6 +21,8 @@ answer appears in a chat.
 - Web page extraction only (trafilatura in the worker, or a TS fallback) — no media yet.
 - PWA shows chat list with unread badge, chat view with streamed run events and cost line,
   compose box, owner login and device pairing (QR).
+- Structured `Answer` parsed from the model output; category and entities stored and shown as
+  cards under the answer; tags and category in export frontmatter.
 - Markdown export written to `~/Doubletake` on completion.
 - Contract tests in `packages/brain-sdk` pass against the adapter with a mocked SDK.
 
@@ -63,13 +65,19 @@ answer appears in a chat.
 
 ## M6 — Search, tags, collections
 
-- FTS5 over title, note, transcript, OCR, answers; search UI.
-- Auto tags from the run's `tags[]`; collections as saved tag queries; manual tags.
-- Re-export on edit; Obsidian-friendly frontmatter stable.
+- FTS5 over title, note, transcript, OCR, answers, entities; search UI.
+- Auto tags from the run's `tags[]`; auto collections per category and entity kind seeded at
+  first boot; manual tags and manual collections.
+- Entity views per kind: places list with map links, recipes with ingredients, products with
+  price and link, tools with install line.
+- Transcript and OCR visible in a tab of the chat view (the one thing reel-summariser apps
+  get right).
+- Re-export on edit; Obsidian-friendly frontmatter stable, entities as frontmatter arrays.
 
 ## Later (not scheduled)
 
 Telegram and ntfy notification channels · iOS share extension · tailscale multi-device
 (worker on another machine, shared data dir) · MCP server exposing the library to other
-agents · Karakeep / Memos import and export · structured answer templates per question type ·
-digest notifications (batch quiet-hours pushes).
+agents · Karakeep / Memos import and export · shareable read-only collection pages (SaveToList's
+shared lists) · cross-library chat ("what did I save about ski wax?") over FTS, Recall-style ·
+map view over place entities · digest notifications (batch quiet-hours pushes).
