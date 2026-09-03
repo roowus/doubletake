@@ -32,6 +32,38 @@ Other ops: `ping`, `describe_frames` (only when `DOUBLETAKE_VISION=local`), `fet
 (re-fetch for Deep escalation), `shutdown`. The server restarts the worker on crash and fails
 the in-flight run with `retryable: true`.
 
+## Platform extractors (server side, M1)
+
+Before the media worker exists (and always, as the first step), the server's extractor
+registry in `apps/server/src/extract/` turns a shared URL into text the brain can use. Each
+extractor implements `PlatformExtractor { platform, match(url), canonicalize(url), extract(url, ctx) }`;
+`ctx.fetchText` is the only network access and carries the SSRF guard and size cap. The first
+extractor whose `match` returns true wins; `web` is registered last as the fallback.
+
+| platform | matches | canonical form | text sources without media | notes |
+|---|---|---|---|---|
+| instagram | `instagram.com/{p,reel,reels,tv}/<code>` (optional `/<user>/` prefix) | `https://www.instagram.com/<kind>/<code>/` | Open Graph caption/title from the public page (often a login wall → warning) | media, transcript and comments arrive with M3/M4 |
+| tiktok | `tiktok.com/@user/video|photo/<id>`, `/v/<id>`, `/embed/v2/<id>`, `vm.`/`vt.` short links | `https://www.tiktok.com/@<user>/video/<id>` | official oEmbed (title = caption, author) | short links are resolved by one HEAD-like fetch first |
+| youtube | `youtube.com/watch?v=`, `/shorts/<id>`, `/embed/`, `/live/`, `/v/`, `youtu.be/<id>`, music/mobile hosts | `https://www.youtube.com/watch?v=<id>` or `https://www.youtube.com/shorts/<id>` | oEmbed (title, channel); `short: true` flag stored | Shorts keep the `/shorts/` form so the UI can label them and the worker can skip caption download for very short clips |
+| x | `x.com|twitter.com/<user>/status/<id>`, also `fxtwitter`/`vxtwitter`/`fixupx` mirrors | `https://x.com/<user>/status/<id>` | `publish.twitter.com/oembed` (tweet text, author) | quote tweets and threads are M3 (syndication JSON) |
+| reddit | `reddit.com/r/<sub>/comments/<id>`, `/comments/<id>`, `/s/<id>` share links, `redd.it/<id>` | `https://www.reddit.com/r/<sub>/comments/<id>/` | public `.json` view: title, self text, capped comment tree | already covers `focus=comments` without the worker |
+| aichat | `gemini.google.com/share/…`, `chatgpt.com/share/…`, `claude.ai/share/…` | as given, tracking stripped | readable page text | no login; treated as a transcript of the shared chat |
+| web | anything else `http(s)` | tracking params stripped | readable text + Open Graph description | fallback |
+
+All extractors strip the common tracking parameters (`utm_*`, `igsh`, `si`, `fbclid`, `s`, `t`
+on X, …) so dedupe on `canonical_url` works across share sheets.
+
+### Adding a platform
+
+1. Create `apps/server/src/extract/platforms/<name>.ts` exporting a `PlatformExtractor`. Use
+   `_shared.ts` helpers (`stripTracking`, `fetchOEmbed`, `stripHtml`, `result`, `MEDIA_LATER`).
+   `extract` must not throw on partial failure: push a human-readable line into `warnings`
+   instead; it is shown in the chat.
+2. Add the id to the `Platform` enum in `packages/shared/src/schemas.ts`.
+3. Register it in `apps/server/src/extract/registry.ts` **above** `webExtractor`.
+4. Add a row to the table above and, if the worker needs a download recipe, to the Download
+   table below. Add a `match`/`canonicalize` unit test next to the existing ones.
+
 ## Stages
 
 ### Download
@@ -40,7 +72,9 @@ Order of preference per platform:
 | platform | 1st | 2nd | 3rd |
 |---|---|---|---|
 | instagram | signed CDN URL from the DM webhook (`hints.cdn_url`; TTL undocumented, fetch immediately) | `yt-dlp` (pinned ≥ 2026.08.19) anonymous | `yt-dlp --cookies-from-browser <browser>` if `DOUBLETAKE_YTDLP_COOKIES_FROM_BROWSER` is set |
-| youtube | `yt-dlp` with `--write-subs --write-auto-subs` (skip transcription if captions exist) | | |
+| tiktok | `yt-dlp` anonymous (resolves `vm.`/`vt.` short links first) | `yt-dlp --cookies-from-browser` opt-in | |
+| youtube (videos and Shorts) | `yt-dlp` with `--write-subs --write-auto-subs` (skip transcription if captions exist) | | |
+| x | `yt-dlp` for native video; images via the syndication CDN URLs in the tweet metadata | | |
 | reddit | `<permalink>.json` for post + comments; `yt-dlp` for v.redd.it video | | |
 | web / aichat | HTTP fetch + `trafilatura` readable text (AI share pages: gemini.google.com/share, chatgpt.com/share, claude.ai/share are ordinary pages; extract turns by their DOM roles when recognisable) | | |
 

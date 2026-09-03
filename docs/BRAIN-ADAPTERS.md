@@ -97,9 +97,22 @@ Uses `@anthropic-ai/claude-agent-sdk` `query({ prompt, options })`.
 - Session id: captured from the first system/init message *inside* the async iterator loop,
   before any `catch`, so a failed run still yields a resumable session.
 - Result: branch on `is_error` and presence of `result`; read `total_cost_usd`, `usage`,
-  `modelUsage`. Subtype names differ across SDK doc versions (unverified which is current).
+  `modelUsage` (verified against SDK 0.3.x in M1). A `success` result whose text is empty and
+  carries no structured block is reported as `stopReason: 'error'` with the message "model
+  returned no text" — proxies (9Router, rewter, …) routing to a free or misconfigured model do
+  exactly this, and a blank answer stored as success is worse than a visible failure.
 - `describeImages`: a one-turn `query` with image content blocks, no tools.
-- `classify`: one-turn `query` with `maxTurns: 1`, no tools, fast model.
+- `classify`: one-turn `query` with `maxTurns: 1`, no tools, fast model, hard 45 s timeout
+  independent of the run budget (a hung classifier must not stall the queue).
+- Model: `DOUBLETAKE_BRAIN_MODEL` is passed as `options.model`; empty means the SDK/CLI default.
+  `ANTHROPIC_BASE_URL` and `ANTHROPIC_API_KEY` are inherited by the SDK subprocess, so a local
+  router works, but pick a model that actually answers there (the smoke test used
+  `cc/claude-haiku-4-5-20251001`).
+- Prompt contract (`apps/server/src/brains/prompts.ts`): the model ends every reply with a
+  fenced `answer` JSON block (`summary`, `category`, `entities`, `claims`, `recommendations`,
+  `tags`, optional `escalate {mode, reason}`). `escalate` may only be set when more research is
+  genuinely needed; the worker additionally ignores offers that do not go up a mode or whose
+  reason negates itself.
 
 ### headless-cli
 

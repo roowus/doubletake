@@ -12,7 +12,7 @@ JSON columns are validated with zod schemas from `packages/shared` on read and w
 | id | text pk | ULID |
 | source_url | text | as shared (may be a share-redirect) |
 | canonical_url | text | resolved permalink; null for free text |
-| platform | text | `instagram` · `reddit` · `youtube` · `web` · `aichat` · `text` |
+| platform | text | `instagram` · `tiktok` · `youtube` (incl. Shorts) · `x` · `reddit` · `aichat` · `web` · `text` — the id of the extractor that claimed the URL |
 | channel | text | `android_share` · `compose` · `ig_dm` · `ig_mention` · `web_share_target` |
 | note | text | the owner's question or remark |
 | focus | text | `whole` · `comments` · `thread:<comment_id>` |

@@ -13,7 +13,7 @@ export interface ExportInput {
   costUsd: number | null;
   createdAt: string;
   /** Conversation in order: the answer first, then follow-ups. */
-  messages: { role: string; content: string; createdAt: string }[];
+  messages: { role: string; kind?: string; content: string; createdAt: string }[];
   structured: Answer | null;
 }
 
@@ -68,6 +68,8 @@ export function exportItemMarkdown(input: ExportInput): string {
   if (s?.summary) body.push(`**Summary:** ${s.summary}`, '');
 
   for (const m of input.messages) {
+    // The first user message is the owner note already rendered above.
+    if (m.role === 'user' && m.kind === 'question') continue;
     if (m.role === 'user')
       body.push(`## Follow-up (${m.createdAt.slice(0, 16).replace('T', ' ')})`, '', m.content, '');
     else body.push(m.content, '');

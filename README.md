@@ -6,7 +6,7 @@ You are scrolling. A reel says "use this Claude skill when vibe coding", a comme
 
 Doubletake is **self-hosted** (it runs on the laptop you already work on), **open source** (AGPL-3.0), and built for **one owner per instance**.
 
-> Status: **docs-before-code**. The design is complete and documented; the first runnable milestone (M1) has not started. See [docs/ROADMAP.md](docs/ROADMAP.md).
+> Status: **M1 vertical slice runs** (compose a URL or text → Claude Agent SDK researches it → chat with entity cards, cost line, follow-ups, Markdown export). No media pipeline, share sheet, or Instagram channel yet. See [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## The 60-second flow
 
@@ -41,14 +41,22 @@ or tool in the post into categorised collections, even when you asked nothing.
 - [Deployment](docs/DEPLOYMENT.md) (macOS launchd, Linux systemd, Tailscale, tunnels)
 - [Roadmap](docs/ROADMAP.md) · [Contributing](CONTRIBUTING.md)
 
-## Quick start (will work from M1)
+## Quick start
 
 ```sh
 git clone https://github.com/roowus/doubletake && cd doubletake
 scripts/doctor.sh              # checks node 22, pnpm 10, uv, ffmpeg
-cp .env.example .env           # set your brain credentials
-pnpm install && pnpm dev
+cp .env.example .env           # set your brain credentials (ANTHROPIC_API_KEY or a logged-in `claude`)
+pnpm install
+pnpm --filter @doubletake/web build   # the server serves the built PWA at /
+pnpm --filter @doubletake/server dev  # http://127.0.0.1:7391 — first visit sets the owner password
 ```
+
+`pnpm dev` runs the server and the Vite dev server (hot reload on :5173) together.
+
+Supported link types today: Instagram posts/reels, TikTok, YouTube videos and Shorts,
+X/Twitter posts, Reddit threads, Gemini/ChatGPT/Claude share links, any web page, or plain
+text. Adding a platform is one file; see [the media pipeline doc](docs/MEDIA-PIPELINE.md#adding-a-platform).
 
 ## Requirements
 
