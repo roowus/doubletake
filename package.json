@@ -1,0 +1,27 @@
+{
+  "name": "doubletake",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Share it now, get a researched answer later. Self-hosted research assistant for things you see while scrolling.",
+  "license": "AGPL-3.0-only",
+  "packageManager": "pnpm@10.26.2",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "scripts/dev.sh",
+    "doctor": "scripts/doctor.sh",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "test": "pnpm -r --if-present test",
+    "py:lint": "cd workers/media && uv run ruff check . && uv run ruff format --check .",
+    "py:test": "cd workers/media && uv run pytest -q",
+    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm py:lint && pnpm py:test"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.12",
+    "typescript": "^5.9.0",
+    "vitest": "^3.2.0"
+  }
+}
