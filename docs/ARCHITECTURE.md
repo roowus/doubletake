@@ -34,6 +34,7 @@ channel; the Instagram bot is optional and documented as fragile.
 | Instagram | Official "Instagram API with Instagram Login" on a shadow Business account; DM share + comment @mention; mention semantics set `focus`; bot silent in comments | [0006](adr/0006-instagram-official-api-and-mention-semantics.md) |
 | Mobile | One PWA; Android via Capacitor with a custom translucent share activity; desktop = installed PWA; iOS/Windows lower priority | [0007](adr/0007-capacitor-and-custom-share-activity.md) |
 | Notifications | Web Push (VAPID) + Android FCM + IG reaction on the source DM; channel interface for Telegram/ntfy later | [0008](adr/0008-notifications.md) |
+| Push keys | VAPID pair auto-generated into `settings` unless env-provided; FCM HTTP v1 with a hand-rolled service-account JWT; `gone` prunes, 8 failures prune | [0016](adr/0016-push-keys-and-fcm-http-v1.md) |
 | Network | Bind loopback; Tailscale serve by default; Cloudflare Tunnel or Tailscale Funnel only for the IG webhook path | [0009](adr/0009-networking.md) |
 | Auth | Owner password at setup + long-lived per-device tokens via QR pairing | [0010](adr/0010-auth-owner-password-device-tokens.md) |
 | Knowledge | Markdown export of every finished chat into `~/Doubletake`; FTS5 search; auto tags and collections | [0011](adr/0011-markdown-export-fts-tags.md) |
@@ -156,7 +157,9 @@ preamble for external CLI harnesses; the default adapter can be overridden per m
 
 - **Android share sheet** ([guide](channels/android-share.md)): translucent native activity,
   compact sheet with URL preview, note, mode chips; posts to `/api/ingest` with the device token
-  and finishes without booting the WebView.
+  and finishes without booting the WebView. Finished, failed and capped runs push a notification
+  (`NotificationHub`, [ADR 0016](adr/0016-push-keys-and-fcm-http-v1.md)) to every subscribed
+  device: FCM for the Android app, Web Push for installed PWAs.
 - **In-app compose**: URL or free text plus note and mode.
 - **Instagram** ([guide](channels/instagram-setup.md)): DM share (reliable path) and comment
   @mention (top-level ⇒ `focus=comments`; reply inside a thread ⇒ `focus=thread:<parent_id>`).
@@ -178,14 +181,14 @@ with their milestones). First run asks for the owner password; other devices red
 code shown as a QR. Android wraps this in Capacitor and adds the native share activity and FCM.
 Desktop uses the installed PWA over Tailscale.
 
-### API surface (M1)
+### API surface (M1 + M2)
 
 All routes under `/api` take `Authorization: Bearer <device token>` except `health`,
 `setup/status`, `setup` (first run only), `login`, and `pair/redeem`.
 
 | route | purpose |
 |---|---|
-| `GET health`, `GET status` | liveness; brain id/model, spend today vs cap, notes dir, queue depth |
+| `GET health`, `GET status` | liveness; brain id/model, spend today vs cap, notes dir, `push: { kinds, vapidPublicKey }` |
 | `POST setup`, `POST login` | create owner password once; exchange password for a device token |
 | `POST pair/start`, `POST pair/redeem`, `GET/DELETE devices[/:id]` | 10-minute single-use pairing codes; device list and revocation |
 | `POST ingest` | `{ url? , text?, note?, channel, mode? }` → `202 { itemId, chatId, runId }` |
@@ -194,6 +197,10 @@ All routes under `/api` take `Authorization: Bearer <device token>` except `heal
 | `POST chats/:id/research { mode?, note? }` | full re-run, session resumed |
 | `GET chats/:id/runs/:runId/events`, `POST runs/:id/cancel` | backfill run events; abort |
 | `GET events` (WebSocket, `?token=`) | `run_event` and `chat_updated` frames for live views |
+| `POST push/subscribe { kind: webpush\|fcm, endpoint, keys? }`, `POST push/unsubscribe { endpoint }`, `GET push/subscriptions`, `POST push/test` | register this device's push endpoint (webpush needs `keys`; 409 when the kind is not configured on the server); list/remove; send a test notification to this device only |
+
+CORS is enabled for `capacitor://localhost`, `https://localhost` and `http://localhost` so the
+Capacitor WebView can call the API on a different origin; every other origin is same-origin only.
 
 ## 10. Security model
 

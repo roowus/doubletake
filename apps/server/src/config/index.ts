@@ -46,6 +46,12 @@ export interface Config {
   dailyCapUsd: number;
   webDist: string | null;
   logLevel: string;
+  /** Web Push VAPID keys; when unset, keys are generated once and stored in settings. */
+  vapidPublicKey: string | null;
+  vapidPrivateKey: string | null;
+  vapidSubject: string;
+  /** Firebase service-account JSON for FCM; null disables FCM (Web Push still works). */
+  fcmServiceAccountPath: string | null;
 }
 
 export function loadConfig(): Config {
@@ -64,6 +70,11 @@ export function loadConfig(): Config {
     dailyCapUsd: Number(env('DOUBLETAKE_DAILY_CAP_USD', '5')),
     webDist: env('DOUBLETAKE_WEB_DIST') ?? defaultWebDist(),
     logLevel: env('DOUBLETAKE_LOG_LEVEL', 'info') ?? 'info',
+    vapidPublicKey: env('VAPID_PUBLIC_KEY') ?? null,
+    vapidPrivateKey: env('VAPID_PRIVATE_KEY') ?? null,
+    vapidSubject:
+      env('VAPID_SUBJECT', 'mailto:doubletake@localhost') ?? 'mailto:doubletake@localhost',
+    fcmServiceAccountPath: expandHome(env('FCM_SERVICE_ACCOUNT_PATH') ?? '') || null,
   };
 }
 

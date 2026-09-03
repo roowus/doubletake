@@ -37,3 +37,7 @@ apps/mobile/ios/App/Pods/
 .idea/
 .vscode/*
 !.vscode/extensions.json
+
+# firebase client config (per-install, contains project ids)
+google-services.json
+GoogleService-Info.plist

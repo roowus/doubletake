@@ -1,11 +1,17 @@
 # Android share sheet and push
 
 ## Pairing
-1. Open the Doubletake PWA on the laptop → Settings → Devices → **Pair new device**. A QR is
-   shown containing `{ "url": "https://<host>.ts.net", "code": "<6-digit, 5-minute>" }`.
-2. Install the Android app (debug APK from `apps/mobile`, later a release). First screen scans
-   the QR (or you type URL + code). The app calls `POST /api/devices/pair` and stores the
-   returned long-lived token and the URL in Capacitor Preferences.
+1. Open the Doubletake PWA on the laptop → Settings → **Pair a device** → **Show pairing code**.
+   The server (`POST /api/pair/start`) mints a 6-character, 10-minute, single-use code; the
+   page shows it as text and as a QR whose payload is the URL
+   `https://<host>.ts.net/?code=ABC123` (a plain URL, so any camera app opens the web pairing
+   screen too). The same response carries `qr: {"url","code"}` as JSON for clients that prefer
+   it; the Android app accepts either form.
+2. Install the Android app (debug APK from `apps/mobile`, later a release). Its first screen
+   scans the QR or takes URL + code typed by hand, calls `POST /api/pair/redeem`
+   `{ code, deviceName, platform: "android" }` and stores the returned long-lived token and the
+   server URL in Capacitor Preferences. Tokens are per device and revocable from Settings →
+   Devices.
 3. The phone must reach the server: install Tailscale on the phone and join the same tailnet.
 
 ## Share sheet
@@ -16,37 +22,63 @@
   floats over Instagram.
 - Extracts the first URL from `EXTRA_TEXT` (Instagram shares reels as a `text/plain` URL;
   Reddit and YouTube likewise; Chrome sends the page URL and title).
-- Renders a compact Material bottom sheet: detected URL or file name, a one-line note field,
+- Renders a compact bottom sheet: detected URL or file name, a one-line note field,
   mode chips **Auto · Quick · Standard · Deep**, and **Send**.
 - On Send: `POST {url}/api/ingest` with `Authorization: Bearer <device token>`, body
-  `{ url?, text?, note, modeHint, channel: "android_share" }` (files are uploaded as
-  multipart). Shows a toast and calls `finish()`. It never starts `MainActivity`/the WebView.
+  `{ url?, text?, note?, modeHint, channel: "android_share" }`. Shows a toast and calls
+  `finish()`. It never starts `MainActivity`/the WebView. Image and video files are accepted by
+  the intent filter but uploaded only from M3 onwards (the media worker); until then the sheet
+  says so and offers to send the text/URL part.
 - If unpaired: opens the main app to the pairing screen with the share preserved.
-- Failures are queued locally (Room table) and retried by a WorkManager job, so sharing works
-  offline and drains when the tailnet is reachable.
+- If the server is unreachable the sheet shows the error and keeps the text; an offline queue
+  (Room + WorkManager) is a roadmap item, not in M2.
 
 Alternative documented in ADR 0007: `@capgo/capacitor-share-target` routes through the WebView
 and is fine if native code is unwanted; Doubletake keeps the native activity for speed.
 
 ## Web Share Target (no Capacitor)
 `apps/web` manifest declares
-`"share_target": { "action": "/share", "method": "POST", "enctype": "multipart/form-data", "params": { "title": "title", "text": "text", "url": "url" } }`
-so an installed PWA on Android Chrome or desktop Chrome/Edge can receive shares. The `/share`
-route shows the same compact sheet in web form.
+`"share_target": { "action": "/share", "method": "GET", "params": { "title": "title", "text": "text", "url": "url" } }`
+so an installed PWA on Android Chrome or desktop Chrome/Edge can receive text and link shares.
+The `/share` route shows the compose sheet pre-filled (`channel: "web_share_target"`). GET is
+enough for text; file shares would need POST + multipart and come with M3.
 
 ## Push
+Every finished, failed or capped run sends one notification to each subscription of every
+non-revoked device ([ADR 0016](../adr/0016-push-keys-and-fcm-http-v1.md)). Payloads are
+`{ title, body, chatId, url, tag }`: the title is the item title or note, the body a fixed
+phrase, `url` the deep link `/chat/<id>`; the answer text never leaves the server.
+
+- **API**: `POST /api/push/subscribe { kind: "webpush" | "fcm", endpoint, keys? }` registers
+  the calling device's endpoint (`keys: { p256dh, auth }` is required for `webpush`; `409` when
+  the server has no notifier of that kind), `POST /api/push/unsubscribe { endpoint }`,
+  `GET /api/push/subscriptions` (this device), `POST /api/push/test` (sends to this device only;
+  use it after pairing). `GET /api/status` returns `push.kinds` and `push.vapidPublicKey`.
 - **FCM**: create a Firebase project, add an Android app with the Capacitor `appId`, download
-  `google-services.json` into `apps/mobile/android/app/` (git-ignored), and put the Firebase
-  service-account JSON path in `FCM_SERVICE_ACCOUNT_PATH`. The app registers with
-  `@capacitor/push-notifications` and posts the token to `POST /api/push/subscribe`
-  (`kind: "fcm"`). The server sends **notification** messages (title, body, `data.chatId`) so
-  delivery works when the app is killed; tapping opens `/chat/<id>`.
-- **Web Push**: the PWA's service worker subscribes with the VAPID public key and posts the
-  subscription (`kind: "webpush"`). Works on desktop Chrome/Edge/Firefox and on Android Chrome
-  for the installed PWA. Generate keys once: `pnpm --filter @doubletake/server exec web-push generate-vapid-keys`.
-- Payloads never contain answer text; only the item title and chat id.
+  `google-services.json` into `apps/mobile/android/app/` (git-ignored), and point
+  `FCM_SERVICE_ACCOUNT_PATH` at the Firebase service-account JSON. The app registers with
+  `@capacitor/push-notifications` and posts the registration token as
+  `{ kind: "fcm", endpoint: <token> }`. The server sends **notification** messages (title,
+  body, `data.chatId`, `data.url`, Android channel `doubletake`, high priority, collapse key
+  `chat-<id>`) so delivery works when the app is killed; tapping opens `/chat/<id>`.
+- **Web Push**: the PWA's service worker subscribes with `push.vapidPublicKey` and posts the
+  subscription as `{ kind: "webpush", endpoint, keys }`. Works on desktop Chrome/Edge/Firefox
+  and on Android Chrome for the installed PWA. Keys are generated by the server on first boot;
+  set `VAPID_*` only to bring your own.
+- Subscriptions reported gone (404/410, `UNREGISTERED`) are deleted at once; eight consecutive
+  failures also delete. Clients re-subscribe on open when their stored endpoint is missing.
 
 ## Build
-JDK 17, Android SDK 35, Capacitor 7. `pnpm --filter @doubletake/web build && npx cap sync android && npx cap open android`.
-iOS: Capacitor iOS target plus a Share Extension is planned; untested until someone with an
-iPhone picks it up.
+JDK 17 and Android SDK 35, Capacitor 7. On this Mac Android Studio's JDK is not the default
+`java`, so:
+
+```sh
+export JAVA_HOME=$(/usr/libexec/java_home -v 17)
+export ANDROID_HOME=~/Library/Android/sdk
+pnpm --filter @doubletake/web build
+cd apps/mobile && npx cap sync android && (cd android && ./gradlew assembleDebug)
+adb install -r android/app/build/outputs/apk/debug/app-debug.apk
+```
+
+`scripts/doctor.sh` checks for both. iOS: Capacitor iOS target plus a Share Extension is
+planned; untested until someone with an iPhone picks it up.

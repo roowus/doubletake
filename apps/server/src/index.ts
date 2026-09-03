@@ -5,6 +5,7 @@ import { createBrain } from './brains/registry.js';
 import { loadConfig } from './config/index.js';
 import { openDb } from './db/index.js';
 import { Repo } from './db/repo.js';
+import { createHub } from './notify/index.js';
 import { QueueWorker } from './queue/worker.js';
 
 export { buildServer } from './api/server.js';
@@ -27,12 +28,14 @@ export async function main(): Promise<void> {
   const repo = new Repo(db, sqlite);
   const brain = createBrain(cfg);
   const worker = new QueueWorker(repo, brain, cfg);
-  const app = await buildServer({ cfg, repo, worker, brain });
+  const { hub, vapid } = createHub(cfg, repo);
+  worker.notifier = hub;
+  const app = await buildServer({ cfg, repo, worker, brain, hub, vapidPublicKey: vapid.publicKey });
 
   worker.start();
   await app.listen({ host: cfg.bind, port: cfg.port });
   app.log.info(
-    `Doubletake listening on http://${cfg.bind}:${cfg.port} (brain: ${brain.id}, data: ${cfg.dataDir})`,
+    `Doubletake listening on http://${cfg.bind}:${cfg.port} (brain: ${brain.id}, push: ${hub.kinds().join('+') || 'none'}, data: ${cfg.dataDir})`,
   );
 
   const shutdown = async () => {

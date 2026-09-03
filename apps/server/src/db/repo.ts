@@ -421,4 +421,86 @@ export class Repo {
   revokeDevice(id: string) {
     this.db.update(s.devices).set({ revokedAt: nowIso() }).where(eq(s.devices.id, id)).run();
   }
+
+  // ---- push subscriptions ----
+
+  upsertPushSubscription(deviceId: string, kind: string, endpoint: string, keys: string | null) {
+    const existing = this.db
+      .select()
+      .from(s.pushSubscriptions)
+      .where(eq(s.pushSubscriptions.endpoint, endpoint))
+      .get();
+    if (existing) {
+      this.db
+        .update(s.pushSubscriptions)
+        .set({ deviceId, kind, keys, failedCount: 0 })
+        .where(eq(s.pushSubscriptions.id, existing.id))
+        .run();
+      return { ...existing, deviceId, kind, keys, failedCount: 0 };
+    }
+    const row: typeof s.pushSubscriptions.$inferInsert = {
+      id: newId(),
+      deviceId,
+      kind,
+      endpoint,
+      keys,
+      failedCount: 0,
+      createdAt: nowIso(),
+    };
+    this.db.insert(s.pushSubscriptions).values(row).run();
+    return row;
+  }
+  listPushSubscriptions() {
+    // Revoked devices keep their rows (cascade only on delete) but must not be notified.
+    return this.db
+      .select({
+        id: s.pushSubscriptions.id,
+        deviceId: s.pushSubscriptions.deviceId,
+        kind: s.pushSubscriptions.kind,
+        endpoint: s.pushSubscriptions.endpoint,
+        keys: s.pushSubscriptions.keys,
+        failedCount: s.pushSubscriptions.failedCount,
+      })
+      .from(s.pushSubscriptions)
+      .innerJoin(s.devices, eq(s.devices.id, s.pushSubscriptions.deviceId))
+      .where(sql`${s.devices.revokedAt} IS NULL`)
+      .all();
+  }
+  listPushSubscriptionsForDevice(deviceId: string) {
+    return this.db
+      .select()
+      .from(s.pushSubscriptions)
+      .where(eq(s.pushSubscriptions.deviceId, deviceId))
+      .all();
+  }
+  deletePushSubscription(id: string) {
+    this.db.delete(s.pushSubscriptions).where(eq(s.pushSubscriptions.id, id)).run();
+  }
+  deletePushSubscriptionByEndpoint(deviceId: string, endpoint: string): boolean {
+    const r = this.db
+      .delete(s.pushSubscriptions)
+      .where(
+        and(eq(s.pushSubscriptions.deviceId, deviceId), eq(s.pushSubscriptions.endpoint, endpoint)),
+      )
+      .run();
+    return r.changes > 0;
+  }
+  bumpPushFailure(id: string): number {
+    this.db
+      .update(s.pushSubscriptions)
+      .set({ failedCount: sql`${s.pushSubscriptions.failedCount} + 1` })
+      .where(eq(s.pushSubscriptions.id, id))
+      .run();
+    return (
+      this.db.select().from(s.pushSubscriptions).where(eq(s.pushSubscriptions.id, id)).get()
+        ?.failedCount ?? 0
+    );
+  }
+  resetPushFailures(id: string) {
+    this.db
+      .update(s.pushSubscriptions)
+      .set({ failedCount: 0 })
+      .where(eq(s.pushSubscriptions.id, id))
+      .run();
+  }
 }
