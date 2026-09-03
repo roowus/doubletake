@@ -10,6 +10,9 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      // Registered from main.tsx, web only: inside Capacitor the assets are local and a stale
+      // precache would keep serving the previous APK's bundle after an update.
+      injectRegister: null,
       // Custom worker: precache + Web Push handlers (src/sw.ts).
       strategies: 'injectManifest',
       srcDir: 'src',

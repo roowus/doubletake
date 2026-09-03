@@ -22,6 +22,10 @@
 
     <!-- Bottom-anchored, translucent share sheet (ShareReceiverActivity). -->
     <style name="AppTheme.ShareSheet" parent="Theme.AppCompat.DayNight.Dialog">
+        <!-- Both attrs: AppCompat's Dialog theme reads its own `windowNoTitle`, and without
+             `windowActionBar=false` it still draws the activity label above the content. -->
+        <item name="windowNoTitle">true</item>
+        <item name="windowActionBar">false</item>
         <item name="android:windowNoTitle">true</item>
         <item name="android:windowBackground">@android:color/transparent</item>
         <item name="android:windowIsTranslucent">true</item>

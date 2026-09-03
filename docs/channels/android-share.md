@@ -84,6 +84,30 @@ phrase, `url` the deep link `/chat/<id>`; the answer text never leaves the serve
 - Subscriptions reported gone (404/410, `UNREGISTERED`) are deleted at once; eight consecutive
   failures also delete. Clients re-subscribe on open when their stored endpoint is missing.
 
+## Inside the Capacitor WebView
+- **Edge-to-edge.** Capacitor 8 draws the web view under the status and navigation bars and
+  injects the CSS variables `--safe-area-inset-*`. `apps/web/src/styles.css` folds them into
+  `--inset-*` (falling back to `env(safe-area-inset-*)` for the installed PWA) and pads the top
+  bar, page, composer, FAB and sign-in card with them. Without this the top bar sat under the
+  status bar on the S25 FE.
+- **No service worker on native.** `main.tsx` registers the PWA worker on the web only and,
+  inside Capacitor, unregisters any worker and clears every cache. The assets are local there,
+  and a precached shell kept serving the *previous* APK's bundle after `adb install -r`, so a
+  fix looked like it had not shipped. Web Push on native is therefore impossible by design;
+  FCM is the only native channel.
+- **Pairing input.** The code field accepts the QR URL or `{url, code}` JSON and splits it into
+  server URL + code only when both are present, so typing a URL by hand is not split mid-way.
+
+## Verified on device (Galaxy S25 FE, Android 16, 2026-09-03)
+Over `adb reverse tcp:7391` with `DOUBLETAKE_PUBLIC_URL=http://localhost:7391`:
+pairing by code and by typed QR URL; `ShareReceiverActivity` for a URL share (item lands with
+`channel: android_share`, note, chosen mode; the run answers and the chat list updates live) and
+for a text-only share; unreachable server shows the toast and keeps the text, retry succeeds;
+unpaired share opens the app on the pairing screen and replays into the compose sheet after
+pairing; Settings → Notifications refuses cleanly while the server has no FCM. **Not verified:**
+FCM delivery (no Firebase project yet) and shares from the real Instagram/Reddit/Chrome apps
+(only synthetic `ACTION_SEND` intents so far).
+
 ## Build
 Capacitor 8 (`@capacitor/*` 8.x), Android Gradle Plugin 8.13, Gradle 8.14 wrapper, compileSdk /
 targetSdk 36, minSdk 24, Java 21, Kotlin 2.2. Android Studio's bundled JBR is a JDK 21 and is
