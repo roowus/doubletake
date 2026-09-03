@@ -10,6 +10,7 @@ import { fetchText } from '../extract/http.js';
 import { extractUrl } from '../extract/registry.js';
 import type { ExtractResult } from '../extract/types.js';
 import { classifyItem } from '../ingest/classify.js';
+import type { Notification } from '../notify/types.js';
 
 const MODE_RANK: Record<Mode, number> = { quick: 0, standard: 1, deep: 2 };
 const NO_MORE_RESEARCH =
@@ -33,6 +34,35 @@ export interface WorkerEvents {
   chat_updated: (chatId: string) => void;
 }
 
+/** What the worker needs from the notification layer; the hub implements it. */
+export interface RunNotifier {
+  notify(n: Notification): Promise<unknown>;
+}
+
+/** Push payloads: title and a short status only, never answer text (ADR 0008). */
+export function buildNotification(
+  item: { title: string | null; note: string | null },
+  chatId: string,
+  outcome: 'answered' | 'failed' | 'capped',
+  publicUrl: string | null,
+): Notification {
+  const subject = (item.title || item.note || 'your share').trim().slice(0, 80);
+  const body =
+    outcome === 'answered'
+      ? 'Answer ready. Tap to open the chat.'
+      : outcome === 'failed'
+        ? 'Research failed. Tap to see why.'
+        : 'Paused: daily spend cap reached.';
+  const path = `/chat/${chatId}`;
+  return {
+    title: outcome === 'answered' ? subject : `${subject} — ${outcome}`,
+    body,
+    chatId,
+    url: publicUrl ? `${publicUrl.replace(/\/$/, '')}${path}` : path,
+    tag: `chat-${chatId}`,
+  };
+}
+
 /** Small reserve kept under the daily cap so follow-ups still work after research is capped. */
 const FOLLOWUP_RESERVE_USD = 0.5;
 
@@ -46,12 +76,21 @@ export class QueueWorker extends EventEmitter {
   private current: { runId: string; ac: AbortController } | null = null;
   private wake: (() => void) | null = null;
 
+  /** Optional; set by the boot sequence once notifiers are configured. */
+  notifier: RunNotifier | null = null;
+
   constructor(
     private readonly repo: Repo,
     private readonly brain: BrainAdapter,
     private readonly cfg: Config,
   ) {
     super();
+  }
+
+  private push(item: ItemRow, chatId: string, outcome: 'answered' | 'failed' | 'capped'): void {
+    if (!this.notifier) return;
+    const n = buildNotification(item, chatId, outcome, this.cfg.publicUrl);
+    this.notifier.notify(n).catch(() => {});
   }
 
   start(): void {
@@ -142,6 +181,7 @@ export class QueueWorker extends EventEmitter {
       });
       emit('done', { stopReason: 'capped' });
       this.emit('chat_updated', chat.id);
+      this.push(item, chat.id, 'capped');
       this.current = null;
       return;
     }
@@ -176,6 +216,7 @@ export class QueueWorker extends EventEmitter {
       });
       emit('error', { message: msg });
       emit('done', { stopReason: 'error' });
+      this.push(item, chat.id, 'failed');
     } finally {
       clearTimeout(timer);
       this.current = null;
@@ -465,6 +506,7 @@ export class QueueWorker extends EventEmitter {
       });
     }
     emit('done', { stopReason: r.stopReason, costUsd: cost });
+    this.push(fresh, chatId, 'answered');
   }
 }
 

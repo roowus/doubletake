@@ -49,6 +49,21 @@ Gives `https://<machine>.<tailnet>.ts.net` with a valid certificate. Set that as
 `DOUBLETAKE_PUBLIC_URL` (used in QR pairing and push deep links). Install Tailscale on the
 phone and desktop.
 
+### Push notifications
+- **Web Push** works out of the box: the server generates a VAPID key pair on first boot and
+  keeps it in the database ([ADR 0016](adr/0016-push-keys-and-fcm-http-v1.md)). Set
+  `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY` only if you want to bring your own pair (for example
+  when restoring onto a new machine and keeping browser subscriptions alive). Browsers require
+  HTTPS for push, which `tailscale serve` provides. Enable it per browser in Settings →
+  Notifications, then **Send test**.
+- **FCM (Android app)**: create a Firebase project, add an Android app with the Capacitor
+  `appId`, put `google-services.json` in `apps/mobile/android/app/` (git-ignored), generate a
+  service-account key (Project settings → Service accounts) and point
+  `FCM_SERVICE_ACCOUNT_PATH` at the JSON. The boot log prints `push: webpush+fcm` when both
+  are active; `FCM disabled: …` explains a missing or malformed file.
+- Subscriptions that the push service reports as gone, or that fail 8 times in a row, are
+  removed automatically; the client re-subscribes on next open.
+
 ### Instagram webhook (public, one path)
 Pick one:
 - **Cloudflare Tunnel**: `cloudflared tunnel create doubletake`, route a hostname, config

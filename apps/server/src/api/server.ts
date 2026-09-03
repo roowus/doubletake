@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import type { BrainAdapter } from '@doubletake/brain-sdk';
 import type { Mode, RunEvent } from '@doubletake/shared';
 import { IngestRequest } from '@doubletake/shared';
+import fastifyCors from '@fastify/cors';
 import fastifyStatic from '@fastify/static';
 import fastifyWebsocket from '@fastify/websocket';
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
@@ -10,6 +11,7 @@ import { Auth, AuthError } from '../auth/index.js';
 import type { Config } from '../config/index.js';
 import type { Repo } from '../db/repo.js';
 import { IngestError, ingest } from '../ingest/index.js';
+import type { NotificationHub } from '../notify/hub.js';
 import type { QueueWorker } from '../queue/worker.js';
 import { toChatDetail, toChatSummary, toRunDto } from './dto.js';
 
@@ -19,6 +21,9 @@ export interface ServerDeps {
   worker: QueueWorker;
   brain: BrainAdapter;
   auth?: Auth;
+  /** Push fan-out; when absent the push routes report `enabled: false`. */
+  hub?: NotificationHub;
+  vapidPublicKey?: string;
 }
 
 const PUBLIC_PATHS = new Set([
@@ -38,6 +43,12 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
   const auth = deps.auth ?? new Auth(repo);
   const app = Fastify({ logger: { level: cfg.logLevel }, bodyLimit: 1024 * 1024 });
   await app.register(fastifyWebsocket);
+  // The Capacitor WebView runs on its own origin (https://localhost); the API is token-gated,
+  // so allowing cross-origin calls adds no exposure.
+  await app.register(fastifyCors, {
+    origin: ['https://localhost', 'http://localhost', 'capacitor://localhost'],
+    methods: ['GET', 'POST', 'DELETE', 'OPTIONS'],
+  });
 
   // ---- auth gate ----
   app.addHook('onRequest', async (req, reply) => {
@@ -236,7 +247,65 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
     dailyCapUsd: cfg.dailyCapUsd,
     brain: deps.brain.id,
     notesDir: cfg.notesDir,
+    push: {
+      kinds: deps.hub?.kinds() ?? [],
+      vapidPublicKey: deps.vapidPublicKey ?? null,
+    },
   }));
+
+  // ---- push subscriptions (per device) ----
+  const PushSubscribe = z.object({
+    kind: z.enum(['webpush', 'fcm']),
+    endpoint: z.string().min(1),
+    keys: z.object({ p256dh: z.string(), auth: z.string() }).optional(),
+  });
+  app.post('/api/push/subscribe', async (req, reply) => {
+    const body = PushSubscribe.parse(req.body);
+    if (body.kind === 'webpush' && !body.keys)
+      return reply.code(400).send({ error: 'webpush subscriptions need keys' });
+    if (!deps.hub?.has(body.kind))
+      return reply.code(409).send({ error: `${body.kind} is not configured on this server` });
+    const session = req.session;
+    if (!session) return reply.code(401).send({ error: 'unauthorized' });
+    const row = repo.upsertPushSubscription(
+      session.deviceId,
+      body.kind,
+      body.endpoint,
+      body.keys ? JSON.stringify(body.keys) : null,
+    );
+    return { id: row.id };
+  });
+  app.post('/api/push/unsubscribe', async (req, reply) => {
+    const { endpoint } = z.object({ endpoint: z.string().min(1) }).parse(req.body);
+    const session = req.session;
+    if (!session) return reply.code(401).send({ error: 'unauthorized' });
+    return { removed: repo.deletePushSubscriptionByEndpoint(session.deviceId, endpoint) };
+  });
+  app.get('/api/push/subscriptions', async (req, reply) => {
+    const session = req.session;
+    if (!session) return reply.code(401).send({ error: 'unauthorized' });
+    return repo
+      .listPushSubscriptionsForDevice(session.deviceId)
+      .map((r) => ({ id: r.id, kind: r.kind, endpoint: r.endpoint, createdAt: r.createdAt }));
+  });
+  /** Sends a test notification to this device's subscriptions only. */
+  app.post('/api/push/test', async (req, reply) => {
+    const session = req.session;
+    if (!session || !deps.hub) return reply.code(409).send({ error: 'push not configured' });
+    const mine = new Set(repo.listPushSubscriptionsForDevice(session.deviceId).map((r) => r.id));
+    if (mine.size === 0) return reply.code(404).send({ error: 'this device has no subscription' });
+    const result = await deps.hub.notify(
+      {
+        title: 'Doubletake',
+        body: 'Test notification. Tap to open.',
+        chatId: '',
+        url: '/',
+        tag: 'test',
+      },
+      { onlySubscriptionIds: mine },
+    );
+    return result;
+  });
 
   // ---- live events ----
   app.get('/api/events', { websocket: true }, (socket) => {

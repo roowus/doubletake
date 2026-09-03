@@ -20,6 +20,7 @@ One file per decision, numbered, never deleted. Superseding a decision means a n
 | [0013](0013-agpl-public.md) | AGPL-3.0, public from day one | accepted |
 | [0014](0014-structured-extraction-and-categories.md) | Structured extraction, categories, auto-collections | accepted |
 | [0015](0015-platform-extractor-registry.md) | Platform extractor registry in the server (IG, TikTok, YouTube/Shorts, X, Reddit, AI chat, web) | accepted |
+| [0016](0016-push-keys-and-fcm-http-v1.md) | VAPID keys generated into settings; FCM over HTTP v1 without the Google SDK; subscription pruning | accepted |
 
 ## Template
 

@@ -30,6 +30,10 @@ export function tempEnv(prefix = 'dt-test-') {
     dailyCapUsd: 5,
     webDist: null,
     logLevel: 'silent',
+    vapidPublicKey: null,
+    vapidPrivateKey: null,
+    vapidSubject: 'mailto:test@example.com',
+    fcmServiceAccountPath: null,
   };
   fs.mkdirSync(cfg.dataDir, { recursive: true });
   const { db, sqlite, close } = openDb(path.join(cfg.dataDir, 'doubletake.db'));
