@@ -85,6 +85,7 @@ export function Welcome({ onAuthed }: { onAuthed: () => void }) {
             value={code}
             onChange={(e) => setCode(e.target.value)}
             autoCapitalize="characters"
+            // biome-ignore lint/a11y/noAutofocus: single-field sign-in screen
             autoFocus
           />
         ) : (
@@ -93,6 +94,7 @@ export function Welcome({ onAuthed }: { onAuthed: () => void }) {
             placeholder={hasOwner ? 'Owner password' : 'New owner password (8+ characters)'}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+            // biome-ignore lint/a11y/noAutofocus: single-field sign-in screen
             autoFocus
           />
         )}
@@ -102,7 +104,7 @@ export function Welcome({ onAuthed }: { onAuthed: () => void }) {
           onChange={(e) => setDeviceName(e.target.value)}
         />
         {err && <div className="msg error small">{err}</div>}
-        <button className="primary" disabled={busy || hasOwner === null}>
+        <button type="submit" className="primary" disabled={busy || hasOwner === null}>
           {hasOwner === false
             ? 'Set password & continue'
             : tab === 'pair'
