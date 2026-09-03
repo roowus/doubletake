@@ -19,6 +19,7 @@ JSON columns are validated with zod schemas from `packages/shared` on read and w
 | mode_requested | text | `auto` · `quick` · `standard` · `deep` |
 | mode_effective | text | what actually ran |
 | question_type | text | classifier output, see RESEARCH-MODES.md |
+| category | text | brain output: `place` · `food` · `product` · `tech` · `skill` · `health` · `travel` · `finance` · `entertainment` · `news` · `other` |
 | status | text | `new` · `extracting` · `researching` · `answered` · `failed` · `capped` |
 | title | text | derived (caption / page title / first line) |
 | created_at, updated_at | text | |
@@ -62,10 +63,20 @@ Content shapes:
 ### artifacts
 `id`, `run_id`, `path` (under notes dir), `bytes`, `created_at`.
 
+### entities
+`id`, `item_id` fk, `run_id` fk, `kind` (`place` · `recipe` · `product` · `tool` · `tip` · `media` ·
+`person` · `event` · `other`), `name`, `attributes` (JSON map; well-known keys per kind, e.g.
+place: `address`, `city`, `cuisine`, `maps_url`; recipe: `ingredients[]`, `time_min`; product:
+`brand`, `price`, `url`; tool: `install`, `url`), `url`, `confidence`, `created_at`.
+Index `(kind, name)`. Re-runs replace the item's entities. Rendered as cards in the chat and
+listed per kind in auto collections.
+
 ### tags / item_tags / collections / collection_items
 `tags`: `id`, `name` unique (lowercase), `kind` (`auto` · `manual`).
 `item_tags`: `item_id`, `tag_id`, `confidence` (auto only).
-`collections`: `id`, `name`, `query` (tag expression or FTS string), `manual` bool.
+`collections`: `id`, `name`, `query` (tag expression, `category:<c>`, `entity:<kind>`, or FTS string),
+`manual` bool, `auto` bool. Auto collections are seeded at first boot (one per category and one
+per entity kind) and cannot be deleted, only hidden.
 `collection_items`: for manual collections.
 
 ### devices / push_subscriptions
@@ -87,7 +98,8 @@ Content shapes:
 entered via UI) are encrypted with the key derived per ADR 0010.
 
 ### items_fts (FTS5)
-Columns: `item_id` unindexed, `title`, `note`, `transcript`, `ocr`, `answer`, `tags`.
+Columns: `item_id` unindexed, `title`, `note`, `transcript`, `ocr`, `answer`, `tags`, `entities`
+(names and attribute values joined).
 Maintained by triggers on `items`, `extractions`, `messages`, `item_tags`.
 
 ## Blob layout

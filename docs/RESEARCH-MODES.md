@@ -16,7 +16,7 @@ Mode is picked per run. Budgets are configuration (`modes.*` in settings) with t
 | `read_file` | no | yes | yes |
 | `write_sandbox_file` | no | no | yes (report + assets) |
 | Model tier hint | fast (Haiku-class) | default (Sonnet-class) | best (Opus / reasoning) |
-| Output | 3–6 sentences | answer + claims verdict + sources | full report, tables, recommendations |
+| Output | 3–6 sentences + entities | answer + claims verdict + sources + entities | full report, tables, recommendations, entities |
 
 ## Picking a mode
 
@@ -33,6 +33,11 @@ Mode is picked per run. Budgets are configuration (`modes.*` in settings) with t
 
 ## Output templates by question type
 
+Every template ends with the structured `Answer` block (category, entities, tags; claims and
+recommendations where relevant). Entities are the SaveToList lesson: the place, recipe, product,
+tool, or tip in the media is extracted with its attributes so it lands in the right auto
+collection even when the owner asked nothing.
+
 - **is_it_true**: verdict line, claims table (claim · verdict · confidence · sources), what
   the comments say, caveats.
 - **what_is_this**: identification, what it is for, who makes it, alternatives, is it worth it
@@ -40,7 +45,9 @@ Mode is picked per run. Budgets are configuration (`modes.*` in settings) with t
 - **how_to**: steps distilled from the media, corrections from sources, prerequisites.
 - **compare**: table of options with criteria the owner cares about, recommendation.
 - **explain_comments**: summary of the discussion, main camps, notable replies, consensus.
-- **save_for_later**: one-paragraph summary and tags; no research.
+- **save_for_later**: one-paragraph summary, category, entities with attributes, tags; no
+  research. A share with an empty note and no question-like caption defaults here in Quick.
+- **other**: what_is_this shape without the alternatives section.
 
 ## Follow-ups and escalation
 

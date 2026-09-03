@@ -18,6 +18,7 @@ One file per decision, numbered, never deleted. Superseding a decision means a n
 | [0011](0011-markdown-export-fts-tags.md) | Markdown export, FTS5, auto tags | accepted |
 | [0012](0012-cost-cap.md) | Daily spend cap and per-run budgets | accepted |
 | [0013](0013-agpl-public.md) | AGPL-3.0, public from day one | accepted |
+| [0014](0014-structured-extraction-and-categories.md) | Structured extraction, categories, auto-collections | accepted |
 
 ## Template
 

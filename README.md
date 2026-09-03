@@ -28,7 +28,8 @@ Doubletake is **self-hosted** (it runs on the laptop you already work on), **ope
 | Self-hosted | ✓ | – | ✓ | ✓ | – |
 | Pluggable AI backend | ✓ | – | ✓ | partial | – |
 
-Full landscape (31 products) in [docs/COMPETITORS.md](docs/COMPETITORS.md).
+Doubletake also does what the capture bots do: every run extracts the place, recipe, product,
+or tool in the post into categorised collections, even when you asked nothing.
 
 ## Documentation
 

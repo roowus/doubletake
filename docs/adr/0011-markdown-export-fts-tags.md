@@ -1,6 +1,6 @@
 # 0011 — Markdown export, FTS5, auto tags
 
-- Status: accepted
+- Status: accepted, extended by [0014](0014-structured-extraction-and-categories.md)
 - Date: 2026-09-03
 
 ## Context

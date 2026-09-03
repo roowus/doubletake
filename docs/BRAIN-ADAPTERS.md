@@ -42,7 +42,7 @@ export interface ToolPolicy {
 
 export interface RunResult {
   text: string;               // Markdown answer
-  structured?: Verdict;       // when the output template asks for it
+  structured?: Answer;        // always requested; see below
   sessionId?: string;
   costUsd?: number;
   usage?: { inputTokens: number; outputTokens: number; cacheReadTokens?: number };
@@ -50,6 +50,23 @@ export interface RunResult {
   stopReason: 'done' | 'max_turns' | 'budget' | 'error' | 'aborted';
 }
 ```
+
+```ts
+export interface Answer {
+  summary: string;
+  category: Category;                 // one of the item categories in DATA-MODEL.md
+  entities: Entity[];                 // typed things found in the media, may be empty
+  claims: { claim: string; verdict: 'true' | 'false' | 'mixed' | 'unverified'; confidence: number; sources: string[] }[];
+  recommendations: string[];
+  tags: string[];
+}
+export interface Entity { kind: EntityKind; name: string; attributes: Record<string, unknown>; url?: string; confidence: number }
+```
+
+The adapter asks the model for `Answer` as a fenced JSON block after the Markdown answer and
+parses it leniently; a missing or malformed block yields `structured: undefined` and the run
+still succeeds. Entities are requested in every mode so that `save_for_later` runs file the
+place, recipe, or product they saw ([ADR 0014](adr/0014-structured-extraction-and-categories.md)).
 
 `ResearchBrief` (in `packages/shared`) holds: `systemFraming`, `untrusted: UntrustedBlock[]`
 (each `{ source, kind, content }` rendered as `<untrusted source="…" kind="…">…</untrusted>`
