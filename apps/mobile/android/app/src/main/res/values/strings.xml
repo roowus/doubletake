@@ -1,0 +1,18 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Doubletake</string>
+    <string name="title_activity_main">Doubletake</string>
+    <string name="package_name">com.roowus.doubletake</string>
+    <string name="custom_url_scheme">com.roowus.doubletake</string>
+    <string name="share_label">Send to Doubletake</string>
+    <string name="share_note_hint">Note or question (optional)</string>
+    <string name="share_send">Send</string>
+    <string name="share_mode_auto">Auto</string>
+    <string name="share_mode_quick">Quick</string>
+    <string name="share_mode_standard">Standard</string>
+    <string name="share_mode_deep">Deep</string>
+    <string name="share_unpaired">Pair Doubletake with your server first.</string>
+    <string name="share_media_only">Media file: uploads arrive in a later release. Only your note is sent.</string>
+    <string name="share_sent">Sent to Doubletake</string>
+    <string name="share_failed">Doubletake: could not send (%1$s)</string>
+</resources>

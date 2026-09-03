@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ApiError, api, setToken } from '../api';
+import { apiBase, isNative, nativePlatform, parsePairingInput, setServerUrl } from '../native';
 
 function defaultDeviceName(): string {
   const ua = navigator.userAgent;
@@ -13,7 +14,10 @@ function defaultDeviceName(): string {
 /** First run (set owner password), login on a new device, or redeem a pairing code. */
 export function Welcome({ onAuthed }: { onAuthed: () => void }) {
   const [hasOwner, setHasOwner] = useState<boolean | null>(null);
-  const [tab, setTab] = useState<'password' | 'pair'>('password');
+  const native = isNative();
+  // On Android the app is not served by the server, so pairing must also learn the server URL.
+  const [tab, setTab] = useState<'password' | 'pair'>(native ? 'pair' : 'password');
+  const [serverUrl, setServerUrlState] = useState(apiBase());
   const [password, setPassword] = useState('');
   const [code, setCode] = useState('');
   const [deviceName, setDeviceName] = useState(defaultDeviceName());
@@ -21,6 +25,10 @@ export function Welcome({ onAuthed }: { onAuthed: () => void }) {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
+    if (native && !apiBase()) {
+      setHasOwner(true);
+      return;
+    }
     api
       .health()
       .then((h) => setHasOwner(h.hasOwner))
@@ -30,7 +38,16 @@ export function Welcome({ onAuthed }: { onAuthed: () => void }) {
       setCode(c.toUpperCase());
       setTab('pair');
     }
-  }, []);
+  }, [native]);
+
+  /** Pasting the QR URL (`https://host/?code=X`) or its JSON fills both fields at once. */
+  function onCodeInput(raw: string) {
+    const parsed = parsePairingInput(raw);
+    if (parsed.url && native) {
+      setServerUrlState(parsed.url);
+      setCode(parsed.code ?? '');
+    } else setCode(raw);
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -38,6 +55,11 @@ export function Welcome({ onAuthed }: { onAuthed: () => void }) {
     setErr(null);
     try {
       let token: string;
+      if (native) {
+        if (!/^https?:\/\//i.test(serverUrl.trim()))
+          throw new ApiError(0, 'Server URL must start with https:// or http://');
+        setServerUrl(serverUrl);
+      }
       if (tab === 'pair')
         token = (await api.pairRedeem(code.trim().toUpperCase(), deviceName, platform())).token;
       else if (hasOwner) token = (await api.login(password, deviceName)).token;
@@ -79,11 +101,21 @@ export function Welcome({ onAuthed }: { onAuthed: () => void }) {
             </button>
           </div>
         )}
+        {native && (
+          <input
+            placeholder="Server URL (https://your-mac.tailnet.ts.net)"
+            value={serverUrl}
+            onChange={(e) => setServerUrlState(e.target.value)}
+            inputMode="url"
+            autoCapitalize="none"
+            autoCorrect="off"
+          />
+        )}
         {tab === 'pair' ? (
           <input
             placeholder="6-character code from Settings → Pair a device"
             value={code}
-            onChange={(e) => setCode(e.target.value)}
+            onChange={(e) => onCodeInput(e.target.value)}
             autoCapitalize="characters"
             // biome-ignore lint/a11y/noAutofocus: single-field sign-in screen
             autoFocus
@@ -117,6 +149,7 @@ export function Welcome({ onAuthed }: { onAuthed: () => void }) {
 }
 
 function platform(): string {
+  if (isNative()) return nativePlatform();
   const ua = navigator.userAgent;
   if (/Android/i.test(ua)) return 'android';
   if (/iPhone|iPad/i.test(ua)) return 'ios';

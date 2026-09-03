@@ -1,6 +1,13 @@
 import { QRCodeSVG } from 'qrcode.react';
 import { useEffect, useState } from 'react';
 import { api, type Device, type Status, setToken } from '../api';
+import {
+  apiBase,
+  disableNativePush,
+  enableNativePush,
+  isNative,
+  nativePushEnabled,
+} from '../native';
 import { disablePush, enablePush, pushEnabled, pushSupported } from '../push';
 import { navigate } from '../router';
 
@@ -14,8 +21,9 @@ export function Settings() {
     qr: string;
   } | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const native = isNative();
   const [push, setPush] = useState<'unsupported' | 'off' | 'on' | 'busy'>(
-    pushSupported() ? 'busy' : 'unsupported',
+    native || pushSupported() ? 'busy' : 'unsupported',
   );
   const [pushMsg, setPushMsg] = useState<string | null>(null);
 
@@ -31,19 +39,26 @@ export function Settings() {
   };
   useEffect(load, []);
   useEffect(() => {
-    if (!pushSupported()) return;
-    pushEnabled()
+    if (!native && !pushSupported()) return;
+    (native ? nativePushEnabled() : pushEnabled())
       .then((on) => setPush(on ? 'on' : 'off'))
       .catch(() => setPush('off'));
-  }, []);
+  }, [native]);
 
   const togglePush = async () => {
     setPushMsg(null);
     setPush('busy');
     try {
       if (push === 'on') {
-        await disablePush();
+        await (native ? disableNativePush() : disablePush());
         setPush('off');
+      } else if (native) {
+        if (!status?.push.kinds.includes('fcm'))
+          throw new Error('The server has no FCM credentials (set FCM_SERVICE_ACCOUNT_PATH).');
+        await enableNativePush();
+        // The FCM token arrives asynchronously via the `registration` listener, which registers it.
+        setPush('on');
+        setPushMsg('Notifications enabled on this device.');
       } else {
         const key = status?.push.vapidPublicKey;
         if (!key) throw new Error('The server has no Web Push key (is webpush configured?).');
@@ -71,6 +86,7 @@ export function Settings() {
         <b>Server</b>
         {status ? (
           <div className="small stack" style={{ gap: 4 }}>
+            {native && <div>Server: {apiBase()}</div>}
             <div>Brain: {status.brain}</div>
             <div>
               Spent today: ${status.spentTodayUsd.toFixed(3)} / cap ${status.dailyCapUsd.toFixed(2)}

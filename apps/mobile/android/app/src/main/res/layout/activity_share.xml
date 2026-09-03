@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/sheet"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_gravity="bottom"
+    android:orientation="vertical"
+    android:background="@drawable/share_sheet_bg"
+    android:paddingStart="20dp"
+    android:paddingEnd="20dp"
+    android:paddingTop="16dp"
+    android:paddingBottom="20dp">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/share_label"
+        android:textColor="#e6e8ee"
+        android:textSize="16sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/preview"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:ellipsize="middle"
+        android:maxLines="2"
+        android:textColor="#9aa3b2"
+        android:textSize="13sp" />
+
+    <EditText
+        android:id="@+id/note"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:background="@drawable/share_input_bg"
+        android:hint="@string/share_note_hint"
+        android:imeOptions="actionSend"
+        android:importantForAutofill="no"
+        android:inputType="textCapSentences|textMultiLine"
+        android:maxLines="3"
+        android:minHeight="48dp"
+        android:padding="12dp"
+        android:textColor="#e6e8ee"
+        android:textColorHint="#6b7482"
+        android:textSize="15sp" />
+
+    <RadioGroup
+        android:id="@+id/modes"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:orientation="horizontal">
+
+        <RadioButton
+            android:id="@+id/mode_auto"
+            style="@style/ShareChip"
+            android:checked="true"
+            android:text="@string/share_mode_auto" />
+
+        <RadioButton
+            android:id="@+id/mode_quick"
+            style="@style/ShareChip"
+            android:text="@string/share_mode_quick" />
+
+        <RadioButton
+            android:id="@+id/mode_standard"
+            style="@style/ShareChip"
+            android:text="@string/share_mode_standard" />
+
+        <RadioButton
+            android:id="@+id/mode_deep"
+            style="@style/ShareChip"
+            android:text="@string/share_mode_deep" />
+    </RadioGroup>
+
+    <TextView
+        android:id="@+id/warning"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:textColor="#f0b35a"
+        android:textSize="12sp"
+        android:visibility="gone" />
+
+    <Button
+        android:id="@+id/send"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:layout_marginTop="14dp"
+        android:backgroundTint="#4f7cff"
+        android:text="@string/share_send"
+        android:textAllCaps="false"
+        android:textColor="#ffffff" />
+</LinearLayout>

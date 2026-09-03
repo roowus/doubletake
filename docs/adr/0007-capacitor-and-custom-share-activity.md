@@ -23,4 +23,6 @@ manifest also declares a Web Share Target for Capacitor-less installs.
 
 ## Consequences
 About 50–100 lines of Kotlin to maintain. iOS Share Extension is a separate native piece to
-be written later. Capacitor pins us to its Android toolchain (JDK 17, SDK 35).
+be written later. Capacitor pins us to its Android toolchain: at adoption time Capacitor 7 (JDK
+17, SDK 35); M2 shipped on Capacitor 8 (Java 21, compileSdk 36, AGP 8.13), and future major
+bumps will move these again.

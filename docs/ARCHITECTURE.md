@@ -76,8 +76,9 @@ apps/server       Fastify + TS: api/ (REST + WebSocket), auth/, brains/ (adapter
                   tools), config/, db/ (drizzle + migrations, repo), export/ (Markdown),
                   extract/ (platform extractor registry + HTTP with SSRF guard), ingest/
                   (normalise + classify), queue/ (worker). Later: channels/, media/, notify/
-apps/web          Vite + React PWA: chats, chat view, compose, settings, pairing, service worker
-apps/mobile       Capacitor Android (ShareReceiverActivity, FCM); iOS scaffold later
+apps/web          Vite + React PWA: chats, chat view, compose, settings, pairing, service worker,
+                  native.ts (Capacitor glue: server-URL prefix, Preferences mirror, FCM, deep links)
+apps/mobile       Capacitor 8 Android: ShareReceiverActivity + Pairing (Kotlin); iOS scaffold later
 packages/shared   zod schemas + types (Item, Run, Message, events, API DTOs, untrusted wrappers)
 packages/brain-sdk BrainAdapter interface, ToolPolicy, contract test harness
 workers/media     Python 3.12 (uv): download, transcribe, OCR, frames, comments
@@ -86,7 +87,8 @@ scripts/          doctor.sh, dev.sh, install-service.sh, check-links.py
 ```
 
 Toolchain: Node 22, pnpm 10, TypeScript 5 strict, Fastify 5, drizzle-orm + better-sqlite3
-(WAL), zod, vitest, biome; Vite 6, React 19, vite-plugin-pwa; Capacitor 7; Python 3.12, uv,
+(WAL), zod, vitest, biome; Vite, React 19, vite-plugin-pwa; Capacitor 8 (Java 21, SDK 36);
+Python 3.12, uv,
 ruff, pytest.
 
 ## 5. Domain model (summary)

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { getToken } from './api';
 import { resetLive } from './live';
+import { installNativeListeners, pendingShareToPath, takePendingShare } from './native';
 import { Chat } from './pages/Chat';
 import { ChatList } from './pages/ChatList';
 import { Compose } from './pages/Compose';
@@ -15,8 +16,17 @@ export function App() {
   useEffect(() => {
     const onUnauth = () => setAuthed(false);
     window.addEventListener('doubletake:unauthorized', onUnauth);
+    installNativeListeners();
     return () => window.removeEventListener('doubletake:unauthorized', onUnauth);
   }, []);
+
+  // A share received by the native sheet while unpaired is replayed once we are signed in.
+  useEffect(() => {
+    if (!authed) return;
+    void takePendingShare().then((s) => {
+      if (s) navigate(pendingShareToPath(s), true);
+    });
+  }, [authed]);
 
   if (!authed) {
     return (
@@ -44,6 +54,9 @@ export function App() {
           ...(url.searchParams.get('text') ? { text: url.searchParams.get('text') ?? '' } : {}),
           ...(url.searchParams.get('title') ? { title: url.searchParams.get('title') ?? '' } : {}),
         }}
+        {...(url.searchParams.get('channel') === 'android_share'
+          ? { channel: 'android_share' as const }
+          : {})}
       />
     );
   else if (url.pathname === '/settings') page = <Settings />;

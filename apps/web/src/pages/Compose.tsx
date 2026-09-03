@@ -1,11 +1,18 @@
-import type { ModeRequested } from '@doubletake/shared';
+import type { Channel, ModeRequested } from '@doubletake/shared';
 import { useState } from 'react';
 import { ApiError, api } from '../api';
 import { ModeChips } from '../components/ModeChips';
 import { navigate } from '../router';
 
 /** Compose box; also the landing page for the Web Share Target (`/share?url=&text=&title=`). */
-export function Compose({ shared }: { shared?: { url?: string; text?: string; title?: string } }) {
+export function Compose({
+  shared,
+  channel,
+}: {
+  shared?: { url?: string; text?: string; title?: string };
+  /** Overrides the channel recorded on the item (native share replayed after pairing). */
+  channel?: Channel;
+}) {
   const initial = shared?.url ?? shared?.text ?? '';
   const [input, setInput] = useState(initial);
   const [note, setNote] = useState('');
@@ -24,7 +31,7 @@ export function Compose({ shared }: { shared?: { url?: string; text?: string; ti
       const res = await api.ingest({
         ...(isUrl ? { url: trimmed } : { text: trimmed }),
         ...(note.trim() ? { note: note.trim() } : {}),
-        channel: shared ? 'web_share_target' : 'compose',
+        channel: channel ?? (shared ? 'web_share_target' : 'compose'),
         focus: 'whole',
         modeHint: mode,
       });
