@@ -4,8 +4,8 @@ import UniformTypeIdentifiers
 /// The iOS share sheet: a compact card over the sharing app with the detected URL or text, a
 /// one-line note, mode chips (Auto · Quick · Standard · Deep) and **Send**. It posts straight to
 /// `POST {serverUrl}/api/ingest` with the device token from the App Group and never launches the
-/// Capacitor WebView. Behaviour mirrors the Android `ShareReceiverActivity`; the extension is
-/// **unverified** on a device (ADR 0027, `docs/channels/ios-share.md`).
+/// Capacitor WebView. Behaviour mirrors the Android `ShareReceiverActivity`; verified in the iOS
+/// 26.3.1 simulator, **unverified** on a device (ADR 0027, `docs/channels/ios-share.md`).
 ///
 /// Media-only shares (an image or movie with no text) are accepted by the activation rule but not
 /// uploaded: the sheet says so and sends the note as text, exactly like Android.
@@ -233,17 +233,29 @@ final class ShareViewController: UIViewController {
         }.resume()
     }
 
-    /// Extensions may not call `UIApplication.shared.open`; walk the responder chain instead.
+    /// Extensions may not touch `UIApplication.shared`, but the hosting `UIApplication` is
+    /// still in the responder chain. Find it there and call the modern
+    /// `open(_:options:completionHandler:)`; iOS 26 rejects the old `openURL:` selector
+    /// outright ("BUG IN CLIENT OF UIKIT ... Force returning false"). Verified in the
+    /// iOS 26.3.1 simulator (ADR 0027).
     private func openApp(_ url: URL) {
         var responder: UIResponder? = self
-        let selector = sel_registerName("openURL:")
         while let r = responder {
-            if r.responds(to: selector) {
-                r.perform(selector, with: url)
-                break
+            if let app = r as? UIApplication {
+                app.open(url, options: [:]) { [weak self] ok in
+                    DispatchQueue.main.async {
+                        if ok {
+                            self?.extensionContext?.completeRequest(returningItems: nil)
+                        } else {
+                            self?.showError("Open Doubletake and pair this iPhone, then share again.")
+                        }
+                    }
+                }
+                return
             }
             responder = r.next
         }
+        // No UIApplication in the chain (should not happen); keep the share stashed and close.
         extensionContext?.completeRequest(returningItems: nil)
     }
 }

@@ -1,8 +1,8 @@
 # 0027 — iOS share extension on the Capacitor app
 
 ## Status
-accepted (builds and launches in the iOS 26.3.1 simulator, App Group mirror verified; Share
-Extension flow and real device still **unverified**)
+accepted (share flow, unpaired deep link and App Group mirror verified in the iOS 26.3.1
+simulator on 2026-09-04; real device still **unverified**)
 
 ## Date
 2026-09-04
@@ -68,7 +68,12 @@ here.
 ## Consequences
 Roughly 330 lines of Swift next to the Kotlin. Two `Pairing` implementations (Kotlin, Swift)
 share key names with `apps/web/src/native.ts` by convention; a key rename touches three files.
-The `channel` enum grows by one value everywhere it is listed. The app and extension build with Xcode 26.2 and
-the app runs in the simulator with the App Group mirror working; the extension's share flow
-and any real device are still marked **unverified**. The first person with an iPhone should
-follow `docs/channels/ios-share.md` §Verify and remove the markers in the same commit.
+The `channel` enum grows by one value everywhere it is listed. The app and extension build with Xcode 26.2; in the
+iOS 26.3.1 simulator the share sheet, the paired Send, the unpaired `doubletake://share` hand-off
+and the App Group mirror all work. Two things learned there: simulator builds must sign ad hoc
+(`CODE_SIGN_IDENTITY=-`, `CODE_SIGNING_ALLOWED=YES`) or the App Group entitlement is dropped and
+the two targets stop sharing data; and iOS 26 rejects the deprecated `openURL:` selector from an
+extension, so the extension calls `UIApplication.open(_:options:completionHandler:)` on the
+application found in the responder chain. A real device is still marked **unverified**. The first
+person with an iPhone should follow `docs/channels/ios-share.md` §Verify and remove the marker in
+the same commit.
