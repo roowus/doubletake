@@ -248,6 +248,8 @@ export class Repo {
     content: unknown;
     tool?: string;
     model?: string;
+    costUsd?: number;
+    durationMs?: number;
   }) {
     this.db
       .insert(s.extractions)
@@ -258,9 +260,50 @@ export class Repo {
         content: JSON.stringify(e.content),
         tool: e.tool ?? null,
         model: e.model ?? null,
+        costUsd: e.costUsd ?? null,
+        durationMs: e.durationMs ?? null,
         createdAt: nowIso(),
       })
       .run();
+  }
+
+  addMediaAsset(a: {
+    itemId: string;
+    kind: string;
+    path: string;
+    sha256: string;
+    bytes: number;
+    durationS?: number | null;
+    width?: number | null;
+    height?: number | null;
+    frameTsS?: number | null;
+    source: string;
+  }) {
+    this.db
+      .insert(s.mediaAssets)
+      .values({
+        id: newId(),
+        itemId: a.itemId,
+        kind: a.kind,
+        path: a.path,
+        sha256: a.sha256,
+        bytes: a.bytes,
+        durationS: a.durationS ?? null,
+        width: a.width ?? null,
+        height: a.height ?? null,
+        frameTsS: a.frameTsS ?? null,
+        source: a.source,
+        createdAt: nowIso(),
+      })
+      .run();
+  }
+
+  listMediaAssets(itemId: string) {
+    return this.db.select().from(s.mediaAssets).where(eq(s.mediaAssets.itemId, itemId)).all();
+  }
+
+  deleteMediaAssets(itemId: string) {
+    this.db.delete(s.mediaAssets).where(eq(s.mediaAssets.itemId, itemId)).run();
   }
 
   listExtractions(itemId: string) {

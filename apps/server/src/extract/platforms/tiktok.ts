@@ -1,5 +1,5 @@
 import type { PlatformExtractor } from '../types.js';
-import { fetchOEmbed, MEDIA_LATER, result } from './_shared.js';
+import { fetchOEmbed, PAGE_ONLY, result } from './_shared.js';
 
 const HOSTS = new Set([
   'tiktok.com',
@@ -53,7 +53,7 @@ export const tiktokExtractor: PlatformExtractor = {
           },
         ]
       : [];
-    warnings.push(oe ? MEDIA_LATER : 'TikTok oEmbed did not answer; only the URL is known.');
+    warnings.push(oe ? PAGE_ONLY : 'TikTok oEmbed did not answer; only the URL is known.');
     return result(
       'tiktok',
       canonical,

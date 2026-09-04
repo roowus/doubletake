@@ -1,6 +1,6 @@
 import { readablePage } from '../readable.js';
 import type { PlatformExtractor } from '../types.js';
-import { MEDIA_LATER, result } from './_shared.js';
+import { PAGE_ONLY, result } from './_shared.js';
 
 const HOSTS = new Set(['instagram.com', 'www.instagram.com', 'm.instagram.com']);
 
@@ -12,7 +12,7 @@ export function instagramPost(u: URL): { kind: 'p' | 'reel' | 'tv'; code: string
   return { kind, code: m[2] };
 }
 
-/** Instagram posts and reels. Public page meta only until the media pipeline (M3) and the IG channel (M4). */
+/** Instagram posts and reels. Public page meta here; media and comments come from the media worker and (M4) the IG channel. */
 export const instagramExtractor: PlatformExtractor = {
   platform: 'instagram',
   match: (u) => instagramPost(u) !== undefined,
@@ -47,7 +47,7 @@ export const instagramExtractor: PlatformExtractor = {
     } catch (e) {
       warnings.push(`Instagram page fetch failed: ${(e as Error).message}`);
     }
-    warnings.push(MEDIA_LATER);
+    warnings.push(PAGE_ONLY);
     return result(
       'instagram',
       canonical,

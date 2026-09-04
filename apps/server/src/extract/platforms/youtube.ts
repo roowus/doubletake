@@ -1,5 +1,5 @@
 import type { PlatformExtractor } from '../types.js';
-import { fetchOEmbed, MEDIA_LATER, result } from './_shared.js';
+import { fetchOEmbed, PAGE_ONLY, result } from './_shared.js';
 
 const HOSTS = new Set([
   'youtube.com',
@@ -64,7 +64,7 @@ export const youtubeExtractor: PlatformExtractor = {
           tool: 'oembed',
         },
       ],
-      [oe ? MEDIA_LATER : 'YouTube oEmbed did not answer; only the URL is known.'],
+      [oe ? PAGE_ONLY : 'YouTube oEmbed did not answer; only the URL is known.'],
     );
   },
 };

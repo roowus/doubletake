@@ -5,6 +5,7 @@ import { createBrain } from './brains/registry.js';
 import { loadConfig } from './config/index.js';
 import { openDb } from './db/index.js';
 import { Repo } from './db/repo.js';
+import { MediaWorkerClient } from './media/worker-client.js';
 import { createHub } from './notify/index.js';
 import { QueueWorker } from './queue/worker.js';
 
@@ -31,16 +32,24 @@ export async function main(): Promise<void> {
   const { hub, vapid } = createHub(cfg, repo);
   worker.notifier = hub;
   const app = await buildServer({ cfg, repo, worker, brain, hub, vapidPublicKey: vapid.publicKey });
+  const media = cfg.media.enabled ? new MediaWorkerClient(cfg, app.log) : null;
+  worker.media = media;
+  if (media) {
+    void media.ping().then((ok) => {
+      if (!ok) app.log.warn('media worker did not answer ping; check logs/worker.log');
+    });
+  }
 
   worker.start();
   await app.listen({ host: cfg.bind, port: cfg.port });
   app.log.info(
-    `Doubletake listening on http://${cfg.bind}:${cfg.port} (brain: ${brain.id}, push: ${hub.kinds().join('+') || 'none'}, data: ${cfg.dataDir})`,
+    `Doubletake listening on http://${cfg.bind}:${cfg.port} (brain: ${brain.id}, push: ${hub.kinds().join('+') || 'none'}, media: ${media ? `${cfg.media.command.join(' ')} vision=${cfg.media.vision}` : 'off'}, data: ${cfg.dataDir})`,
   );
 
   const shutdown = async () => {
     app.log.info('shutting down');
     await worker.stop();
+    await media?.stop();
     await app.close();
     close();
     process.exit(0);
