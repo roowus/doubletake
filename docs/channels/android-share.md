@@ -175,5 +175,5 @@ adb install -r apps/mobile/android/app/build/outputs/apk/debug/app-debug.apk
 `pnpm --filter @doubletake/mobile sync` runs only the web build + `cap sync`; `open` launches
 Android Studio. The Capacitor CLI finishes its work in well under a second and then, on a
 non-interactive terminal, waits on a telemetry prompt: run it from a real terminal or kill it
-after `✔ Sync finished`. `scripts/doctor.sh` checks for `java` and `adb`. iOS: Capacitor iOS
-target plus a Share Extension is planned; untested until someone with an iPhone picks it up.
+after `✔ Sync finished`. `scripts/doctor.sh` checks for `java`, `adb` and `xcodebuild`. iOS: same
+wrapper plus a native Share Extension, see [ios-share.md](ios-share.md) (unverified on a device).

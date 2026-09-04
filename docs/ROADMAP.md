@@ -122,7 +122,7 @@ and a Reddit video.
 
 ## Later (not scheduled)
 
-~~Telegram and ntfy notification channels~~ (done 2026-09-04, [ADR 0019](adr/0019-owner-notification-channels.md)) · iOS share extension · ~~tailscale multi-device
+~~Telegram and ntfy notification channels~~ (done 2026-09-04, [ADR 0019](adr/0019-owner-notification-channels.md)) · ~~iOS share extension~~ (done 2026-09-04, [ADR 0027](adr/0027-ios-share-extension.md); **unverified** on a device) · ~~tailscale multi-device
 (worker on another machine, shared data dir)~~ (done 2026-09-04, [ADR 0026](adr/0026-remote-media-worker.md)) · ~~MCP server exposing the library to other
 agents~~ (done 2026-09-04, [ADR 0023](adr/0023-mcp-server.md)) · ~~Karakeep / Memos import and export~~ (done 2026-09-04, [ADR 0024](adr/0024-karakeep-memos-interchange.md)) · ~~shareable read-only collection pages (SaveToList's
 shared lists)~~ (done 2026-09-04, [ADR 0025](adr/0025-shareable-collection-pages.md)) · ~~cross-library chat ("what did I save about ski wax?") over FTS, Recall-style~~ (done 2026-09-04, [ADR 0021](adr/0021-cross-library-chat.md)) ·

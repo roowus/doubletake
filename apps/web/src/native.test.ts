@@ -1,6 +1,12 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
-import { fcmErrorMessage, parsePairingInput, pendingShareToPath, targetPath } from './native';
+import {
+  fcmErrorMessage,
+  nativeShareChannel,
+  parsePairingInput,
+  pendingShareToPath,
+  targetPath,
+} from './native';
 
 describe('parsePairingInput', () => {
   it('accepts the QR URL form', () => {
@@ -32,12 +38,24 @@ describe('targetPath', () => {
 
 describe('pendingShareToPath', () => {
   it('carries url/text/title and marks the android_share channel', () => {
-    const p = pendingShareToPath({ url: 'https://x.com/a/status/1', title: 'T' });
+    const p = pendingShareToPath({ url: 'https://x.com/a/status/1', title: 'T' }, 'android_share');
     const u = new URL(p, 'https://localhost');
     expect(u.pathname).toBe('/share');
     expect(u.searchParams.get('url')).toBe('https://x.com/a/status/1');
     expect(u.searchParams.get('title')).toBe('T');
     expect(u.searchParams.get('channel')).toBe('android_share');
+  });
+  it('records ios_share for the iOS extension', () => {
+    const u = new URL(pendingShareToPath({ text: 'hi' }, 'ios_share'), 'https://localhost');
+    expect(u.searchParams.get('channel')).toBe('ios_share');
+  });
+});
+
+describe('nativeShareChannel', () => {
+  it('maps the Capacitor platform to the channel enum', () => {
+    expect(nativeShareChannel('ios')).toBe('ios_share');
+    expect(nativeShareChannel('android')).toBe('android_share');
+    expect(nativeShareChannel('web')).toBe('android_share');
   });
 });
 

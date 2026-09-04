@@ -15,6 +15,7 @@ import {
   disableNativePush,
   enableNativePush,
   isNative,
+  nativePlatform,
   nativePushEnabled,
 } from '../native';
 import { disablePush, enablePush, pushEnabled, pushSupported } from '../push';
@@ -31,8 +32,10 @@ export function Settings() {
   } | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const native = isNative();
+  // No APNs in v1 (ADR 0027): the iOS app shows the limitation instead of a toggle.
+  const ios = native && nativePlatform() === 'ios';
   const [push, setPush] = useState<'unsupported' | 'off' | 'on' | 'busy'>(
-    native || pushSupported() ? 'busy' : 'unsupported',
+    ios ? 'unsupported' : native || pushSupported() ? 'busy' : 'unsupported',
   );
   const [pushMsg, setPushMsg] = useState<string | null>(null);
   const [quiet, setQuiet] = useState<QuietHours | null>(null);
@@ -104,11 +107,11 @@ export function Settings() {
     loadIg();
   }, []);
   useEffect(() => {
-    if (!native && !pushSupported()) return;
+    if (ios || (!native && !pushSupported())) return;
     (native ? nativePushEnabled() : pushEnabled())
       .then((on) => setPush(on ? 'on' : 'off'))
       .catch(() => setPush('off'));
-  }, [native]);
+  }, [native, ios]);
 
   const togglePush = async () => {
     setPushMsg(null);
@@ -197,7 +200,11 @@ export function Settings() {
           installed app or PWA. The notification carries the title only, never the answer.
         </div>
         {push === 'unsupported' ? (
-          <div className="small muted">This browser does not support Web Push.</div>
+          <div className="small muted">
+            {ios
+              ? 'The iOS app has no push yet (no APNs in v1). Set up ntfy or Telegram in .env to be notified on this phone.'
+              : 'This browser does not support Web Push.'}
+          </div>
         ) : (
           <div className="row">
             <button type="button" disabled={push === 'busy'} onClick={togglePush}>

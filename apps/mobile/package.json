@@ -3,11 +3,13 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Doubletake Android app (Capacitor wrapper of apps/web + native share sheet + FCM)",
+  "description": "Doubletake mobile apps (Capacitor wrapper of apps/web; Android share sheet + FCM, iOS share extension)",
   "license": "AGPL-3.0-only",
   "scripts": {
     "sync": "pnpm --filter @doubletake/web build && cap sync android",
     "open": "cap open android",
+    "sync:ios": "pnpm --filter @doubletake/web build && cap sync ios",
+    "open:ios": "cap open ios",
     "apk": "pnpm run sync && cd android && ./gradlew assembleDebug",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run --passWithNoTests"
@@ -16,6 +18,7 @@
     "@capacitor/android": "^8.5.1",
     "@capacitor/app": "^8.0.0",
     "@capacitor/core": "^8.5.1",
+    "@capacitor/ios": "^8.5.1",
     "@capacitor/preferences": "^8.0.1",
     "@capacitor/push-notifications": "^8.1.2"
   },

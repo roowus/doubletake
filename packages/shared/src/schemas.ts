@@ -30,6 +30,7 @@ export type Platform = z.infer<typeof Platform>;
 
 export const Channel = z.enum([
   'android_share',
+  'ios_share',
   'compose',
   'ig_dm',
   'ig_mention',

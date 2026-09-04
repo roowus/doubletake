@@ -15,6 +15,13 @@ const config: CapacitorConfig = {
     // Allow it; the OS network security config still limits cleartext to localhost (adb reverse).
     allowMixedContent: true,
   },
+  ios: {
+    // Safari Web Inspector for debug builds only.
+    webContentsDebuggingEnabled: false,
+    // WKWebView serves the bundle from capacitor://localhost; the server URL is prefixed by
+    // apps/web/src/native.ts. The Share Extension (ios/App/ShareExtension) is native code and
+    // reads pairing values from the App Group, see docs/channels/ios-share.md.
+  },
   plugins: {
     PushNotifications: {
       presentationOptions: ['badge', 'sound', 'alert'],
