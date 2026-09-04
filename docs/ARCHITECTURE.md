@@ -221,7 +221,7 @@ and is authenticated by Meta's signature instead.
 | `POST setup`, `POST login` | create owner password once; exchange password for a device token |
 | `POST pair/start`, `POST pair/redeem`, `GET/DELETE devices[/:id]` | 10-minute single-use pairing codes; device list and revocation |
 | `POST ingest` | `{ url? , text?, note?, channel, mode? }` → `202 { itemId, chatId, runId }` |
-| `GET chats?q=&tag=`, `GET chats/:id`, `POST chats/:id/read` | list (FTS when `q`, tag filter when `tag`), detail with messages/runs/entities/extractions (flattened text), clear unread |
+| `GET chats?q=&tag=`, `GET chats/:id`, `POST chats/:id/read` | list (FTS when `q`, tag filter when `tag`), detail with messages/runs/entities/extractions (flattened text, newest per kind+tool), clear unread |
 | `GET tags`, `POST chats/:id/tags { name }`, `DELETE chats/:id/tags/:name` | all tags with counts; add a manual tag (normalised: trimmed, lowercase, ≤40 chars); remove any tag from the item. Both edits re-index FTS, re-export the note and emit `chat_updated` |
 | `POST chats/:id/messages` | follow-up turn (cheap path) |
 | `POST chats/:id/research { mode?, note? }` | full re-run, session resumed |

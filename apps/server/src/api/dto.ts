@@ -73,17 +73,28 @@ export function toChatDetail(repo: Repo, chat: ChatRow, item: ItemRow): ChatDeta
       ...(e.url ? { url: e.url } : {}),
       confidence: e.confidence ?? 0.7,
     })),
-    extractions: repo
-      .listExtractions(item.id)
-      .map((e) => ({
-        id: e.id,
-        kind: e.kind,
-        tool: e.tool,
-        createdAt: e.createdAt,
-        text: extractionText(e.kind, parseExtraction(e.content)),
-      }))
-      .filter((e) => e.text.length > 0),
+    extractions: latestExtractions(repo.listExtractions(item.id)),
   };
+}
+
+/** Re-runs store a fresh set of extractions; show only the newest per kind+tool. */
+function latestExtractions(rows: ReturnType<Repo['listExtractions']>): ChatDetail['extractions'] {
+  const byKey = new Map<string, (typeof rows)[number]>();
+  for (const e of rows) {
+    const key = `${e.kind}|${e.tool ?? ''}`;
+    const prev = byKey.get(key);
+    if (!prev || e.createdAt > prev.createdAt) byKey.set(key, e);
+  }
+  return [...byKey.values()]
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+    .map((e) => ({
+      id: e.id,
+      kind: e.kind,
+      tool: e.tool,
+      createdAt: e.createdAt,
+      text: extractionText(e.kind, parseExtraction(e.content)),
+    }))
+    .filter((e) => e.text.length > 0);
 }
 
 function safeJson(s: string): Record<string, unknown> {
