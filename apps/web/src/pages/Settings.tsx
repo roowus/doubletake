@@ -50,6 +50,7 @@ export function Settings() {
       .catch(() => {});
   };
   useEffect(load, []);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: run once on mount, like `load`
   useEffect(() => {
     loadIg();
   }, []);
