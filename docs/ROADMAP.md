@@ -127,3 +127,8 @@ and a Reddit video.
 agents~~ (done 2026-09-04, [ADR 0023](adr/0023-mcp-server.md)) · ~~Karakeep / Memos import and export~~ (done 2026-09-04, [ADR 0024](adr/0024-karakeep-memos-interchange.md)) · ~~shareable read-only collection pages (SaveToList's
 shared lists)~~ (done 2026-09-04, [ADR 0025](adr/0025-shareable-collection-pages.md)) · ~~cross-library chat ("what did I save about ski wax?") over FTS, Recall-style~~ (done 2026-09-04, [ADR 0021](adr/0021-cross-library-chat.md)) ·
 ~~map view over place entities~~ (done 2026-09-04, [ADR 0022](adr/0022-map-view-place-geocoding.md)) · ~~digest notifications (batch quiet-hours pushes)~~ (done 2026-09-04, [ADR 0020](adr/0020-quiet-hours-digest.md)).
+
+Hosted bring-your-own-key service (sign-up website, per-user tenants on the same core, connectors
+instead of local folders): researched and deferred 2026-09-04 for cost reasons
+([ADR 0028](adr/0028-hosted-service-deferred.md)); the design lives in a private repo. Self-hosting
+remains the product.

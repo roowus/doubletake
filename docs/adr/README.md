@@ -32,6 +32,7 @@ One file per decision, numbered, never deleted. Superseding a decision means a n
 | [0025](0025-shareable-collection-pages.md) | Shareable read-only collection pages: a manual list or saved search gets a random path token, `GET /s/<token>` renders a script-free HTML page of titles, tags and first answers (never the note or extractions); tailnet-only unless `DOUBLETAKE_SHARE_PUBLIC=on` opens `/s/` on the tunnel host | accepted |
 | [0026](0026-remote-media-worker.md) | Remote media worker: `doubletake-media serve` exposes the same line protocol over HTTP (NDJSON stream + `/files`) behind a bearer token on the tailnet; `DOUBLETAKE_WORKER_URL` selects `RemoteMediaClient`, which mirrors assets and frames into the server's data dir, or trusts a shared path when told to | accepted |
 | [0027](0027-ios-share-extension.md) | iOS share extension: native `ShareExtension` target posting to `/api/ingest` as channel `ios_share`; App Group bridge (`SceneDelegate` mirrors the Capacitor Preferences pairing values, extension stashes pending shares and opens `doubletake://share`); no APNs in v1; scaffold committed, **unverified** on a device (extends 0007) | accepted |
+| [0028](0028-hosted-service-deferred.md) | Hosted bring-your-own-key service (sign-up site, per-user tenants on the same core, connectors instead of local folders): designed and costed, **deferred** 2026-09-04; design kept in private `roowus/doubletake-cloud`; self-hosting stays the product; names the auth/config/SecretBox seams to keep narrow | accepted (deferral) |
 
 ## Template
 
