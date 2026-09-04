@@ -31,7 +31,7 @@ links ([ADR 0015](adr/0015-platform-extractor-registry.md)).
 - Markdown export written to `~/Doubletake` on completion.
 - Contract tests in `packages/brain-sdk` pass against the adapter with a mocked SDK.
 
-## M2 — Android share sheet + push (code complete 2026-09-03)
+## M2 — Android share sheet + push (done 2026-09-03)
 
 Done: server push layer (Web Push + FCM notifiers, `NotificationHub`, `push/*` routes,
 notifications on answered/failed/capped, CORS for Capacitor); PWA service worker with push +
@@ -44,9 +44,10 @@ text shares, failure toast + retry, unpaired share → pair → replay, no-FCM r
 the CLI ([DEPLOYMENT.md](DEPLOYMENT.md)), server boots `push: webpush+fcm`, APK carries
 `google-services.json`. Verified later the same day over the tailnet (Tailscale on the phone):
 FCM notifications arrive with the app killed and deep-link to the chat; pairing by QR URL
-against the `ts.net` hostname; real shares from Chrome and the Reddit app (the Reddit app
-short link needed a resolver + an Atom fallback in the extractor). Instagram share pending an
-owner test. Offline queue for the share sheet stays a v2 item.
+against the `ts.net` hostname; real shares from Chrome, the Reddit app (the Reddit app short
+link needed a resolver + an Atom fallback in the extractor) and the Instagram app (reel link,
+answered with a notification). M2 acceptance is complete. Offline queue for the share sheet
+stays a v2 item.
 
 - Capacitor project builds a debug APK; QR pairing stores server URL + device token.
 - `ShareReceiverActivity` receives `text/plain` from Instagram, Reddit, Chrome, YouTube; shows
