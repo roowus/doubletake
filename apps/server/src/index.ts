@@ -9,6 +9,7 @@ import { openDb } from './db/index.js';
 import { Repo } from './db/repo.js';
 import { MediaWorkerClient } from './media/worker-client.js';
 import { createHub } from './notify/index.js';
+import { DigestGate } from './notify/quiet.js';
 import { QueueWorker } from './queue/worker.js';
 import { SecretBox } from './secrets/box.js';
 
@@ -34,7 +35,11 @@ export async function main(): Promise<void> {
   const brain = brains.defaultBrain;
   const worker = new QueueWorker(repo, brains, cfg);
   const { hub, vapid } = createHub(cfg, repo);
-  worker.notifier = hub;
+  // Quiet hours: park run notifications and send one digest when the window ends (ADR 0020).
+  const digest = new DigestGate(repo, hub, cfg.publicUrl ?? null);
+  worker.notifier = digest;
+  digest.start();
+  digest.flush().catch((e) => console.warn('digest flush failed', e));
   // Instagram channel: routes exist whenever the Meta app credentials are configured.
   let ig: InstagramChannel | undefined;
   if (cfg.ig.appId && cfg.ig.appSecret) {
@@ -55,6 +60,7 @@ export async function main(): Promise<void> {
     worker,
     brain,
     hub,
+    digest,
     vapidPublicKey: vapid.publicKey,
     ...(ig ? { ig } : {}),
   });
@@ -82,6 +88,7 @@ export async function main(): Promise<void> {
   const shutdown = async () => {
     app.log.info('shutting down');
     ig?.stop();
+    digest.stop();
     await worker.stop();
     await media?.stop();
     await app.close();

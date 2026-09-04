@@ -36,6 +36,13 @@
       "when": 1788507900000,
       "tag": "0004_collections",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1788600000000,
+      "tag": "0005_pending_notifications",
+      "breakpoints": true
     }
   ]
 }

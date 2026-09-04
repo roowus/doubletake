@@ -679,6 +679,38 @@ export class Repo {
       .all();
   }
 
+  // ---- pending notifications (quiet hours, ADR 0020) ----
+
+  enqueueNotification(n: {
+    chatId: string;
+    title: string;
+    body: string;
+    url: string;
+    tag: string;
+  }) {
+    const row: typeof s.pendingNotifications.$inferInsert = {
+      id: newId(),
+      ...n,
+      createdAt: nowIso(),
+    };
+    this.db.insert(s.pendingNotifications).values(row).run();
+    return row;
+  }
+  listPendingNotifications() {
+    return this.db
+      .select()
+      .from(s.pendingNotifications)
+      .orderBy(s.pendingNotifications.createdAt)
+      .all();
+  }
+  countPendingNotifications(): number {
+    return this.db.select({ n: sql<number>`count(*)` }).from(s.pendingNotifications).get()?.n ?? 0;
+  }
+  clearPendingNotifications(ids: string[]) {
+    for (const id of ids)
+      this.db.delete(s.pendingNotifications).where(eq(s.pendingNotifications.id, id)).run();
+  }
+
   // ---- settings / devices ----
 
   getSetting(key: string): string | undefined {

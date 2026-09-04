@@ -354,7 +354,13 @@ describe('push API + worker integration', () => {
 
   it('exposes the VAPID public key and configured kinds in status', async () => {
     const st = (await app.inject({ method: 'GET', url: '/api/status', headers: auth() })).json();
-    expect(st.push).toEqual({ kinds: ['webpush'], channels: ['ntfy'], vapidPublicKey: 'VAPIDPUB' });
+    expect(st.push).toMatchObject({
+      kinds: ['webpush'],
+      channels: ['ntfy'],
+      vapidPublicKey: 'VAPIDPUB',
+      quietHours: null,
+      pending: 0,
+    });
   });
 
   it('owner channels get every notification except device-targeted tests; channels/test hits them only', async () => {

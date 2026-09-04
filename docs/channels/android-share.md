@@ -102,6 +102,10 @@ notification also goes to the owner channels (ntfy, Telegram) when configured
   set `VAPID_*` only to bring your own.
 - Subscriptions reported gone (404/410, `UNREGISTERED`) are deleted at once; eight consecutive
   failures also delete. Clients re-subscribe on open when their stored endpoint is missing.
+- During owner-set quiet hours nothing is sent; one digest (`tag: digest`, title
+  `N answers ready`, `url` = chat list, or the single chat when N = 1) follows when the window
+  ends ([ADR 0020](../adr/0020-quiet-hours-digest.md)). Clients need no change: a digest without
+  `chatId` opens `/`.
 
 ## Inside the Capacitor WebView
 - **Edge-to-edge.** Capacitor 8 draws the web view under the status and navigation bars and

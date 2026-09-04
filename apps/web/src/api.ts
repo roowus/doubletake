@@ -76,7 +76,22 @@ export interface Status {
   /** One entry per configured adapter; empty when `health=skip`. */
   brains: BrainHealth[];
   notesDir: string;
-  push: { kinds: string[]; channels: string[]; vapidPublicKey: string | null };
+  push: {
+    kinds: string[];
+    channels: string[];
+    vapidPublicKey: string | null;
+    /** null when the server has no push at all. */
+    quietHours: QuietHours | null;
+    /** Notifications parked during quiet hours, waiting for the digest. */
+    pending: number;
+  };
+}
+export interface QuietHours {
+  enabled: boolean;
+  /** HH:MM in `timeZone`. */
+  start: string;
+  end: string;
+  timeZone: string;
 }
 export interface PushSubscriptionRow {
   id: string;
@@ -189,6 +204,10 @@ export const api = {
     call<{ sent: number; gone: number; failed: number; skipped: number }>('POST', '/api/push/test'),
   /** Test the owner channels (ntfy, Telegram); 404 when none is configured. */
   pushChannelsTest: () => call<{ sent: number; failed: number }>('POST', '/api/push/channels/test'),
+  setQuietHours: (q: QuietHours) =>
+    call<{ quietHours: QuietHours; pending: number }>('PUT', '/api/push/quiet-hours', q),
+  /** Send the parked digest now, even inside quiet hours. */
+  flushDigest: () => call<{ sent: number }>('POST', '/api/push/digest/flush'),
   /** 404 when the server has no IG_APP_ID/IG_APP_SECRET (routes are not registered). */
   igStatus: () => call<IgStatus>('GET', '/api/ig/status'),
   igConnect: () => call<{ url: string }>('POST', '/api/ig/connect'),
