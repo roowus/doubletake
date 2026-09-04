@@ -90,7 +90,7 @@ and a Reddit video.
   extractions, DM reaction; 19 tests against a fake Graph client). **Live verification pending**
   (needs a Meta app, shadow Business account and tunnel; checklist in the
   [guide](channels/instagram-setup.md#6-live-verification-checklist-m4-acceptance)). Settings
-  UI for connect/status is a follow-up.
+  card for connect/status/poll/refresh/disconnect shipped.
 
 ## M5 — More brains
 

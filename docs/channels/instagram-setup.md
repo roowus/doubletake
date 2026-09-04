@@ -125,9 +125,12 @@ Limits: the media owner must be a public account; private replies to comments ar
 possible on your own media and are not used.
 
 ## 5. Settings UI
-Connect / disconnect, show username and token expiry, polling state. Planned: "send test DM
-to myself" (`POST /api/ig/test { recipientId, text? }`) and "simulate mention" buttons; both
-routes exist and can be called with `curl` and a device token in the meantime.
+Settings → **Instagram**: shows "not configured" when the server lacks the env vars,
+otherwise **Connect Instagram** (starts OAuth, returns to `/settings?ig=connected`), and once
+connected the username, token expiry, polling/webhook-host state, **Poll mentions now**,
+**Refresh token**, **Disconnect**, and the last five webhook events. "Send test DM to myself"
+(`POST /api/ig/test { recipientId, text? }`) and "simulate mention" have routes but no buttons
+yet; call them with `curl` and a device token.
 
 ## 6. Live verification checklist (M4 acceptance)
 1. `GET /api/ig/status` → `connected: true`, `username` = shadow account.

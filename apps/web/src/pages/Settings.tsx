@@ -1,6 +1,6 @@
 import { QRCodeSVG } from 'qrcode.react';
 import { useEffect, useState } from 'react';
-import { api, type Device, type Status, setToken } from '../api';
+import { ApiError, api, type Device, type IgStatus, type Status, setToken } from '../api';
 import {
   apiBase,
   disableNativePush,
@@ -26,6 +26,18 @@ export function Settings() {
     native || pushSupported() ? 'busy' : 'unsupported',
   );
   const [pushMsg, setPushMsg] = useState<string | null>(null);
+  const [ig, setIg] = useState<IgStatus | 'off' | null>(null);
+  const [igMsg, setIgMsg] = useState<string | null>(() => {
+    const q = new URLSearchParams(location.search);
+    if (q.get('ig') === 'connected') return 'Instagram connected.';
+    if (q.get('ig') === 'error') return `Instagram: ${q.get('message') ?? 'connection failed'}`;
+    return null;
+  });
+  const loadIg = () =>
+    api
+      .igStatus()
+      .then(setIg)
+      .catch((e) => setIg(e instanceof ApiError && e.status === 404 ? 'off' : null));
 
   const load = () => {
     api
@@ -38,6 +50,9 @@ export function Settings() {
       .catch(() => {});
   };
   useEffect(load, []);
+  useEffect(() => {
+    loadIg();
+  }, []);
   useEffect(() => {
     if (!native && !pushSupported()) return;
     (native ? nativePushEnabled() : pushEnabled())
@@ -145,6 +160,127 @@ export function Settings() {
         {status && status.push.kinds.length > 0 && (
           <div className="small muted">Server push: {status.push.kinds.join(', ')}</div>
         )}
+      </div>
+
+      <div className="card stack">
+        <b>Instagram</b>
+        <div className="small muted">
+          DM a reel to your shadow account, or @mention it in a comment, and the answer arrives
+          here. Setup: docs/channels/instagram-setup.md.
+        </div>
+        {ig === null && <div className="small muted">Loading…</div>}
+        {ig === 'off' && (
+          <div className="small muted">
+            Not configured on the server (set IG_APP_ID, IG_APP_SECRET and IG_WEBHOOK_VERIFY_TOKEN,
+            then restart).
+          </div>
+        )}
+        {ig && ig !== 'off' && (
+          <>
+            {ig.connected ? (
+              <div className="small">
+                Connected as <b>@{ig.username ?? ig.igUserId}</b>
+                {ig.expiresAt && (
+                  <span className="muted">
+                    {' '}
+                    · token expires {new Date(ig.expiresAt).toLocaleDateString()}
+                  </span>
+                )}
+                {ig.refreshedAt && (
+                  <span className="muted">
+                    {' '}
+                    · refreshed {new Date(ig.refreshedAt).toLocaleDateString()}
+                  </span>
+                )}
+              </div>
+            ) : (
+              <div className="small muted">Not connected.</div>
+            )}
+            <div className="small muted">
+              Mention polling {ig.mentionPolling ? 'on' : 'off'}
+              {ig.webhookPublicHost
+                ? ` · webhook host ${ig.webhookPublicHost}`
+                : ' · no public webhook host set'}
+            </div>
+            <div className="row">
+              {ig.connected ? (
+                <>
+                  <button
+                    type="button"
+                    className="ghost"
+                    onClick={() =>
+                      api
+                        .igPoll()
+                        .then((r) =>
+                          setIgMsg(
+                            `Poll: ${r.handled.length} new, ${r.duplicates} seen before, ${r.ignored} ignored.`,
+                          ),
+                        )
+                        .catch((e) => setIgMsg(String(e.message ?? e)))
+                    }
+                  >
+                    Poll mentions now
+                  </button>
+                  <button
+                    type="button"
+                    className="ghost"
+                    onClick={() =>
+                      api
+                        .igRefresh()
+                        .then((s) => {
+                          setIg(s);
+                          setIgMsg('Token refreshed.');
+                        })
+                        .catch((e) => setIgMsg(String(e.message ?? e)))
+                    }
+                  >
+                    Refresh token
+                  </button>
+                  <button
+                    type="button"
+                    className="ghost"
+                    onClick={() => {
+                      if (!confirm('Disconnect the Instagram account?')) return;
+                      api
+                        .igDisconnect()
+                        .then(() => {
+                          setIgMsg('Disconnected.');
+                          loadIg();
+                        })
+                        .catch((e) => setIgMsg(String(e.message ?? e)));
+                    }}
+                  >
+                    Disconnect
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() =>
+                    api
+                      .igConnect()
+                      .then((r) => {
+                        location.href = r.url;
+                      })
+                      .catch((e) => setIgMsg(String(e.message ?? e)))
+                  }
+                >
+                  Connect Instagram
+                </button>
+              )}
+            </div>
+            {ig.recentEvents.length > 0 && (
+              <div className="small muted">
+                Recent events:{' '}
+                {ig.recentEvents
+                  .slice(0, 5)
+                  .map((e) => `${e.kind}${e.error ? ' (error)' : ''}`)
+                  .join(', ')}
+              </div>
+            )}
+          </>
+        )}
+        {igMsg && <div className="small muted">{igMsg}</div>}
       </div>
 
       <div className="card stack">
