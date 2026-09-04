@@ -230,3 +230,32 @@ export const settings = sqliteTable('settings', {
   value: text('value').notNull(),
   updatedAt: text('updated_at').notNull(),
 });
+
+/** The connected Instagram shadow account (docs/DATA-MODEL.md §ig_accounts). One row in v1. */
+export const igAccounts = sqliteTable('ig_accounts', {
+  igUserId: text('ig_user_id').primaryKey(),
+  username: text('username'),
+  /** Long-lived token, encrypted with the keyfile (ADR 0018). */
+  accessTokenEnc: text('access_token_enc').notNull(),
+  expiresAt: text('expires_at'),
+  refreshedAt: text('refreshed_at'),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+});
+
+/** Webhook dedupe + audit; `id` is Meta's message id or comment id. */
+export const igEvents = sqliteTable(
+  'ig_events',
+  {
+    id: text('id').primaryKey(),
+    kind: text('kind').notNull(), // dm_share | mention | comment | other
+    raw: text('raw').notNull(), // JSON
+    itemId: text('item_id').references(() => items.id, { onDelete: 'set null' }),
+    /** IGSID of the DM sender, needed to react to the message when the run finishes. */
+    senderId: text('sender_id'),
+    receivedAt: text('received_at').notNull(),
+    processedAt: text('processed_at'),
+    error: text('error'),
+  },
+  (t) => [index('ig_events_item_idx').on(t.itemId)],
+);

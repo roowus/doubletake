@@ -85,6 +85,12 @@ and a Reddit video.
 - Token refresh job; connect/disconnect flow in settings.
 - **Verify or refute**: mention webhook under Standard Access. If it does not fire, ship the
   polling fallback and document the limitation prominently.
+- Status 2026-09-03: **code complete** ([ADR 0018](adr/0018-instagram-channel-and-keyfile-secrets.md);
+  channel module, webhook + host guard, OAuth connect, refresh job, polling fallback, Graph
+  extractions, DM reaction; 19 tests against a fake Graph client). **Live verification pending**
+  (needs a Meta app, shadow Business account and tunnel; checklist in the
+  [guide](channels/instagram-setup.md#6-live-verification-checklist-m4-acceptance)). Settings
+  UI for connect/status is a follow-up.
 
 ## M5 — More brains
 

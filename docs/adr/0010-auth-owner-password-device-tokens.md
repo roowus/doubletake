@@ -1,6 +1,6 @@
 # 0010 — Owner password and per-device tokens
 
-- Status: accepted
+- Status: accepted (secrets-at-rest sentence superseded by [0018](0018-instagram-channel-and-keyfile-secrets.md))
 - Date: 2026-09-03
 
 ## Context
@@ -12,7 +12,8 @@ Set an owner password at first run (argon2id hash in `settings`). Pair each devi
 scanning a QR shown in the settings page that contains the server URL and a short-lived pairing
 code; the device exchanges it for a long-lived random token (hash stored in `devices`). Tokens
 are revocable from the devices list. Secrets at rest are encrypted with a key derived from the
-password and a machine keyfile.
+password and a machine keyfile. *Amended by ADR 0018: the key is the machine keyfile alone, so
+the service can use stored secrets unattended.*
 
 ## Alternatives considered
 - OAuth / OIDC: overkill for one user.

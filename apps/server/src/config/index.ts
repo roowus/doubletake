@@ -64,6 +64,17 @@ export interface Config {
     whisperBackend: string;
     ytdlpCookiesFromBrowser: string | null;
   };
+  /** Instagram shadow-account channel (docs/channels/instagram-setup.md). All null = disabled. */
+  ig: {
+    appId: string | null;
+    appSecret: string | null;
+    verifyToken: string | null;
+    /** Public hostname (tunnel / Funnel) that may reach `/webhooks/instagram` and nothing else. */
+    webhookPublicHost: string | null;
+    /** Poll `/me/tags` for mentions in case the `mentions` webhook does not fire. */
+    mentionPolling: boolean;
+    graphBase: string;
+  };
 }
 
 export function loadConfig(): Config {
@@ -94,6 +105,14 @@ export function loadConfig(): Config {
       vision: visionMode(env('DOUBLETAKE_VISION', 'cloud')),
       whisperBackend: env('DOUBLETAKE_WHISPER_BACKEND', 'auto') ?? 'auto',
       ytdlpCookiesFromBrowser: env('DOUBLETAKE_YTDLP_COOKIES_FROM_BROWSER') ?? null,
+    },
+    ig: {
+      appId: env('IG_APP_ID') ?? null,
+      appSecret: env('IG_APP_SECRET') ?? null,
+      verifyToken: env('IG_WEBHOOK_VERIFY_TOKEN') ?? null,
+      webhookPublicHost: env('DOUBLETAKE_WEBHOOK_PUBLIC_HOST')?.toLowerCase() ?? null,
+      mentionPolling: (env('IG_MENTION_POLLING', 'on') ?? 'on') !== 'off',
+      graphBase: env('IG_GRAPH_BASE', 'https://graph.instagram.com/v25.0') ?? '',
     },
   };
 }

@@ -30,13 +30,16 @@ enforced in code.
   3 redirects re-checking each, caps bodies at 200 KB of text, sends no cookies or auth.
 - The server binds loopback. Clients arrive via Tailscale. Only `/webhooks/instagram` is
   reachable from the public internet, through a tunnel; requests to other routes carrying the
-  public hostname are rejected.
+  public hostname (`DOUBLETAKE_WEBHOOK_PUBLIC_HOST`) are answered `404` before authentication.
 
 ## Authentication and secrets
 - Owner password (argon2id) set at first run; per-device long-lived tokens (random 32 bytes,
   hashed at rest) issued by QR pairing, revocable.
-- Secrets in `settings` are encrypted (XChaCha20-Poly1305) with a key derived from the owner
-  password and `~/.doubletake/keyfile`. Losing the password means re-entering secrets.
+- Secrets at rest (the Instagram long-lived token in `ig_accounts.access_token_enc`; later
+  API keys entered via the UI) are sealed with ChaCha20-Poly1305 under a random key in
+  `~/.doubletake/keyfile` (mode 0600, created on first use; [ADR 0018](adr/0018-instagram-channel-and-keyfile-secrets.md)).
+  The keyfile lives beside the database it protects, so disk-level protection (FileVault) is
+  the real defence against theft; losing the keyfile means re-connecting Instagram.
 - Webhook deliveries are verified with `X-Hub-Signature-256`; unsigned or replayed events are
   dropped.
 - Push payloads contain no answer text.
