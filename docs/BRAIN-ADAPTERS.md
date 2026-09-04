@@ -154,6 +154,10 @@ Messages API). We run the tool loop:
   summarisation call when they exceed a token threshold.
 - Vision: enabled when the model is flagged `vision: true` in config.
 
+The Claude Agent SDK adapter implements `describeImages()` as one tool-less turn per batch of
+six frames (base64 image blocks, JSON-array reply, `maxBudgetUsd` 0.10). The media stage calls
+it when `DOUBLETAKE_VISION=cloud`; adapters without it produce a warning and no descriptions.
+
 ## Selection
 
 ```jsonc

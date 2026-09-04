@@ -21,6 +21,7 @@ One file per decision, numbered, never deleted. Superseding a decision means a n
 | [0014](0014-structured-extraction-and-categories.md) | Structured extraction, categories, auto-collections | accepted |
 | [0015](0015-platform-extractor-registry.md) | Platform extractor registry in the server (IG, TikTok, YouTube/Shorts, X, Reddit, AI chat, web) | accepted |
 | [0016](0016-push-keys-and-fcm-http-v1.md) | VAPID keys generated into settings; FCM over HTTP v1 without the Google SDK; subscription pruning | accepted |
+| [0017](0017-media-worker-process-and-vision-via-brain.md) | Media worker as a spawned Python child over JSON-lines; crash → respawn + one retry; frame descriptions via the brain | accepted |
 
 ## Template
 
