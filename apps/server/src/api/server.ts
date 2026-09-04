@@ -600,6 +600,9 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
     await app.register(fastifyStatic, { root: cfg.webDist, wildcard: false });
     app.setNotFoundHandler((req, reply) => {
       if (req.url.startsWith('/api/')) return reply.code(404).send({ error: 'not found' });
+      // Hashed bundles are registered as routes at boot; one built after boot must 404, not
+      // come back as index.html (a module script served as text/html breaks the whole app).
+      if (req.url.startsWith('/assets/')) return reply.code(404).send('not found');
       return reply.sendFile('index.html');
     });
   }

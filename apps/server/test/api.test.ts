@@ -394,6 +394,37 @@ describe('API', () => {
     expect(res.json().error).toBe('invalid request');
   });
 
+  it('serves the PWA with an SPA fallback, but unknown /assets/ paths 404', async () => {
+    const dist = fs.mkdtempSync(path.join(env.root, 'web-dist-'));
+    fs.mkdirSync(path.join(dist, 'assets'));
+    fs.writeFileSync(path.join(dist, 'index.html'), '<!doctype html><title>dt</title>');
+    fs.writeFileSync(path.join(dist, 'assets', 'index-abc123.js'), 'export const x = 1;');
+    const w = new QueueWorker(env.repo, brain, env.cfg);
+    const web = await buildServer({
+      cfg: { ...env.cfg, webDist: dist },
+      repo: env.repo,
+      worker: w,
+      brain,
+    });
+    try {
+      const js = await web.inject({ method: 'GET', url: '/assets/index-abc123.js' });
+      expect(js.statusCode).toBe(200);
+      expect(js.headers['content-type']).toMatch(/javascript/);
+      const spa = await web.inject({ method: 'GET', url: '/chat/01ABC' });
+      expect(spa.statusCode).toBe(200);
+      expect(spa.headers['content-type']).toMatch(/text\/html/);
+      // A bundle built after boot is not a route yet: it must not come back as index.html.
+      const stale = await web.inject({ method: 'GET', url: '/assets/index-zzz999.js' });
+      expect(stale.statusCode).toBe(404);
+      expect(stale.headers['content-type']).not.toMatch(/text\/html/);
+      const api = await web.inject({ method: 'GET', url: '/api/nope', headers: auth() });
+      expect(api.statusCode).toBe(404);
+      expect(api.json()).toEqual({ error: 'not found' });
+    } finally {
+      await web.close();
+    }
+  });
+
   it('ftsQuery quotes terms and strips operators', () => {
     expect(ftsQuery('sour"dough  OR x')).toBe('"sourdough"* "OR"* "x"*');
   });
