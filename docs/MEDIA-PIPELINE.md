@@ -47,6 +47,30 @@ spawns a fresh worker for the next request. `transcribe_model` is the mode name;
 warning in the chat and the run continues with page-level extraction. Planned ops not yet
 implemented: `fetch_comments` (re-fetch for Deep escalation).
 
+### Remote worker (ADR 0026)
+
+`doubletake-media serve --bind <tailnet-ip> --port 7392` serves the same protocol over HTTP so
+the worker can run on another machine ([ADR 0026](adr/0026-remote-media-worker.md),
+[Deployment](DEPLOYMENT.md#media-worker-on-another-machine)):
+
+| Route | Body / response |
+|---|---|
+| `GET /ping` | `{ ok: true, pong: true }` |
+| `POST /extract` | request body = the stdio request object above (`op` defaults to `extract`); response is `application/x-ndjson`, the progress lines followed by the one result line |
+| `GET /files?path=<absolute>` | bytes of one file under the worker's data dir; anything else is `400`/`404` |
+
+Every route needs `Authorization: Bearer $DOUBLETAKE_WORKER_TOKEN` (the worker refuses to bind
+a non-loopback address without a token). The worker replaces `out_dir` with
+`<its data dir>/media/<item_id>` unless started with `--shared-paths`, and adds `out_dir` to
+the result line. The server's `RemoteMediaClient` (selected by `DOUBLETAKE_WORKER_URL`) then
+fetches each asset and `vision_requests[].frame_path` through `/files` into its own
+`<dataDir>/media/<item_id>/` and rewrites the paths, so everything downstream (cloud vision,
+storage relative to the data dir, export) is unchanged. With `DOUBLETAKE_WORKER_SHARED_PATHS=on`
+nothing is copied. Errors map to the same codes (`unauthorized` non-retryable; a dropped
+connection is `worker_crashed`, HTTP failures `worker_unavailable`, both retryable; the media
+wall clock still ends in `timeout`). One extraction at a time on the worker; a second request
+waits. The worker's stderr is its log; the server's `logs/worker.log` stays empty.
+
 ## Platform extractors (server side, M1)
 
 Before the media worker exists (and always, as the first step), the server's extractor

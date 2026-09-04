@@ -15,7 +15,12 @@ def handle_version(_params: Mapping[str, object], _progress: Progress) -> dict[s
 
 
 def main() -> int:
-    server = Server({"extract": handle_extract, "version": handle_version})
+    handlers = {"extract": handle_extract, "version": handle_version}
+    if len(sys.argv) > 1 and sys.argv[1] == "serve":
+        from .serve import serve
+
+        return serve(sys.argv[2:], handlers)
+    server = Server(handlers)
     print(f"doubletake-media {__version__} ready", file=sys.stderr, flush=True)
     server.serve_forever()
     return 0

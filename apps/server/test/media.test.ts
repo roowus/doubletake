@@ -34,6 +34,7 @@ env.cfg.media = {
   vision: 'cloud',
   whisperBackend: 'off',
   ytdlpCookiesFromBrowser: null,
+  remote: null,
 };
 const brain = new VisionBrain();
 const media = new MediaWorkerClient(env.cfg, silentLog);

@@ -99,6 +99,37 @@ phone and desktop.
   public URL. Both channels are owner-level: no device subscription, no toggle in the UI,
   failures are logged (`… notification failed: …`) and never disable the channel.
 
+### Media worker on another machine
+The Python media worker ([ADR 0026](adr/0026-remote-media-worker.md)) can run on any tailnet
+machine, for example a Mac mini or a Linux box with a GPU, while the server stays on the laptop.
+On the worker machine:
+
+```sh
+git clone https://github.com/roowus/doubletake && cd doubletake/workers/media
+uv sync --extra media --extra whisper-mlx        # or --extra whisper-cpu
+export DOUBLETAKE_WORKER_TOKEN="$(openssl rand -base64 24)"   # keep it; the server needs the same value
+uv run doubletake-media serve --bind "$(tailscale ip -4)" --port 7392 --data-dir ~/.doubletake-worker
+```
+
+On the server, in `.env`: `DOUBLETAKE_WORKER_URL=http://<worker tailnet ip>:7392` and
+`DOUBLETAKE_WORKER_TOKEN=<same token>`, then restart. The boot log prints
+`media: remote http://…`; a failed `ping` is a warning, and runs then degrade to page-level
+extraction with a `Media pipeline (worker_unavailable)` note until the worker answers.
+Downloaded files and frames are copied to the server's data dir after each extraction, so
+backups and the UI are unchanged; the worker keeps its own copy under `--data-dir`, which you
+may clear at any time. The worker reads `DOUBLETAKE_VISION` and `DOUBLETAKE_WHISPER_BACKEND`
+from its own environment when remote (the server only sets them for a spawned child), so put
+them next to the token. `DOUBLETAKE_VISION=local` then runs on the worker machine (that is where
+a GPU helps); `cloud` vision is still done by the server through the brain.
+
+If both machines mount one filesystem at the same absolute path (a NAS share, a synced
+folder), start the worker with `--shared-paths` and set `DOUBLETAKE_WORKER_SHARED_PATHS=on` on
+the server: the worker writes straight into the server's `media/<item_id>/` and nothing is
+copied. Run the worker as a service the same way as the server (a launchd plist or systemd
+unit whose command is the `uv run … serve …` line, with the token in its environment). Bind to
+the tailnet IP only; `--bind 0.0.0.0` without a token is refused, and with one it still exposes
+the worker's files to anyone who guesses it.
+
 ### Map view geocoder
 The map ([ADR 0022](adr/0022-map-view-place-geocoding.md)) locates saved places with the public
 OpenStreetMap Nominatim service by default (one request per new place, 1 s apart, results
