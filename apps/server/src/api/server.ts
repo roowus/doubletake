@@ -19,6 +19,12 @@ import {
   resolveQuery,
   seedAutoCollections,
 } from '../library/collections.js';
+import {
+  exportKarakeep,
+  exportMemos,
+  importKarakeep,
+  KarakeepExport,
+} from '../library/interchange.js';
 import { MCP_PATH, registerMcpRoutes } from '../mcp/index.js';
 import type { NotificationHub } from '../notify/hub.js';
 import { type DigestGate, parseHHMM, validTimeZone } from '../notify/quiet.js';
@@ -305,6 +311,41 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
     repo.removeCollectionItem(id, chat.itemId);
     worker.emit('chat_updated', chat.id);
     return { count: repo.collectionItemIds(id).length };
+  });
+
+  // ---- Karakeep / Memos interchange (ADR 0024) ----
+  app.get('/api/export/karakeep', async (_req, reply) => {
+    const stamp = new Date().toISOString().slice(0, 10);
+    return reply
+      .header('content-disposition', `attachment; filename="doubletake-karakeep-${stamp}.json"`)
+      .send(exportKarakeep(repo));
+  });
+
+  app.get('/api/export/memos', async (_req, reply) => {
+    const stamp = new Date().toISOString().slice(0, 10);
+    return reply
+      .header('content-disposition', `attachment; filename="doubletake-memos-${stamp}.json"`)
+      .send(exportMemos(repo));
+  });
+
+  // A Karakeep export can be large; this route alone takes bodies up to 32 MiB.
+  app.post('/api/import/karakeep', { bodyLimit: 32 * 1024 * 1024 }, async (req, reply) => {
+    const research = z
+      .object({ research: z.enum(['quick', 'standard', 'deep']).optional() })
+      .parse(req.query ?? {}).research;
+    const parsed = KarakeepExport.safeParse(req.body);
+    if (!parsed.success) {
+      return reply
+        .code(400)
+        .send({ error: 'not a Karakeep export file (expected { bookmarks: [...] })' });
+    }
+    const summary = importKarakeep(repo, parsed.data, {
+      research: research ?? null,
+      adapterFor: (m) => worker.brains.forMode(m),
+    });
+    if (summary.runs) worker.kick();
+    if (summary.imported) worker.emit('chat_updated', '');
+    return summary;
   });
 
   /** Which manual collections hold this chat (for the chat header picker). */

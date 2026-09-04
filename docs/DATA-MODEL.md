@@ -13,7 +13,7 @@ JSON columns are validated with zod schemas from `packages/shared` on read and w
 | source_url | text | as shared (may be a share-redirect) |
 | canonical_url | text | resolved permalink; null for free text |
 | platform | text | `instagram` · `tiktok` · `youtube` (incl. Shorts) · `x` · `reddit` · `aichat` · `web` · `text` — the id of the extractor that claimed the URL |
-| channel | text | `android_share` · `compose` · `ig_dm` · `ig_mention` · `web_share_target` · `library` (a question over the owner's own chats, [ADR 0021](adr/0021-cross-library-chat.md)) · `mcp` (saved by another agent through the MCP server, [ADR 0023](adr/0023-mcp-server.md)) |
+| channel | text | `android_share` · `compose` · `ig_dm` · `ig_mention` · `web_share_target` · `library` (a question over the owner's own chats, [ADR 0021](adr/0021-cross-library-chat.md)) · `mcp` (saved by another agent through the MCP server, [ADR 0023](adr/0023-mcp-server.md)) · `import` (from a Karakeep export file, original `created_at` kept, [ADR 0024](adr/0024-karakeep-memos-interchange.md)) |
 | note | text | the owner's question or remark |
 | focus | text | `whole` · `comments` · `thread:<comment_id>` |
 | mode_requested | text | `auto` · `quick` · `standard` · `deep` |

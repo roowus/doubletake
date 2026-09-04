@@ -144,7 +144,9 @@ export function ChatList() {
                   ? '💬'
                   : c.channel === 'mcp'
                     ? '🤖'
-                    : (PLATFORM_ICON[c.platform] ?? '•')}{' '}
+                    : c.channel === 'import'
+                      ? '📥'
+                      : (PLATFORM_ICON[c.platform] ?? '•')}{' '}
                 {c.title}
               </div>
               <div className="row small">

@@ -124,6 +124,6 @@ and a Reddit video.
 
 ~~Telegram and ntfy notification channels~~ (done 2026-09-04, [ADR 0019](adr/0019-owner-notification-channels.md)) · iOS share extension · tailscale multi-device
 (worker on another machine, shared data dir) · ~~MCP server exposing the library to other
-agents~~ (done 2026-09-04, [ADR 0023](adr/0023-mcp-server.md)) · Karakeep / Memos import and export · shareable read-only collection pages (SaveToList's
+agents~~ (done 2026-09-04, [ADR 0023](adr/0023-mcp-server.md)) · ~~Karakeep / Memos import and export~~ (done 2026-09-04, [ADR 0024](adr/0024-karakeep-memos-interchange.md)) · shareable read-only collection pages (SaveToList's
 shared lists) · ~~cross-library chat ("what did I save about ski wax?") over FTS, Recall-style~~ (done 2026-09-04, [ADR 0021](adr/0021-cross-library-chat.md)) ·
 ~~map view over place entities~~ (done 2026-09-04, [ADR 0022](adr/0022-map-view-place-geocoding.md)) · ~~digest notifications (batch quiet-hours pushes)~~ (done 2026-09-04, [ADR 0020](adr/0020-quiet-hours-digest.md)).

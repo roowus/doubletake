@@ -4,6 +4,7 @@ import {
   ApiError,
   api,
   type Device,
+  getToken,
   type IgStatus,
   type QuietHours,
   type Status,
@@ -50,6 +51,38 @@ export function Settings() {
       .catch((e) => setIg(e instanceof ApiError && e.status === 404 ? 'off' : null));
 
   const [checking, setChecking] = useState(false);
+  const [importMsg, setImportMsg] = useState<string | null>(null);
+  const [importResearch, setImportResearch] = useState<'' | 'quick' | 'standard'>('');
+  const importFile = async (f: File | undefined) => {
+    if (!f) return;
+    setImportMsg('Importing…');
+    try {
+      const parsed: unknown = JSON.parse(await f.text());
+      const r = await api.importKarakeep(parsed, importResearch || undefined);
+      setImportMsg(
+        `Imported ${r.imported}, skipped ${r.skipped} already saved or empty, ${r.collections} new collection${r.collections === 1 ? '' : 's'}${r.runs ? `, ${r.runs} research runs queued` : ''}.`,
+      );
+    } catch (e) {
+      setImportMsg(`Import failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  };
+  const download = async (kind: 'karakeep' | 'memos') => {
+    setImportMsg(null);
+    try {
+      const res = await fetch(`${apiBase()}/api/export/${kind}`, {
+        headers: { authorization: `Bearer ${getToken() ?? ''}` },
+      });
+      if (!res.ok) throw new Error(res.statusText);
+      const blob = await res.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `doubletake-${kind}-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch (e) {
+      setImportMsg(`Export failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  };
   const load = (health: 'cached' | 'refresh' = 'cached') => {
     if (health === 'refresh') setChecking(true);
     api
@@ -500,6 +533,50 @@ export function Settings() {
           for a token, then point their MCP client at <code>{window.location.origin}/mcp</code> with{' '}
           <code>Authorization: Bearer &lt;token&gt;</code>. They appear here and can be revoked.
         </p>
+      </div>
+
+      <div className="card stack">
+        <b>Import and export</b>
+        <p className="muted small">
+          Move the library to or from other tools. Export the Karakeep file to import it into
+          Karakeep (Settings → Import), or the Memos file to post with a script. Importing a
+          Karakeep export adds its bookmarks as items with their tags and lists; nothing is
+          researched unless you ask.
+        </p>
+        <div className="row small" style={{ flexWrap: 'wrap', gap: 8 }}>
+          <button type="button" className="ghost" onClick={() => download('karakeep')}>
+            Download Karakeep export
+          </button>
+          <button type="button" className="ghost" onClick={() => download('memos')}>
+            Download Memos export
+          </button>
+        </div>
+        <div className="row small" style={{ flexWrap: 'wrap', gap: 8 }}>
+          <label className="row small" style={{ gap: 6 }}>
+            After import
+            <select
+              value={importResearch}
+              onChange={(e) => setImportResearch(e.target.value as '' | 'quick' | 'standard')}
+            >
+              <option value="">do nothing (free)</option>
+              <option value="quick">research each, quick</option>
+              <option value="standard">research each, standard</option>
+            </select>
+          </label>
+          <label className="row small" style={{ gap: 6 }}>
+            Import Karakeep file
+            <input
+              type="file"
+              accept="application/json,.json"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                e.target.value = '';
+                void importFile(f);
+              }}
+            />
+          </label>
+        </div>
+        {importMsg && <p className="muted small">{importMsg}</p>}
       </div>
 
       <div className="card stack">

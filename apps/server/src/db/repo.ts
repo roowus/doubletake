@@ -77,6 +77,16 @@ export class Repo {
   getChat(id: string) {
     return this.db.select().from(s.chats).where(eq(s.chats.id, id)).get();
   }
+  /** Any item ever saved for this permalink (import dedupe is all-time, unlike the 24 h share window). */
+  findItemByCanonicalUrl(canonicalUrl: string): ItemRow | undefined {
+    return this.db
+      .select()
+      .from(s.items)
+      .where(eq(s.items.canonicalUrl, canonicalUrl))
+      .orderBy(desc(s.items.createdAt))
+      .get();
+  }
+
   listItems(limit = 200) {
     return this.db.select().from(s.items).orderBy(desc(s.items.createdAt)).limit(limit).all();
   }
@@ -444,6 +454,10 @@ export class Repo {
 
   getCollection(id: string) {
     return this.db.select().from(s.collections).where(eq(s.collections.id, id)).get();
+  }
+
+  findCollectionByName(name: string) {
+    return this.db.select().from(s.collections).where(eq(s.collections.name, name)).get();
   }
 
   findCollectionByQuery(query: string) {
