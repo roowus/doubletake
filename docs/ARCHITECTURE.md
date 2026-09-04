@@ -221,6 +221,9 @@ and is authenticated by Meta's signature instead.
 
 CORS is enabled for `capacitor://localhost`, `https://localhost` and `http://localhost` so the
 Capacitor WebView can call the API on a different origin; every other origin is same-origin only.
+On the Android side the WebView allows mixed content and the network security config permits
+cleartext to `localhost`/`127.0.0.1` only, so `adb reverse` device testing works while any real
+server URL stays https ([android-share.md](channels/android-share.md)).
 
 ## 10. Security model
 

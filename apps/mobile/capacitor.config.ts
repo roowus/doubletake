@@ -11,6 +11,9 @@ const config: CapacitorConfig = {
   android: {
     // Enable `chrome://inspect` for debug builds only.
     webContentsDebuggingEnabled: false,
+    // The bundle is served from https://localhost, so a plain-http server URL is mixed content.
+    // Allow it; the OS network security config still limits cleartext to localhost (adb reverse).
+    allowMixedContent: true,
   },
   plugins: {
     PushNotifications: {
