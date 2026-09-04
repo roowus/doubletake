@@ -138,6 +138,7 @@ export async function runMediaStage(args: {
       },
       {
         signal,
+        timeoutMs: MODE_BUDGETS[mode].mediaWallClockMs,
         onProgress: (p) => emit('media', { stage: p.stage, pct: p.pct, detail: p.detail }),
       },
     );

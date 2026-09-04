@@ -71,13 +71,19 @@ export class MediaWorkerClient implements MediaClient {
     proc.stderr.on('data', (d: Buffer) => this.logStream?.write(d));
     const rl = readline.createInterface({ input: proc.stdout });
     rl.on('line', (line) => this.onLine(line));
-    proc.on('error', (e) => this.failAll(new MediaWorkerError('worker_crashed', e.message, true)));
+    proc.on('error', (e) => {
+      if (this.proc === proc) this.failAll(new MediaWorkerError('worker_crashed', e.message, true));
+    });
     proc.on('exit', (code, sig) => {
-      if (this.proc === proc) this.proc = null;
+      // A process we already replaced (killed on timeout/abort) had its request dropped when it
+      // was killed; its late exit must not fail requests queued on the new process.
+      const current = this.proc === proc;
+      if (current) this.proc = null;
       if (!this.stopping) this.log.warn({ code, sig }, 'media worker exited');
-      this.failAll(
-        new MediaWorkerError('worker_crashed', `media worker exited (${code ?? sig})`, true),
-      );
+      if (current)
+        this.failAll(
+          new MediaWorkerError('worker_crashed', `media worker exited (${code ?? sig})`, true),
+        );
     });
     return proc;
   }
@@ -155,9 +161,7 @@ export class MediaWorkerClient implements MediaClient {
           timer = setTimeout(() => {
             this.pending.delete(id);
             proc.kill('SIGTERM');
-            done(() =>
-              reject(new MediaWorkerError('download_failed', 'media worker timed out', true)),
-            );
+            done(() => reject(new MediaWorkerError('timeout', 'media worker timed out', true)));
           }, opts.timeoutMs);
         }
         this.pending.set(id, {

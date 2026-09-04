@@ -120,6 +120,9 @@ export class ClaudeAgentSdkAdapter implements BrainAdapter {
         ...(this.cfg.pathToClaudeCodeExecutable
           ? { pathToClaudeCodeExecutable: this.cfg.pathToClaudeCodeExecutable }
           : {}),
+        // Same model as research runs. Without this the CLI picks its own default, which behind a
+        // router may be a slow or empty-answering tier and silently blows the one-shot budget.
+        ...(this.cfg.model ? { model: this.cfg.model } : {}),
         systemPrompt,
         tools: [],
         allowedTools: [],
@@ -131,7 +134,9 @@ export class ClaudeAgentSdkAdapter implements BrainAdapter {
       },
     });
     for await (const m of it) {
-      if (m.type === 'result' && m.subtype === 'success') text = m.result;
+      if (m.type !== 'result') continue;
+      if (m.subtype === 'success' && !m.is_error) text = m.result;
+      else throw new Error(`one-shot call failed (${m.subtype})`);
     }
     return text;
   }

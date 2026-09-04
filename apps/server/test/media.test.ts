@@ -73,6 +73,30 @@ describe('media worker client', () => {
     } satisfies Partial<MediaWorkerError>);
   });
 
+  it('kills the worker and reports a retryable timeout when a request exceeds its budget', async () => {
+    const ac = new AbortController();
+    await expect(
+      media.extract(
+        {
+          item_id: 's',
+          url: 'https://example.com/slow',
+          platform: 'youtube',
+          focus: 'whole',
+          mode: 'quick',
+          hints: {},
+          budget: budgetFor('quick', 'whole'),
+          out_dir: path.join(env.cfg.dataDir, 'media', 's'),
+        },
+        { signal: ac.signal, timeoutMs: 300 },
+      ),
+    ).rejects.toMatchObject({
+      code: 'timeout',
+      retryable: true,
+    } satisfies Partial<MediaWorkerError>);
+    // The next request gets a fresh process.
+    expect(await media.ping()).toBe(true);
+  });
+
   it('restarts a crashed worker and retries the request once', async () => {
     const ac = new AbortController();
     const progress: string[] = [];

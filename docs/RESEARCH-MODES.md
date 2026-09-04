@@ -4,7 +4,8 @@ Mode is picked per run. Budgets are configuration (`modes.*` in settings) with t
 
 | | Quick | Standard | Deep |
 |---|---|---|---|
-| Wall-clock target | < 90 s | < 6 min | < 25 min |
+| Wall-clock target (research) | < 90 s | < 6 min | < 25 min |
+| Media wall clock (download → OCR/vision) | 3 min | 10 min | 20 min |
 | Transcription model | small / turbo | large-v3-turbo | large-v3-turbo |
 | Frames sampled | ≤ 4 | ≤ 12 | ≤ 40 |
 | Frames described by vision | 0 (OCR only) | ≤ 6 | all sampled |

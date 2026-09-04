@@ -7,7 +7,11 @@ export interface ModeBudget {
   maxFetches: number;
   readFiles: boolean;
   writeSandbox: boolean;
+  /** Research phase (classify + agent) wall clock. */
   wallClockMs: number;
+  /** Media pipeline wall clock (download, transcription, frames, OCR, vision); separate so a slow
+   *  download cannot starve the research phase. */
+  mediaWallClockMs: number;
   modelTier: 'fast' | 'default' | 'best';
   framesMax: number;
   commentsMax: number;
@@ -22,6 +26,7 @@ export const MODE_BUDGETS: Record<Mode, ModeBudget> = {
     readFiles: false,
     writeSandbox: false,
     wallClockMs: 90_000,
+    mediaWallClockMs: 3 * 60_000,
     modelTier: 'fast',
     framesMax: 4,
     commentsMax: 20,
@@ -34,6 +39,7 @@ export const MODE_BUDGETS: Record<Mode, ModeBudget> = {
     readFiles: true,
     writeSandbox: false,
     wallClockMs: 6 * 60_000,
+    mediaWallClockMs: 10 * 60_000,
     modelTier: 'default',
     framesMax: 12,
     commentsMax: 100,
@@ -46,6 +52,7 @@ export const MODE_BUDGETS: Record<Mode, ModeBudget> = {
     readFiles: true,
     writeSandbox: true,
     wallClockMs: 25 * 60_000,
+    mediaWallClockMs: 20 * 60_000,
     modelTier: 'best',
     framesMax: 40,
     commentsMax: 500,

@@ -20,8 +20,11 @@ where, and how extractions stay isolated from the brain's instructions.
 - **Failure ownership**: the worker never partially answers. Tool/download problems are error
   results with a stable `code` (`download_failed`, `private_or_removed`, `too_long`,
   `no_speech`, `tool_missing`, `bad_request`, `worker_error`) and a `retryable` flag. A process
-  exit or a wall-clock timeout fails every in-flight request with `worker_crashed`; the client
-  respawns on the next request and retries an `extract` **once**. A failed media stage is
+  exit fails every in-flight request with `worker_crashed`; the client respawns on the next
+  request and retries an `extract` **once**. Each request has a per-mode media wall clock
+  (`MODE_BUDGETS[mode].mediaWallClockMs`) separate from the research clock; expiry kills the
+  process and fails the request with `timeout`. The run's hard ceiling is research wall clock +
+  media wall clock + 60 s. A failed media stage is
   reported to the chat as a warning and the research run continues on page-level extraction.
 - **Vision through the brain**: the worker returns `vision_requests` (frame paths); the server
   fulfils them with `BrainAdapter.describeImages()` when `DOUBLETAKE_VISION=cloud` (default).
