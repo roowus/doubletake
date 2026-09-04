@@ -249,6 +249,126 @@ describe('API', () => {
     ).json();
     expect(Array.isArray(det2.extractions)).toBe(true);
 
+    // collections: auto ones are seeded and count matching items; manual ones hold picked chats
+    const cols = (
+      await app.inject({ method: 'GET', url: '/api/collections', headers: auth() })
+    ).json();
+    expect(cols).toContainEqual(
+      expect.objectContaining({ query: 'category:tech', auto: true, count: 1 }),
+    );
+    expect(cols).toContainEqual(
+      expect.objectContaining({ query: 'entity:tool', name: 'Tools', count: 1 }),
+    );
+    expect(cols.find((c: { query: string }) => c.query === 'category:travel')).toBeUndefined();
+    const allCols = (
+      await app.inject({ method: 'GET', url: '/api/collections?all=true', headers: auth() })
+    ).json();
+    expect(allCols.find((c: { query: string }) => c.query === 'category:travel')).toMatchObject({
+      count: 0,
+    });
+    const techId = cols.find((c: { query: string }) => c.query === 'category:tech').id;
+    expect(
+      (
+        await app.inject({
+          method: 'GET',
+          url: `/api/chats?collection=${techId}`,
+          headers: auth(),
+        })
+      ).json(),
+    ).toHaveLength(1);
+    expect(
+      (await app.inject({ method: 'DELETE', url: `/api/collections/${techId}`, headers: auth() }))
+        .statusCode,
+    ).toBe(400);
+    const hide = await app.inject({
+      method: 'POST',
+      url: `/api/collections/${techId}`,
+      headers: auth(),
+      payload: { hidden: true },
+    });
+    expect(hide.json()).toMatchObject({ hidden: true });
+    expect(
+      (await app.inject({ method: 'GET', url: '/api/collections', headers: auth() }))
+        .json()
+        .find((c: { id: string }) => c.id === techId),
+    ).toBeUndefined();
+
+    const made = await app.inject({
+      method: 'POST',
+      url: '/api/collections',
+      headers: auth(),
+      payload: { name: 'Read later' },
+    });
+    expect(made.statusCode).toBe(201);
+    expect(made.json()).toMatchObject({ manual: true, auto: false, count: 0 });
+    const manualId = made.json().id;
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: `/api/collections/${manualId}/items`,
+          headers: auth(),
+          payload: { chatId },
+        })
+      ).json(),
+    ).toEqual({ count: 1 });
+    expect(
+      (
+        await app.inject({
+          method: 'GET',
+          url: `/api/chats/${chatId}/collections`,
+          headers: auth(),
+        })
+      ).json(),
+    ).toEqual({ collectionIds: [manualId] });
+    expect(
+      (
+        await app.inject({
+          method: 'GET',
+          url: `/api/chats?collection=${manualId}`,
+          headers: auth(),
+        })
+      ).json(),
+    ).toHaveLength(1);
+    await app.inject({
+      method: 'DELETE',
+      url: `/api/collections/${manualId}/items/${chatId}`,
+      headers: auth(),
+    });
+    expect(
+      (
+        await app.inject({
+          method: 'GET',
+          url: `/api/chats?collection=${manualId}`,
+          headers: auth(),
+        })
+      ).json(),
+    ).toHaveLength(0);
+    const saved = await app.inject({
+      method: 'POST',
+      url: '/api/collections',
+      headers: auth(),
+      payload: { name: 'Widgets', query: 'widget' },
+    });
+    expect(saved.json()).toMatchObject({ manual: false, count: 1 });
+    expect(
+      (
+        await app.inject({
+          method: 'GET',
+          url: '/api/collections/preview?query=tag:tools',
+          headers: auth(),
+        })
+      ).json(),
+    ).toEqual({ count: 1 });
+
+    // entity views
+    const tools = (
+      await app.inject({ method: 'GET', url: '/api/entities?kind=tool', headers: auth() })
+    ).json();
+    expect(tools).toHaveLength(1);
+    expect(tools[0]).toMatchObject({ name: 'Widget', chatId, platform: 'text' });
+    expect(typeof tools[0].itemTitle).toBe('string');
+
     const status = (
       await app.inject({ method: 'GET', url: '/api/status', headers: auth() })
     ).json();

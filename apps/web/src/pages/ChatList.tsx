@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../api';
 import { useLive } from '../live';
 import { Link, navigate } from '../router';
+import { CollectionBar } from './Library';
 
 const PLATFORM_ICON: Record<string, string> = {
   instagram: '📸',
@@ -31,12 +32,15 @@ export function ChatList() {
   const [tag, setTag] = useState<string | null>(
     new URLSearchParams(location.search).get('tag') || null,
   );
+  const [collection, setCollection] = useState<string | null>(
+    new URLSearchParams(location.search).get('collection') || null,
+  );
   const [allTags, setAllTags] = useState<TagDto[]>([]);
   const [err, setErr] = useState<string | null>(null);
 
   const load = () => {
     api
-      .chats(q.trim() || undefined, tag ?? undefined)
+      .chats(q.trim() || undefined, tag ?? undefined, collection ?? undefined)
       .then((c) => {
         setChats(c);
         setErr(null);
@@ -47,10 +51,15 @@ export function ChatList() {
       .then(setAllTags)
       .catch(() => {});
   };
-  // biome-ignore lint/correctness/useExhaustiveDependencies: reload when the query or tag changes
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reload when a filter changes
   useEffect(() => {
     load();
-  }, [q, tag]);
+    const p = new URLSearchParams(location.search);
+    if (collection) p.set('collection', collection);
+    else p.delete('collection');
+    const qs = p.toString();
+    history.replaceState(null, '', qs ? `/?${qs}` : '/');
+  }, [q, tag, collection]);
   useLive((e) => {
     if (e.kind === 'chat_updated' || (e.kind === 'run_event' && e.type === 'done')) load();
   });
@@ -69,6 +78,14 @@ export function ChatList() {
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
+      </div>
+      <CollectionBar selected={collection} onSelect={setCollection} />
+      <div className="row small muted">
+        <Link to="/entities/place">Places</Link>
+        <Link to="/entities/recipe">Recipes</Link>
+        <Link to="/entities/product">Products</Link>
+        <Link to="/entities/tool">Tools</Link>
+        <Link to="/entities/tip">Tips</Link>
       </div>
       {tags.length > 0 && (
         <div className="chips">

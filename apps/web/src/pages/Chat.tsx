@@ -7,6 +7,7 @@ import { RunTimeline } from '../components/RunTimeline';
 import { Sources, TagEditor } from '../components/Sources';
 import { useLive } from '../live';
 import { navigate } from '../router';
+import { CollectionPicker } from './Library';
 
 const ACTIVE = new Set(['queued', 'extracting', 'classifying', 'researching']);
 
@@ -131,6 +132,7 @@ export function Chat({ id }: { id: string }) {
             }
           }}
         />
+        <CollectionPicker chatId={id} />
         {item.note && <div className="small">Note: {item.note}</div>}
       </div>
 

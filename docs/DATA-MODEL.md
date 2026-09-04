@@ -77,10 +77,14 @@ listed per kind in auto collections.
 (`auto` · `manual`). A manual tag whose name already exists as an auto tag reuses that row.
 `item_tags`: `item_id`, `tag_id`, `confidence` (auto only; null for manual links). Removing the
 last link deletes the tag row.
-`collections`: `id`, `name`, `query` (tag expression, `category:<c>`, `entity:<kind>`, or FTS string),
-`manual` bool, `auto` bool. Auto collections are seeded at first boot (one per category and one
-per entity kind) and cannot be deleted, only hidden.
-`collection_items`: for manual collections.
+`collections`: `id`, `name`, `query` (`category:<c>`, `entity:<kind>`, `tag:<name>`, or an FTS
+string; empty for manual lists), `manual` bool, `auto` bool, `hidden` bool, `created_at`. Auto
+collections are seeded idempotently at every boot (`library/collections.ts`: one per category,
+one per entity kind, matched by `query`) and cannot be deleted or retargeted, only hidden. A
+collection's members are resolved at read time: manual → `collection_items`, otherwise the
+query (`resolveQuery`, capped at 500 items).
+`collection_items`: `collection_id`, `item_id`, `added_at`; unique on the pair, cascade on
+delete of either side. Migration `0004_collections.sql`.
 
 ### devices / push_subscriptions
 `devices`: `id`, `name`, `platform` (`android` · `ios` · `web`), `token_hash`, `created_at`,

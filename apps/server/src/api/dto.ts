@@ -1,4 +1,11 @@
-import type { Answer, ChatDetail, ChatSummary, MessageDto, RunDto } from '@doubletake/shared';
+import type {
+  Answer,
+  ChatDetail,
+  ChatSummary,
+  EntityHit,
+  MessageDto,
+  RunDto,
+} from '@doubletake/shared';
 import type { ChatRow, ItemRow, MessageRow, Repo, RunRow } from '../db/repo.js';
 import { extractionText, parseExtraction } from '../extract/flatten.js';
 
@@ -104,4 +111,19 @@ function safeJson(s: string): Record<string, unknown> {
   } catch {
     return {};
   }
+}
+
+/** One entity plus where it came from, for the per-kind entity views. */
+export function toEntityHit(r: ReturnType<Repo['listEntitiesByKind']>[number]): EntityHit {
+  return {
+    kind: r.entity.kind as EntityHit['kind'],
+    name: r.entity.name,
+    attributes: safeJson(r.entity.attributes),
+    ...(r.entity.url ? { url: r.entity.url } : {}),
+    confidence: r.entity.confidence ?? 0.7,
+    chatId: r.chatId,
+    itemTitle: r.item.title ?? r.item.sourceUrl ?? 'Untitled',
+    platform: r.item.platform as EntityHit['platform'],
+    createdAt: r.item.createdAt,
+  };
 }

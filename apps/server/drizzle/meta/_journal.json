@@ -29,6 +29,13 @@
       "when": 1788497425737,
       "tag": "0003_instagram",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1788507900000,
+      "tag": "0004_collections",
+      "breakpoints": true
     }
   ]
 }

@@ -1,6 +1,9 @@
 import type {
   ChatDetail,
   ChatSummary,
+  CollectionDto,
+  EntityHit,
+  EntityKind,
   IngestRequest,
   Mode,
   RunEvent,
@@ -126,14 +129,35 @@ export const api = {
       '/api/ingest',
       req,
     ),
-  chats: (q?: string, tag?: string) => {
+  chats: (q?: string, tag?: string, collection?: string) => {
     const p = new URLSearchParams();
     if (q) p.set('q', q);
     if (tag) p.set('tag', tag);
+    if (collection) p.set('collection', collection);
     const qs = p.toString();
     return call<ChatSummary[]>('GET', qs ? `/api/chats?${qs}` : '/api/chats');
   },
   tags: () => call<TagDto[]>('GET', '/api/tags'),
+  collections: (all = false) =>
+    call<CollectionDto[]>(
+      'GET',
+      all ? '/api/collections?all=true&hidden=true' : '/api/collections',
+    ),
+  createCollection: (name: string, query?: string) =>
+    call<CollectionDto>('POST', '/api/collections', query ? { name, query } : { name }),
+  updateCollection: (id: string, patch: { name?: string; query?: string; hidden?: boolean }) =>
+    call<CollectionDto>('POST', `/api/collections/${id}`, patch),
+  deleteCollection: (id: string) => call<void>('DELETE', `/api/collections/${id}`),
+  previewCollection: (query: string) =>
+    call<{ count: number }>('GET', `/api/collections/preview?query=${encodeURIComponent(query)}`),
+  addToCollection: (id: string, chatId: string) =>
+    call<{ count: number }>('POST', `/api/collections/${id}/items`, { chatId }),
+  removeFromCollection: (id: string, chatId: string) =>
+    call<{ count: number }>('DELETE', `/api/collections/${id}/items/${chatId}`),
+  chatCollections: (chatId: string) =>
+    call<{ collectionIds: string[] }>('GET', `/api/chats/${chatId}/collections`),
+  entities: (kind: EntityKind, limit = 200) =>
+    call<EntityHit[]>('GET', `/api/entities?kind=${kind}&limit=${limit}`),
   addTag: (chatId: string, name: string) =>
     call<{ tags: string[] }>('POST', `/api/chats/${chatId}/tags`, { name }),
   removeTag: (chatId: string, name: string) =>

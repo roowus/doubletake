@@ -189,6 +189,23 @@ export const collections = sqliteTable('collections', {
   hidden: integer('hidden', { mode: 'boolean' }).notNull().default(false),
 });
 
+export const collectionItems = sqliteTable(
+  'collection_items',
+  {
+    collectionId: text('collection_id')
+      .notNull()
+      .references(() => collections.id, { onDelete: 'cascade' }),
+    itemId: text('item_id')
+      .notNull()
+      .references(() => items.id, { onDelete: 'cascade' }),
+    addedAt: text('added_at').notNull(),
+  },
+  (t) => [
+    uniqueIndex('collection_items_pk').on(t.collectionId, t.itemId),
+    index('collection_items_item_idx').on(t.itemId),
+  ],
+);
+
 export const devices = sqliteTable('devices', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),

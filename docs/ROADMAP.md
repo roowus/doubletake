@@ -110,9 +110,10 @@ and a Reddit video.
   chat list (`GET /api/chats?q=&tag=`, `GET /api/tags`).
 - ✅ Auto tags from the run's `tags[]`; manual tags (`POST/DELETE /api/chats/:id/tags`) editable
   from the chat header.
-- Auto collections per category and entity kind seeded at first boot; manual collections.
-- Entity views per kind: places list with map links, recipes with ingredients, products with
-  price and link, tools with install line.
+- ✅ Auto collections per category and entity kind seeded at boot; manual collections and
+  saved searches (`/api/collections`, `?collection=` filter, chip row + picker in the PWA).
+- ✅ Entity views per kind (`/entities/<kind>`, `GET /api/entities?kind=`): places with map
+  links, recipes with ingredients, products with price and link, tools with install line.
 - ✅ Transcript, OCR, frame descriptions, caption, comments and page text visible in the
   **Sources** panel of the chat view (`extractions[]` on `GET /api/chats/:id`).
 - ✅ Re-export on edit; frontmatter stable (tags slugified + sorted), entities as frontmatter
