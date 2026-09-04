@@ -34,6 +34,7 @@ export const Channel = z.enum([
   'ig_dm',
   'ig_mention',
   'web_share_target',
+  'library',
 ]);
 export type Channel = z.infer<typeof Channel>;
 
@@ -167,6 +168,7 @@ export const ChatSummary = z.object({
   itemId: z.string(),
   title: z.string(),
   platform: Platform,
+  channel: Channel,
   status: ItemStatus,
   category: Category.nullable(),
   unreadCount: z.number().int(),

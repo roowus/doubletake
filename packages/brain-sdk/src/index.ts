@@ -35,6 +35,11 @@ export interface ResearchBrief {
   localContextHints: string[];
   sourceUrl: string | null;
   title: string | null;
+  /**
+   * What the brief is about. `share` (default when absent) = one shared item; `library` = a
+   * question over the owner's own library, where `untrusted` holds retrieved past answers.
+   */
+  kind?: 'share' | 'library';
 }
 
 export interface ChatContext {

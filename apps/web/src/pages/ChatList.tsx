@@ -37,6 +37,20 @@ export function ChatList() {
   );
   const [allTags, setAllTags] = useState<TagDto[]>([]);
   const [err, setErr] = useState<string | null>(null);
+  const [asking, setAsking] = useState(false);
+
+  // "Ask your library": the search box doubles as a question box. Enter filters the list;
+  // the Ask button starts a chat whose answer is drawn from past chats (channel `library`).
+  const ask = () => {
+    const question = q.trim();
+    if (!question || asking) return;
+    setAsking(true);
+    api
+      .askLibrary(question)
+      .then((r) => navigate(`/chat/${r.chatId}`))
+      .catch((e) => setErr(String(e.message ?? e)))
+      .finally(() => setAsking(false));
+  };
 
   const load = () => {
     api
@@ -74,10 +88,18 @@ export function ChatList() {
     <div className="page stack">
       <div className="row">
         <input
-          placeholder="Search everything you shared…"
+          placeholder="Search everything you shared, or ask a question about it…"
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
+        <button
+          type="button"
+          disabled={!q.trim() || asking}
+          title="Ask the brain a question answered from your saved chats"
+          onClick={ask}
+        >
+          {asking ? 'Asking…' : 'Ask library'}
+        </button>
       </div>
       <CollectionBar selected={collection} onSelect={setCollection} />
       <div className="row small muted">
@@ -117,7 +139,7 @@ export function ChatList() {
           >
             <div className="stack" style={{ gap: 4 }}>
               <div className="title">
-                {PLATFORM_ICON[c.platform] ?? '•'} {c.title}
+                {c.channel === 'library' ? '💬' : (PLATFORM_ICON[c.platform] ?? '•')} {c.title}
               </div>
               <div className="row small">
                 <span className={`status ${c.status}`}>{c.status}</span>

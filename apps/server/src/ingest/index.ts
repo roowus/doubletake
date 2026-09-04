@@ -30,6 +30,7 @@ const DEDUPE_HOURS = 24;
  * the worker (keywords, then classifier) unless the sharer forced one.
  */
 export function ingest(req: IngestRequest, deps: IngestDeps): IngestOutcome {
+  if (req.channel === 'library') return ingestLibraryQuestion(req, deps);
   const { repo } = deps;
   const url = req.url ?? (req.text ? firstUrlIn(req.text) : undefined);
   let platform: Platform = 'text';
@@ -96,6 +97,38 @@ export function ingest(req: IngestRequest, deps: IngestDeps): IngestOutcome {
 }
 
 export class IngestError extends Error {}
+
+/**
+ * Channel `library`: `text` (or `note`) is a question about what the owner saved earlier. No URL
+ * detection, no dedupe, platform `text`; the question becomes the item note (so it shows as the
+ * first message of the chat and as `ResearchBrief.note`) and the worker retrieves the context
+ * (ADR 0021).
+ */
+function ingestLibraryQuestion(req: IngestRequest, deps: IngestDeps): IngestOutcome {
+  const { repo } = deps;
+  const question = (req.text ?? req.note ?? '').trim();
+  if (!question) throw new IngestError('a question is required');
+  const forcedMode: Mode | null = resolveRequestedMode(req.modeHint);
+  const normalised: IngestRequest = {
+    channel: 'library',
+    focus: 'whole',
+    modeHint: req.modeHint,
+    note: question,
+  };
+  const { item, chat } = repo.createItemWithChat(normalised, 'text', null, titleFromText(question));
+  const mode = forcedMode ?? 'quick';
+  const bound = pickAdapter(deps)(mode);
+  const run = repo.createRun({
+    itemId: item.id,
+    chatId: chat.id,
+    kind: 'research',
+    mode,
+    adapter: bound.adapter.id,
+    model: bound.model,
+  });
+  repo.addMessage({ chatId: chat.id, role: 'user', kind: 'question', content: question });
+  return { item, chat, run, deduplicated: false };
+}
 
 export function titleFromUrl(url: string, platform: Platform): string {
   try {

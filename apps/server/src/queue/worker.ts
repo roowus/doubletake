@@ -1,8 +1,8 @@
 import { EventEmitter } from 'node:events';
 import type { BrainAdapter, ResearchBrief, RunOptions, ToolPolicy } from '@doubletake/brain-sdk';
 import type { Answer, Mode, QuestionType, RunEvent, UntrustedBlock } from '@doubletake/shared';
-import { FOLLOWUP_BUDGET, MODE_BUDGETS } from '@doubletake/shared';
-import { OUTPUT_TEMPLATES, SYSTEM_FRAMING } from '../brains/prompts.js';
+import { FOLLOWUP_BUDGET, MODE_BUDGETS, pickModeByKeywords } from '@doubletake/shared';
+import { LIBRARY_TEMPLATE, OUTPUT_TEMPLATES, SYSTEM_FRAMING } from '../brains/prompts.js';
 import { BrainSet } from '../brains/registry.js';
 import type { Config } from '../config/index.js';
 import type { ItemRow, Repo, RunRow } from '../db/repo.js';
@@ -13,6 +13,7 @@ import { PAGE_ONLY } from '../extract/platforms/_shared.js';
 import { extractUrl } from '../extract/registry.js';
 import type { ExtractResult } from '../extract/types.js';
 import { classifyItem } from '../ingest/classify.js';
+import { LIBRARY_TOOL, libraryContext } from '../library/ask.js';
 import type { ExtractParams, MediaClient } from '../media/protocol.js';
 import { asUntrustedKind, MEDIA_PLATFORMS, runMediaStage } from '../media/stage.js';
 import type { Notification } from '../notify/types.js';
@@ -292,18 +293,72 @@ export class QueueWorker extends EventEmitter {
     item: ItemRow,
     blocks: UntrustedBlock[],
     questionType: QuestionType,
+    hints: string[] = [],
   ): ResearchBrief {
+    const library = item.channel === 'library';
     return {
       systemFraming: SYSTEM_FRAMING,
       untrusted: blocks,
       note: item.note,
       focus: item.focus,
       questionType,
-      outputTemplate: OUTPUT_TEMPLATES[questionType],
-      localContextHints: [],
+      outputTemplate: library ? LIBRARY_TEMPLATE : OUTPUT_TEMPLATES[questionType],
+      localContextHints: hints,
       sourceUrl: item.canonicalUrl ?? item.sourceUrl,
       title: item.title,
+      kind: library ? 'library' : 'share',
     };
+  }
+
+  /**
+   * Channel `library`: the item is a question over the owner's own library. Retrieval replaces
+   * extraction, the classifier is skipped (keywords or the forced mode decide; quick by default
+   * so the answer comes from the library rather than the web) and the brief is a library brief.
+   */
+  private async researchLibrary(
+    run: RunRow,
+    item: ItemRow,
+    chatId: string,
+    emit: (t: RunEvent['type'], p: Record<string, unknown>) => void,
+    signal: AbortSignal,
+  ) {
+    const forced = item.modeRequested !== 'auto' ? (item.modeRequested as Mode) : null;
+    const question = item.note ?? item.text ?? '';
+    emit('status', { phase: 'retrieving' });
+    const ctx = libraryContext(this.repo, question, { excludeItemId: item.id });
+    for (const h of ctx.hits) {
+      this.repo.addExtraction({
+        itemId: item.id,
+        kind: 'page_text',
+        tool: LIBRARY_TOOL,
+        content: `${h.title} (/chat/${h.chatId})\n\n${h.text}`,
+      });
+    }
+    emit('status', {
+      phase: 'retrieved',
+      hits: ctx.hits.length,
+      chats: ctx.hits.map((h) => h.chatId),
+    });
+
+    const mode: Mode = forced ?? pickModeByKeywords(question) ?? 'quick';
+    const questionType: QuestionType = 'other';
+    const bound = this.brains.forMode(mode);
+    const model = bound.model ?? this.cfg.brainModel;
+    let current = run;
+    if (bound.adapter.id !== run.adapter || model !== run.model) {
+      current = { ...run, adapter: bound.adapter.id, model };
+      this.repo.updateRun(run.id, { adapter: current.adapter, model });
+      emit('status', { phase: 'adapter', adapter: current.adapter, ...(model ? { model } : {}) });
+    }
+    this.repo.updateRun(run.id, { mode, status: 'researching' });
+    this.repo.updateItem(item.id, { modeEffective: mode, questionType, status: 'researching' });
+    emit('status', { phase: 'mode', mode, questionType, source: forced ? 'forced' : 'library' });
+    this.emit('chat_updated', chatId);
+
+    const brief = this.buildBrief(item, ctx.blocks, questionType, ctx.hints);
+    const opts = this.runOptions(mode, 'research', signal, null, bound.model);
+    const result = await bound.adapter.run(brief, opts, { emit: (e) => emit(e.type, e.payload) });
+    return { ...result, mode, run: current, kind: 'research' as const };
   }
 
   private async research(
@@ -313,6 +368,7 @@ export class QueueWorker extends EventEmitter {
     emit: (t: RunEvent['type'], p: Record<string, unknown>) => void,
     signal: AbortSignal,
   ) {
+    if (item.channel === 'library') return this.researchLibrary(run, item, chatId, emit, signal);
     // 1. Extract. Forced modes decide extraction depth; auto starts standard and is refined below.
     const forced = item.modeRequested !== 'auto' ? (item.modeRequested as Mode) : null;
     // Provisional adapter for the extraction stage; the effective mode below may rebind it.
@@ -482,7 +538,9 @@ export class QueueWorker extends EventEmitter {
     const out: UntrustedBlock[] = [];
     for (const x of this.repo.listExtractions(item.id)) {
       const text = extractionText(x.kind, parseExtraction(x.content)).slice(0, 8000);
-      if (text) out.push({ source: item.platform, kind: asUntrustedKind(x.kind), content: text });
+      if (!text) continue;
+      const source = x.tool === LIBRARY_TOOL ? 'library' : item.platform;
+      out.push({ source, kind: asUntrustedKind(x.kind), content: text });
     }
     if (item.text?.trim()) out.push({ source: 'owner', kind: 'shared_text', content: item.text });
     return out;

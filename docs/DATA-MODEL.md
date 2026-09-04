@@ -13,7 +13,7 @@ JSON columns are validated with zod schemas from `packages/shared` on read and w
 | source_url | text | as shared (may be a share-redirect) |
 | canonical_url | text | resolved permalink; null for free text |
 | platform | text | `instagram` · `tiktok` · `youtube` (incl. Shorts) · `x` · `reddit` · `aichat` · `web` · `text` — the id of the extractor that claimed the URL |
-| channel | text | `android_share` · `compose` · `ig_dm` · `ig_mention` · `web_share_target` |
+| channel | text | `android_share` · `compose` · `ig_dm` · `ig_mention` · `web_share_target` · `library` (a question over the owner's own chats, [ADR 0021](adr/0021-cross-library-chat.md)) |
 | note | text | the owner's question or remark |
 | focus | text | `whole` · `comments` · `thread:<comment_id>` |
 | mode_requested | text | `auto` · `quick` · `standard` · `deep` |
@@ -35,8 +35,8 @@ Index: `(canonical_url, focus, created_at)` for the 24 h dedupe.
 ### extractions
 `id`, `item_id` fk, `kind` (`caption` · `transcript` · `ocr` · `frame_description` ·
 `comments` · `thread` · `page_text` · `aichat_transcript`), `content` (JSON; shape per kind
-below), `tool` (e.g. `mlx-whisper/large-v3-turbo`), `model`, `cost_usd`, `duration_ms`,
-`created_at`.
+below), `tool` (e.g. `mlx-whisper/large-v3-turbo`; `library-fts` marks the retrieved past chats a
+`library` question was answered from), `model`, `cost_usd`, `duration_ms`, `created_at`.
 
 Content shapes:
 - `transcript`: `{ language, segments: [{ start, end, text }] }`

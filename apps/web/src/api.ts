@@ -144,6 +144,11 @@ export const api = {
       '/api/ingest',
       req,
     ),
+  askLibrary: (question: string, modeHint: 'auto' | 'quick' | 'standard' | 'deep' = 'auto') =>
+    call<{ itemId: string; chatId: string; runId: string }>('POST', '/api/library/chat', {
+      question,
+      modeHint,
+    }),
   chats: (q?: string, tag?: string, collection?: string) => {
     const p = new URLSearchParams();
     if (q) p.set('q', q);

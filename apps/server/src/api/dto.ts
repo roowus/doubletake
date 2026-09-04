@@ -15,6 +15,7 @@ export function toChatSummary(repo: Repo, chat: ChatRow, item: ItemRow): ChatSum
     itemId: item.id,
     title: item.title ?? 'Untitled',
     platform: item.platform as ChatSummary['platform'],
+    channel: item.channel as ChatSummary['channel'],
     status: item.status as ChatSummary['status'],
     category: (item.category as ChatSummary['category']) ?? null,
     unreadCount: chat.unreadCount,
