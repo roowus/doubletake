@@ -157,8 +157,11 @@ Full column-level detail in [DATA-MODEL.md](DATA-MODEL.md).
 Interface, adapters, and configuration are specified in [BRAIN-ADAPTERS.md](BRAIN-ADAPTERS.md).
 Key properties: every adapter reports `capabilities()` (resume, vision, streaming, cost
 reporting, how tools are provided); tool policy is enforced by code on our side for the Agent
-SDK (`canUseTool`) and the API adapter (our loop), and by a sandboxed working directory plus
+SDK (`canUseTool`) and the API adapter (our loop in `brains/tools/`, which only declares the
+tools the policy allows and refuses everything else), and by a sandboxed working directory plus
 preamble for external CLI harnesses; the default adapter can be overridden per mode and per run.
+Shipped: `claude-agent-sdk`, `openai-compatible` (self-managed JSON sessions under
+`<dataDir>/sessions/`); `headless-cli` and the per-mode override are M5 work in progress.
 
 ## 8. Channels
 

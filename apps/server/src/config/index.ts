@@ -75,6 +75,22 @@ export interface Config {
     mentionPolling: boolean;
     graphBase: string;
   };
+  /** `openai-compatible` brain: any Chat Completions endpoint (docs/BRAIN-ADAPTERS.md). */
+  openai: {
+    baseUrl: string;
+    apiKey: string | null;
+    model: string;
+    /** Model → USD per million input/output tokens, for cost reporting. */
+    prices: Record<string, { inputPerM: number; outputPerM: number }>;
+    vision: boolean;
+  };
+  /** Web search backend for loop-based brains; `off` removes the web_search tool. */
+  search: {
+    provider: 'searxng' | 'brave' | 'tavily' | 'off';
+    searxngUrl: string;
+    braveKey: string | null;
+    tavilyKey: string | null;
+  };
 }
 
 export function loadConfig(): Config {
@@ -114,7 +130,41 @@ export function loadConfig(): Config {
       mentionPolling: (env('IG_MENTION_POLLING', 'on') ?? 'on') !== 'off',
       graphBase: env('IG_GRAPH_BASE', 'https://graph.instagram.com/v25.0') ?? '',
     },
+    openai: {
+      baseUrl: env('OPENAI_BASE_URL', 'https://api.openai.com/v1') ?? '',
+      apiKey: env('OPENAI_API_KEY') ?? null,
+      model: env('OPENAI_MODEL', 'gpt-4o-mini') ?? 'gpt-4o-mini',
+      prices: parsePrices(env('OPENAI_PRICES')),
+      vision: (env('OPENAI_VISION', 'off') ?? 'off') === 'on',
+    },
+    search: {
+      provider: searchProvider(env('SEARCH_PROVIDER', 'searxng')),
+      searxngUrl: env('SEARXNG_URL', 'http://127.0.0.1:8888') ?? '',
+      braveKey: env('BRAVE_SEARCH_API_KEY') ?? null,
+      tavilyKey: env('TAVILY_API_KEY') ?? null,
+    },
   };
+}
+
+function searchProvider(v: string | undefined): Config['search']['provider'] {
+  return v === 'brave' || v === 'tavily' || v === 'off' ? v : 'searxng';
+}
+
+/** `OPENAI_PRICES='{"gpt-4o-mini":{"inputPerM":0.15,"outputPerM":0.6}}'`; malformed → no prices. */
+function parsePrices(raw: string | undefined): Config['openai']['prices'] {
+  if (!raw) return {};
+  try {
+    const obj = JSON.parse(raw) as Record<string, { inputPerM?: unknown; outputPerM?: unknown }>;
+    const out: Config['openai']['prices'] = {};
+    for (const [model, p] of Object.entries(obj)) {
+      if (typeof p?.inputPerM === 'number' && typeof p?.outputPerM === 'number') {
+        out[model] = { inputPerM: p.inputPerM, outputPerM: p.outputPerM };
+      }
+    }
+    return out;
+  } catch {
+    return {};
+  }
 }
 
 function visionMode(v: string | undefined): 'cloud' | 'local' | 'off' {

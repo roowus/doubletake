@@ -150,18 +150,35 @@ enforcement model, ADR 0005). Cost is parsed when the parser knows the format
 
 ### openai-compatible
 
-Any base URL with the Chat Completions API (flag `anthropicMessages: true` switches to the
-Messages API). We run the tool loop:
+`apps/server/src/brains/openai-compatible.ts`. Any base URL with the Chat Completions API
+(OpenAI, DeepSeek, Ollama, LM Studio, rewter, …): `OPENAI_BASE_URL`, `OPENAI_API_KEY`
+(optional for local servers), `OPENAI_MODEL` (overridden by `DOUBLETAKE_BRAIN_MODEL` when set).
+We run the tool loop ourselves:
 
-- Tools: `web_search` (provider from `SEARCH_PROVIDER`: SearXNG, Brave, Tavily), `web_fetch`
-  (readable text via a TS readability port, 200 KB cap, SSRF guard), `read_file`, `list_dir`,
-  `write_sandbox_file`. Same implementations as the MCP server above.
-- Loop: up to `maxTurns` rounds; stop on a final message without tool calls; abort on budget
-  (estimated from token usage × per-model price table in config) or signal.
-- Resume: we store the full message list per chat (`chats.brain_session_id` points at a JSON
-  file under `data/sessions/`); follow-ups append. Long histories are condensed by a
-  summarisation call when they exceed a token threshold.
-- Vision: enabled when the model is flagged `vision: true` in config.
+- Tools come from `apps/server/src/brains/tools/` (`buildTools(policy, deps)`): `web_search`
+  (provider from `SEARCH_PROVIDER`: SearXNG `SEARXNG_URL`, Brave `BRAVE_SEARCH_API_KEY`, Tavily
+  `TAVILY_API_KEY`; `off` or a missing key removes the tool), `web_fetch` (readable text via
+  `extract/http.ts` + `readable.ts`, 200 KB cap, SSRF guard), `read_file`, `list_dir`,
+  `write_sandbox_file` (relative paths resolve inside the notes folder). The same `fs-policy`
+  checks back the MCP tools above, so both adapters refuse the same paths. A tool is only
+  *declared* to the model when the policy allows it; calls to anything else are answered
+  `Refused: …`, as are calls past the search/fetch budget. Search results and fetched pages are
+  wrapped with `renderUntrusted` (`kind: page_text`) before they go back to the model.
+- Loop: up to `maxTurns` rounds; stop on a final message without tool calls (`done`); an empty
+  final message is an `error` ("model returned no text"); `max_turns`, `budget` (only when the
+  model has a row in `OPENAI_PRICES`, a JSON map of model → `{ inputPerM, outputPerM }` USD),
+  `aborted` on the signal. Timeline events: `status` (`agent_started`, model, declared tools),
+  `tool_call {id, name, input}`, `tool_result {id, isError, preview}`, `text`.
+- Resume: the full message list is stored as JSON under `<dataDir>/sessions/<id>.json`; the
+  returned `sessionId` lands in `chats.brain_session_id`. Follow-ups append to that list and
+  keep the run's tool policy; when the file is missing (data dir moved) the adapter falls back to
+  the rendered transcript with no tools. Histories above 60 messages drop the oldest tool
+  exchanges (system prompt and the original brief always stay). No summarisation call yet.
+- Cost: `usage.prompt_tokens`/`completion_tokens` × the price table; `capabilities().costReporting`
+  is true only when the configured model is priced, otherwise the run shows no cost.
+- Vision: `OPENAI_VISION=on` enables `describeImages()` (data-URL image parts, batches of six,
+  JSON-array reply, same prompt contract as the SDK adapter); `classify()` is a tool-less turn;
+  `healthcheck()` asks for `{"ok":true}`.
 
 The Claude Agent SDK adapter implements `describeImages()` as one tool-less turn per batch of
 six frames (base64 image blocks, JSON-array reply, `maxBudgetUsd` 0.10). The media stage calls
