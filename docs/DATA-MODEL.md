@@ -73,8 +73,10 @@ Index `(kind, name)`. Re-runs replace the item's entities. Rendered as cards in 
 listed per kind in auto collections.
 
 ### tags / item_tags / collections / collection_items
-`tags`: `id`, `name` unique (lowercase), `kind` (`auto` · `manual`).
-`item_tags`: `item_id`, `tag_id`, `confidence` (auto only).
+`tags`: `id`, `name` unique (normalised: trimmed, lowercase, single spaces, ≤40 chars), `kind`
+(`auto` · `manual`). A manual tag whose name already exists as an auto tag reuses that row.
+`item_tags`: `item_id`, `tag_id`, `confidence` (auto only; null for manual links). Removing the
+last link deletes the tag row.
 `collections`: `id`, `name`, `query` (tag expression, `category:<c>`, `entity:<kind>`, or FTS string),
 `manual` bool, `auto` bool. Auto collections are seeded at first boot (one per category and one
 per entity kind) and cannot be deleted, only hidden.
@@ -104,7 +106,10 @@ entered via UI) are encrypted with the keyfile per ADR 0018.
 ### items_fts (FTS5)
 Columns: `item_id` unindexed, `title`, `note`, `transcript`, `ocr`, `answer`, `tags`, `entities`
 (names and attribute values joined).
-Maintained by triggers on `items`, `extractions`, `messages`, `item_tags`.
+Maintained in code, not by triggers: `QueueWorker.reindex()` rewrites the item's row after
+every finished run and after every tag edit (`transcript` = transcript + caption + page text +
+comments + thread flattened by `extract/flatten.ts`; `ocr` = OCR + frame descriptions). The same
+call re-exports the Markdown note so frontmatter stays in step.
 
 ## Blob layout
 ```

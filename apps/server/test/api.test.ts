@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildServer, ftsQuery } from '../src/api/server.js';
@@ -202,6 +204,50 @@ describe('API', () => {
       await app.inject({ method: 'GET', url: '/api/chats?q=zebra', headers: auth() })
     ).json();
     expect(miss).toHaveLength(0);
+
+    // manual tags: add, list, filter, reindex + re-export, remove
+    const added = await app.inject({
+      method: 'POST',
+      url: `/api/chats/${chatId}/tags`,
+      headers: auth(),
+      payload: { name: '  Ski Tips ' },
+    });
+    expect(added.statusCode).toBe(200);
+    expect(added.json().tags.sort()).toEqual(['ski tips', 'tools', 'widgets']);
+    const allTags = (await app.inject({ method: 'GET', url: '/api/tags', headers: auth() })).json();
+    expect(allTags).toContainEqual({ name: 'ski tips', kind: 'manual', count: 1 });
+    expect(allTags).toContainEqual({ name: 'tools', kind: 'auto', count: 1 });
+    const byTag = (
+      await app.inject({ method: 'GET', url: '/api/chats?tag=ski%20tips', headers: auth() })
+    ).json();
+    expect(byTag).toHaveLength(1);
+    const byOther = (
+      await app.inject({ method: 'GET', url: '/api/chats?tag=nope', headers: auth() })
+    ).json();
+    expect(byOther).toHaveLength(0);
+    const viaFts = (
+      await app.inject({ method: 'GET', url: '/api/chats?q=ski', headers: auth() })
+    ).json();
+    expect(viaFts).toHaveLength(1);
+    const noteDir = path.join(env.cfg.notesDir, String(new Date().getFullYear()));
+    const note = fs.readFileSync(path.join(noteDir, fs.readdirSync(noteDir)[0] ?? ''), 'utf8');
+    expect(note).toContain('tags: [ski-tips, tools, widgets]');
+    expect(note).toContain('tools: ["Widget"]');
+    const removed = await app.inject({
+      method: 'DELETE',
+      url: `/api/chats/${chatId}/tags/ski%20tips`,
+      headers: auth(),
+    });
+    expect(removed.json().tags.sort()).toEqual(['tools', 'widgets']);
+    expect(
+      (await app.inject({ method: 'GET', url: '/api/tags', headers: auth() })).json(),
+    ).not.toContainEqual(expect.objectContaining({ name: 'ski tips' }));
+
+    // extractions are flattened for the Sources tab
+    const det2 = (
+      await app.inject({ method: 'GET', url: `/api/chats/${chatId}`, headers: auth() })
+    ).json();
+    expect(Array.isArray(det2.extractions)).toBe(true);
 
     const status = (
       await app.inject({ method: 'GET', url: '/api/status', headers: auth() })
