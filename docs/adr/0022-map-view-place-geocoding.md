@@ -39,7 +39,8 @@ most three times, once; a re-run with better attributes changes the query and th
 Geocoding is off the run's critical path: `finish()` stores the answer, sends the push and
 writes the export as before, then `Worker.locatePlaces(itemId)` runs and emits `chat_updated`
 when done, so the map fills in a few seconds later. `POST /api/entities/geocode` backfills every
-place saved before this ADR (409 when the provider is `off`). `GET /api/entities?kind=place`
+place saved before this ADR (409 when the provider is `off`; `?retry=misses` forgets cached misses
+first, for after switching to a better geocoder). `GET /api/entities?kind=place`
 attaches `geo: { lat, lon, label, source: 'brain' | 'geocoder' }` to located entities and omits
 it otherwise.
 

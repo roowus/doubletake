@@ -339,8 +339,11 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
   });
 
   /** Geocode every place that has no coordinates yet (backfill after enabling the geocoder). */
-  app.post('/api/entities/geocode', async (_req, reply) => {
+  app.post('/api/entities/geocode', async (req, reply) => {
     if (!deps.geocoder?.enabled) return reply.code(409).send({ error: 'geocoder is off' });
+    const q = req.query as { retry?: string };
+    // `?retry=misses` forgets cached misses first, for a better geocoder or a fixed OSM entry.
+    const retried = q.retry === 'misses' ? repo.clearPlaceGeoMisses() : 0;
     const rows = repo.listEntitiesByKind('place', 1000);
     const seen = new Set<string>();
     let located = 0;
@@ -362,7 +365,7 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
       else unknown++;
     }
     for (const r of rows) worker.emit('chat_updated', r.chatId);
-    return { places: rows.length, located, unknown };
+    return { places: rows.length, located, unknown, retried };
   });
 
   /** Preview what a query would match without saving it. */

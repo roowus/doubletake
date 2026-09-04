@@ -206,7 +206,15 @@ describe('map view API', () => {
 
     const back = await app.inject({ method: 'POST', url: '/api/entities/geocode', headers: h });
     expect(back.statusCode).toBe(200);
-    expect(back.json()).toEqual({ places: 3, located: 2, unknown: 1 });
+    expect(back.json()).toEqual({ places: 3, located: 2, unknown: 1, retried: 0 });
+    // ?retry=misses forgets the cached miss and asks again; still unknown, cached again.
+    const retry = await app.inject({
+      method: 'POST',
+      url: '/api/entities/geocode?retry=misses',
+      headers: h,
+    });
+    expect(retry.json()).toEqual({ places: 3, located: 2, unknown: 1, retried: 1 });
+    expect(env.repo.getPlaceGeo('Nowhere')).toMatchObject({ lat: null });
 
     await worker.stop();
     await app.close();
