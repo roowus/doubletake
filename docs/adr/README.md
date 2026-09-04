@@ -28,6 +28,7 @@ One file per decision, numbered, never deleted. Superseding a decision means a n
 | [0021](0021-cross-library-chat.md) | Cross-library chat: `library` channel, FTS OR-retrieval over past chats fed to the brain as untrusted blocks and stored as `library-fts` extractions (extends 0011) | accepted |
 | [0022](0022-map-view-place-geocoding.md) | Map view: place entities located from brain `lat`/`lon` first, else a Nominatim-compatible geocoder with hits and misses cached in `place_geo`, off the run's critical path; Leaflet `/map` with browser-fetched OSM tiles (extends 0014) | accepted |
 | [0023](0023-mcp-server.md) | MCP server for other agents: stateless Streamable HTTP at `/mcp` behind the device-token gate; read tools mirror the REST library routes as Markdown with extractions still wrapped `<untrusted>`, write tools only enqueue `save`/`ask_library`; no file, shell or network tools | accepted |
+| [0024](0024-karakeep-memos-interchange.md) | Karakeep and Memos interchange: export the library as Karakeep's own export file and as Memos create bodies; import a Karakeep file as `import`-channel items with tags, original dates and manual lists as collections, deduplicated by canonical URL over all time; no runs unless `?research=` is passed | accepted |
 
 ## Template
 

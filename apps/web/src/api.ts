@@ -22,6 +22,13 @@ export function setToken(token: string | null): void {
   mirrorToken(token);
 }
 
+export interface ImportSummary {
+  imported: number;
+  skipped: number;
+  collections: number;
+  runs: number;
+}
+
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -138,6 +145,13 @@ export const api = {
     call<{ code: string; expiresAt: string; url: string; qr: string }>('POST', '/api/pair/start'),
   devices: () => call<Device[]>('GET', '/api/devices'),
   revokeDevice: (id: string) => call<void>('DELETE', `/api/devices/${id}`),
+  /** Karakeep / Memos interchange (ADR 0024). Exports are plain GETs with a device token. */
+  importKarakeep: (file: unknown, research?: Mode) =>
+    call<ImportSummary>(
+      'POST',
+      `/api/import/karakeep${research ? `?research=${research}` : ''}`,
+      file,
+    ),
   ingest: (req: IngestRequest) =>
     call<{ itemId: string; chatId: string; runId: string; deduplicated: boolean }>(
       'POST',

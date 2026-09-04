@@ -141,6 +141,30 @@ which queue work exactly like the share sheet; the answer arrives in the app and
 wait for it with `get_chat { wait_seconds }`. The endpoint is refused on the tunnel hostname,
 so it is reachable over the tailnet only. Revoke the agent from Settings → Devices.
 
+### Karakeep and Memos
+Settings → **Import and export** ([ADR 0024](adr/0024-karakeep-memos-interchange.md)).
+
+- **To Karakeep**: **Download Karakeep export**, then in Karakeep Settings → Import → *Import
+  from Karakeep export*. Links, text, tags, notes (owner note + first answer), dates and manual
+  collections (as lists) come across.
+- **From Karakeep**: in Karakeep Settings → Export, download the JSON, then pick it under
+  **Import Karakeep file**. Bookmarks become items with their tags, dates and lists; links you
+  already saved are skipped. Nothing is researched unless you choose *research each* first (or
+  call `POST /api/import/karakeep?research=quick` yourself); a large import then queues one run
+  per item and the daily cap paces them.
+- **To Memos**: **Download Memos export** gives `{ memos: [ { content, visibility,
+  create_time } ] }`, one Markdown memo per item with `#tags`. Post them with a token from
+  Memos Settings → Access tokens (**unverified** against a live Memos: field casing and token
+  header are taken from the proto):
+
+  ```sh
+  jq -c '.memos[]' doubletake-memos-*.json | while read -r m; do
+    curl -s -X POST https://memos.example/api/v1/memos \
+      -H "Authorization: Bearer $MEMOS_TOKEN" -H 'content-type: application/json' \
+      -d "{\"memo\": $m}" >/dev/null
+  done
+  ```
+
 ### Instagram webhook (public, one path)
 Pick one:
 - **Cloudflare Tunnel**: `cloudflared tunnel create doubletake`, route a hostname, config

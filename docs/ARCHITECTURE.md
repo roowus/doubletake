@@ -18,8 +18,8 @@ never research; summarisers (SuperBrain, reel-summary apps) stop at a transcript
 (Karakeep, Raindrop, Readwise) keep things findable but not answered; Recall has library chat
 but no reels and no local files. Doubletake sells **the answer**, keeps SaveToList-style
 structured extraction as a by-product of every run, treats the comment thread as a first-class
-object, reads the owner's files, and integrates with archives (Markdown export, an MCP server for other agents, Karakeep
-import later) rather than replacing them. The share sheet is the primary
+object, reads the owner's files, and integrates with archives (Markdown export, an MCP server for
+other agents, Karakeep and Memos import/export) rather than replacing them. The share sheet is the primary
 channel; the Instagram bot is optional and documented as fragile.
 
 ## 2. Decisions table
@@ -38,7 +38,7 @@ channel; the Instagram bot is optional and documented as fragile.
 | Network | Bind loopback; Tailscale serve by default; Cloudflare Tunnel or Tailscale Funnel only for the IG webhook path | [0009](adr/0009-networking.md) |
 | Auth | Owner password at setup + long-lived per-device tokens via QR pairing | [0010](adr/0010-auth-owner-password-device-tokens.md) |
 | Knowledge | Markdown export of every finished chat into `~/Doubletake`; FTS5 search; auto tags and collections; cross-library questions answered by the brain from FTS-retrieved chats | [0011](adr/0011-markdown-export-fts-tags.md), [0021](adr/0021-cross-library-chat.md) |
-| Integrations | Other agents read and feed the library over MCP: stateless Streamable HTTP at `/mcp` behind the device-token gate, read tools mirror the REST library routes, extractions stay `<untrusted>`-wrapped, writes only enqueue runs | [0023](adr/0023-mcp-server.md) |
+| Integrations | Other agents read and feed the library over MCP: stateless Streamable HTTP at `/mcp` behind the device-token gate, read tools mirror the REST library routes, extractions stay `<untrusted>`-wrapped, writes only enqueue runs. Karakeep and Memos interchange as files: export in their shapes, import a Karakeep file as `import`-channel items, no runs unless asked | [0023](adr/0023-mcp-server.md), [0024](adr/0024-karakeep-memos-interchange.md) |
 | Structure | Every run also extracts a category and typed entities (places, recipes, products, tools, tips); collections are automatic per category and entity kind; places are geocoded (brain coordinates first, else a Nominatim-compatible geocoder, cached) and shown on a Leaflet map | [0014](adr/0014-structured-extraction-and-categories.md), [0022](adr/0022-map-view-place-geocoding.md) |
 | Platforms | Server-side extractor registry, one file per platform, `web` fallback; v1: Instagram, TikTok, YouTube + Shorts, X, Reddit, AI-chat shares | [0015](adr/0015-platform-extractor-registry.md) |
 | Cost | Daily spend cap; runs queue as `capped` when hit; per-run cost shown in chat | [0012](adr/0012-cost-cap.md) |
@@ -80,7 +80,8 @@ apps/server       Fastify + TS: api/ (REST + WebSocket), auth/, brains/ (adapter
                   extract/ (platform extractor registry + HTTP with SSRF guard), ingest/
                   (normalise + classify), media/ (worker client + stage), notify/ (push),
                   queue/ (worker), channels/instagram/ (Graph client + channel), secrets/ (SecretBox),
-                  mcp/ (library tools for other agents over Streamable HTTP)
+                  mcp/ (library tools for other agents over Streamable HTTP), library/
+                  (collections, cross-library ask, Karakeep/Memos interchange)
 apps/web          Vite + React PWA: chats, chat view, compose, settings, pairing, service worker,
                   native.ts (Capacitor glue: server-URL prefix, Preferences mirror, FCM, deep links)
 apps/mobile       Capacitor 8 Android: ShareReceiverActivity + Pairing (Kotlin); iOS scaffold later
@@ -199,6 +200,13 @@ every configured adapter and Settings shows them ([guide](BRAIN-ADAPTERS.md#sele
   readable-text extractor; no login.
 - **Web Share Target** in the PWA manifest so an installed PWA can receive shares on
   Android/Chrome desktop without Capacitor.
+- **Import** (`channel=import`, [ADR 0024](adr/0024-karakeep-memos-interchange.md)): a
+  Karakeep export file posted to `/api/import/karakeep`. `library/interchange.ts` turns each
+  bookmark into an item + chat with its original date, tags and manual lists (as manual
+  collections), skips links already saved (canonical URL, all time) and indexes the note in
+  FTS at once. No run is queued unless `?research=<mode>` is passed; imports are free by
+  default. The same module renders the library as a Karakeep file and as Memos create bodies
+  (`/api/export/karakeep`, `/api/export/memos`).
 
 ## 9. Clients
 
@@ -263,6 +271,7 @@ connection recipe in [DEPLOYMENT.md](DEPLOYMENT.md#connect-an-agent-mcp)).
 | `GET ig/status`, `POST ig/connect`, `GET ig/callback`, `DELETE ig/account` | shadow-account state (username, expiry, polling); start OAuth (`{ url }`, 409 when unconfigured); OAuth redirect → `/settings?ig=connected\|error`; disconnect |
 | `POST ig/refresh`, `POST ig/poll`, `POST ig/test { recipientId, text? }`, `POST ig/simulate-mention { media_id?, comment_id? }` | force token refresh; run one mention poll; send a DM to yourself; replay a mention through the handler |
 | `GET/POST /webhooks/instagram` | Meta handshake (`hub.challenge`) and signed deliveries; `401` on bad signature, `200` then async processing |
+| `GET export/karakeep`, `GET export/memos`, `POST import/karakeep?research=quick\|standard\|deep` | download the library as a Karakeep export file / as Memos `{ memos: [{ content, visibility, create_time }] }`; import a Karakeep file → `{ imported, skipped, collections, runs }` (32 MiB body limit; 400 when not that shape; [ADR 0024](adr/0024-karakeep-memos-interchange.md)) |
 | `POST /mcp` (`GET`/`DELETE` → 405) | Streamable HTTP MCP, stateless, JSON responses. Tools: `search_library { query, limit }`, `list_chats { collection?, tag?, limit }`, `get_chat { chat_id, include_extractions, wait_seconds ≤120 }`, `list_collections`, `list_tags`, `list_entities { kind, limit }` (read-only); `save { url?, text?, note?, mode }` → channel `mcp`, `ask_library { question, mode }` → channel `library` (enqueue only) |
 
 CORS is enabled for `capacitor://localhost`, `https://localhost` and `http://localhost` so the
