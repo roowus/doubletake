@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ApiError, api, setToken } from '../api';
+import { Icon } from '../components/Icon';
 import { apiBase, isNative, nativePlatform, parsePairingInput, setServerUrl } from '../native';
 
 function defaultDeviceName(): string {
@@ -78,26 +79,38 @@ export function Welcome({ onAuthed }: { onAuthed: () => void }) {
 
   return (
     <div className="center">
-      <form className="card narrow stack" onSubmit={submit}>
-        <h2 style={{ margin: 0 }}>Doubletake</h2>
-        <div className="muted small">Share it now, get a researched answer later.</div>
+      <form className="card welcome" onSubmit={submit} aria-busy={busy}>
+        <div className="hero">
+          <span className="brand-mark">
+            <Icon name="sparkles" size={30} />
+          </span>
+          <h1>Doubletake</h1>
+          <p className="muted">Share it now, get a researched answer later.</p>
+        </div>
         {hasOwner === false && (
-          <div className="small">
-            First run: choose the owner password. You will use it to sign in new devices.
+          <div className="banner">
+            <Icon name="info" />
+            <span>
+              First run: choose the owner password. You will use it to sign in new devices.
+            </span>
           </div>
         )}
         {hasOwner && (
-          <div className="chips">
+          <div className="tabs" role="tablist" aria-label="Sign-in method">
             <button
               type="button"
-              className={`chip ${tab === 'password' ? 'on' : ''}`}
+              role="tab"
+              aria-selected={tab === 'password'}
+              className={tab === 'password' ? 'on' : ''}
               onClick={() => setTab('password')}
             >
               Password
             </button>
             <button
               type="button"
-              className={`chip ${tab === 'pair' ? 'on' : ''}`}
+              role="tab"
+              aria-selected={tab === 'pair'}
+              className={tab === 'pair' ? 'on' : ''}
               onClick={() => setTab('pair')}
             >
               Pairing code
@@ -105,46 +118,89 @@ export function Welcome({ onAuthed }: { onAuthed: () => void }) {
           </div>
         )}
         {native && (
-          <input
-            placeholder="Server URL (https://your-mac.tailnet.ts.net)"
-            value={serverUrl}
-            onChange={(e) => setServerUrlState(e.target.value)}
-            inputMode="url"
-            autoCapitalize="none"
-            autoCorrect="off"
-          />
+          <div className="field">
+            <label htmlFor="w-server">Server URL</label>
+            <input
+              id="w-server"
+              placeholder="https://your-mac.tailnet.ts.net"
+              value={serverUrl}
+              onChange={(e) => setServerUrlState(e.target.value)}
+              inputMode="url"
+              autoCapitalize="none"
+              autoCorrect="off"
+              aria-describedby="w-server-help"
+            />
+            <div id="w-server-help" className="help">
+              The address your laptop shows under Settings → Pair a device.
+            </div>
+          </div>
         )}
         {tab === 'pair' ? (
-          <input
-            placeholder="6-character code from Settings → Pair a device"
-            value={code}
-            onChange={(e) => onCodeInput(e.target.value)}
-            autoCapitalize="characters"
-            // biome-ignore lint/a11y/noAutofocus: single-field sign-in screen
-            autoFocus
-          />
+          <div className="field">
+            <label htmlFor="w-code">Pairing code</label>
+            <input
+              id="w-code"
+              className="mono"
+              placeholder="ABC123"
+              value={code}
+              onChange={(e) => onCodeInput(e.target.value)}
+              autoCapitalize="characters"
+              autoComplete="one-time-code"
+              aria-describedby="w-code-help"
+              // biome-ignore lint/a11y/noAutofocus: single-field sign-in screen
+              autoFocus
+            />
+            <div id="w-code-help" className="help">
+              Six characters from Settings → Pair a device on a signed-in device. You can also paste
+              the whole pairing link.
+            </div>
+          </div>
         ) : (
-          <input
-            type="password"
-            placeholder={hasOwner ? 'Owner password' : 'New owner password (8+ characters)'}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            // biome-ignore lint/a11y/noAutofocus: single-field sign-in screen
-            autoFocus
-          />
+          <div className="field">
+            <label htmlFor="w-pass">{hasOwner ? 'Owner password' : 'New owner password'}</label>
+            <input
+              id="w-pass"
+              type="password"
+              placeholder={hasOwner ? '' : 'At least 8 characters'}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete={hasOwner ? 'current-password' : 'new-password'}
+              // biome-ignore lint/a11y/noAutofocus: single-field sign-in screen
+              autoFocus
+            />
+          </div>
         )}
-        <input
-          placeholder="Device name"
-          value={deviceName}
-          onChange={(e) => setDeviceName(e.target.value)}
-        />
-        {err && <div className="msg error small">{err}</div>}
-        <button type="submit" className="primary" disabled={busy || hasOwner === null}>
-          {hasOwner === false
-            ? 'Set password & continue'
-            : tab === 'pair'
-              ? 'Pair this device'
-              : 'Sign in'}
+        <div className="field">
+          <label htmlFor="w-device">Device name</label>
+          <input
+            id="w-device"
+            value={deviceName}
+            onChange={(e) => setDeviceName(e.target.value)}
+            aria-describedby="w-device-help"
+          />
+          <div id="w-device-help" className="help">
+            Shown in Settings → Devices so you can revoke it later.
+          </div>
+        </div>
+        {err && (
+          <div className="banner error" role="alert">
+            <Icon name="alert" />
+            <span>{err}</span>
+          </div>
+        )}
+        <button
+          type="submit"
+          className="primary block"
+          disabled={busy || hasOwner === null}
+          aria-live="polite"
+        >
+          {busy
+            ? 'Connecting…'
+            : hasOwner === false
+              ? 'Set password & continue'
+              : tab === 'pair'
+                ? 'Pair this device'
+                : 'Sign in'}
         </button>
       </form>
     </div>

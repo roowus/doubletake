@@ -1,5 +1,6 @@
 import type { ExtractionDto } from '@doubletake/shared';
 import { useState } from 'react';
+import { Icon } from './Icon';
 
 const LABEL: Record<string, string> = {
   transcript: 'Transcript',
@@ -18,25 +19,24 @@ export function Sources({ extractions }: { extractions: ExtractionDto[] }) {
   if (extractions.length === 0) return null;
   const current = extractions.find((e) => e.id === active) ?? extractions[0];
   return (
-    <div className="card stack" style={{ gap: 6 }}>
+    <div className="card stack tight">
       <button
         type="button"
-        className="ghost row"
-        style={{ justifyContent: 'space-between', width: '100%' }}
+        className="disclosure"
         onClick={() => setOpen(!open)}
         aria-expanded={open}
       >
-        <span>
+        <span className="grow truncate">
           <b>Sources</b>{' '}
           <span className="muted small">
             {extractions.map((e) => LABEL[e.kind] ?? e.kind).join(' · ')}
           </span>
         </span>
-        <span>{open ? '▾' : '▸'}</span>
+        <Icon name="chevron-down" className="chev" />
       </button>
       {open && current && (
         <>
-          <div className="chips">
+          <div className="chips scroll">
             {extractions.map((e) => (
               <button
                 type="button"
@@ -86,7 +86,7 @@ export function TagEditor({
     }
   };
   return (
-    <form className="row small" onSubmit={submit} style={{ flexWrap: 'wrap', gap: 6 }}>
+    <form className="row wrap small" onSubmit={submit}>
       {tags.map((t) => (
         <span className="tag" key={t}>
           {t}
@@ -98,7 +98,7 @@ export function TagEditor({
             disabled={busy}
             onClick={() => onRemove(t)}
           >
-            ×
+            <Icon name="x" size={14} />
           </button>
         </span>
       ))}

@@ -1,6 +1,8 @@
 import type { CollectionDto, EntityHit, EntityKind } from '@doubletake/shared';
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { ApiError, api } from '../api';
+import { Icon } from '../components/Icon';
+import { ago } from '../format';
 import { useLive } from '../live';
 import { Link } from '../router';
 
@@ -62,32 +64,56 @@ function EntityCard({ hit }: { hit: EntityHit }) {
     .slice(0, 3);
   const maps = mapsUrl(hit);
   return (
-    <div className="card stack entity" style={{ gap: 6 }}>
-      <div className="row">
-        <b style={{ flex: 1 }}>{hit.name}</b>
-        {hit.url && (
-          <a href={hit.url} target="_blank" rel="noopener noreferrer" className="small">
-            link ↗
-          </a>
-        )}
-        {maps && (
-          <a href={maps} target="_blank" rel="noopener noreferrer" className="small">
-            map ↗
-          </a>
-        )}
+    <article className="card stack tight entity">
+      <div className="row top">
+        <span className="name clamp-2">{hit.name}</span>
+        <span className="links">
+          {hit.url && (
+            <a
+              href={hit.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="icon-link"
+              aria-label={`Open link for ${hit.name}`}
+              title="Open link"
+            >
+              <Icon name="external-link" />
+            </a>
+          )}
+          {maps && (
+            <a
+              href={maps}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="icon-link"
+              aria-label={`Open ${hit.name} in maps`}
+              title="Open in maps"
+            >
+              <Icon name="map-pin" />
+            </a>
+          )}
+        </span>
       </div>
-      {[...shown, ...extra].map(([k, v]) => (
-        <div className="small" key={k}>
-          <span className="muted">{k.replace(/_/g, ' ')}: </span>
-          {attrText(v)}
-        </div>
-      ))}
-      <div className="row small muted">
-        <Link to={`/chat/${hit.chatId}`}>from: {hit.itemTitle}</Link>
+      {shown.length + extra.length > 0 && (
+        <dl className="kv">
+          {[...shown, ...extra].map(([k, v]) => (
+            <Fragment key={k}>
+              <dt>{k.replace(/_/g, ' ')}</dt>
+              <dd>{attrText(v)}</dd>
+            </Fragment>
+          ))}
+        </dl>
+      )}
+      <div className="foot">
+        <Link to={`/chat/${hit.chatId}`} className="truncate">
+          {hit.itemTitle}
+        </Link>
+        <span>·</span>
         <span>{hit.platform}</span>
-        <span>{new Date(hit.createdAt).toLocaleDateString()}</span>
+        <span>·</span>
+        <time dateTime={hit.createdAt}>{ago(hit.createdAt)}</time>
       </div>
-    </div>
+    </article>
   );
 }
 
@@ -114,30 +140,56 @@ export function Entities({ kind }: { kind: EntityKind }) {
     (h) => !f || h.name.toLowerCase().includes(f) || h.itemTitle.toLowerCase().includes(f),
   );
   return (
-    <div className="page stack">
-      <div className="chips">
+    <div className="page stack loose">
+      <div className="page-head">
+        <Link to="/" className="icon-link" aria-label="Back to chats">
+          <Icon name="arrow-left" />
+        </Link>
+        <h2>{spec.title}</h2>
+        {kind === 'place' && (
+          <Link to="/map" className="icon-link" aria-label="Map view" title="Map view">
+            <Icon name="map" />
+          </Link>
+        )}
+      </div>
+      <nav className="chips scroll" aria-label="Kinds">
         {ENTITY_KINDS.map((k) => (
-          <Link key={k} to={`/entities/${k}`} className={`chip ${k === kind ? 'on' : ''}`}>
+          <Link
+            key={k}
+            to={`/entities/${k}`}
+            className="chip"
+            aria-current={k === kind ? 'page' : undefined}
+          >
             {KINDS[k].title}
           </Link>
         ))}
-      </div>
-      <div className="row">
-        <h3 style={{ margin: 0, flex: 1 }}>{spec.title}</h3>
-        {kind === 'place' && (
-          <Link to="/map" className="small">
-            map view
-          </Link>
-        )}
+      </nav>
+      <label className="field">
+        <span className="sr-only">Filter {spec.title.toLowerCase()}</span>
         <input
-          placeholder="Filter…"
+          type="search"
+          placeholder={`Filter ${spec.title.toLowerCase()}…`}
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
-          style={{ maxWidth: 200 }}
         />
-      </div>
-      {err && <div className="msg error">{err}</div>}
-      {hits && shown.length === 0 && <div className="card muted">{spec.empty}</div>}
+      </label>
+      {err && (
+        <div className="banner error" role="alert">
+          <Icon name="alert" />
+          <span>{err}</span>
+        </div>
+      )}
+      {!hits && !err && (
+        <div className="muted small" aria-busy="true">
+          Loading…
+        </div>
+      )}
+      {hits && shown.length === 0 && (
+        <div className="card quiet empty">
+          <Icon name="inbox" className="icon-lg" />
+          <p>{spec.empty}</p>
+        </div>
+      )}
       <div className="entities">
         {shown.map((h) => (
           <EntityCard hit={h} key={`${h.chatId}:${h.name}`} />
@@ -239,27 +291,36 @@ export function CollectionBar({
   }
 
   return (
-    <div className="stack" style={{ gap: 6 }}>
-      <div className="chips">
+    <div className="stack tight">
+      <fieldset className="chips scroll">
+        <legend className="sr-only">Collections</legend>
         {cols.map((c) => (
           <button
             type="button"
             key={c.id}
-            className={`chip ${selected === c.id ? 'on' : ''}`}
+            className="chip"
+            aria-pressed={selected === c.id}
             title={c.manual ? 'Manual list' : c.query}
             onClick={() => onSelect(selected === c.id ? null : c.id)}
           >
-            {c.manual ? '☰ ' : c.auto ? '' : '🔍 '}
-            {c.name} <span className="muted">{c.count}</span>
-            {c.shareUrl && <span title="Shared read-only link">🔗</span>}
+            {c.manual ? (
+              <Icon name="list" size={16} />
+            ) : c.auto ? null : (
+              <Icon name="bookmark-search" size={16} />
+            )}
+            {c.name}
+            <span className="count">{c.count}</span>
+            {c.shareUrl && <Icon name="link" size={14} label="Shared read-only link" />}
           </button>
         ))}
         <button
           type="button"
           className="chip"
+          aria-expanded={creating !== null}
           onClick={() => setCreating(creating ? null : 'manual')}
         >
-          + collection
+          <Icon name="plus" size={16} />
+          Collection
         </button>
         {cur && !cur.auto && (
           <button
@@ -268,64 +329,83 @@ export function CollectionBar({
             onClick={() => share(cur)}
             title={cur.shareUrl ? 'Revoke the read-only link' : 'Create a read-only link'}
           >
-            {cur.shareUrl ? 'unshare' : 'share'}
+            <Icon name="share" size={16} />
+            {cur.shareUrl ? 'Unshare' : 'Share'}
           </button>
         )}
         {cur && (
-          <button type="button" className="chip" onClick={() => hide(cur)} title="Hide or delete">
-            {cur.auto ? 'hide' : 'delete'} “{cur.name}”
+          <button
+            type="button"
+            className="chip"
+            onClick={() => hide(cur)}
+            title={cur.auto ? 'Hide this collection' : 'Delete this collection'}
+          >
+            <Icon name={cur.auto ? 'x' : 'trash'} size={16} />
+            {cur.auto ? 'Hide' : 'Delete'}
           </button>
         )}
-      </div>
+      </fieldset>
       {cur?.shareUrl && (
-        <div className="muted" style={{ fontSize: 13, wordBreak: 'break-all' }}>
+        <p className="small muted truncate">
           Shared read-only{shared === cur.shareUrl ? ' (link copied)' : ''}:{' '}
           <a href={cur.shareUrl} target="_blank" rel="noreferrer">
             {cur.shareUrl}
           </a>
-        </div>
+        </p>
       )}
       {creating && (
         <form
-          className="row card"
-          style={{ gap: 6, flexWrap: 'wrap' }}
+          className="card stack"
           onSubmit={(e) => {
             e.preventDefault();
             if (name.trim() && (creating === 'manual' || query.trim())) void create();
           }}
         >
-          <select
-            value={creating}
-            onChange={(e) => setCreating(e.target.value as 'manual' | 'search')}
-          >
-            <option value="manual">Manual list</option>
-            <option value="search">Saved search</option>
-          </select>
-          <input
-            placeholder="Name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            maxLength={60}
-            style={{ flex: 1, minWidth: 120 }}
-          />
+          <label className="field">
+            <span className="label">Type</span>
+            <select
+              value={creating}
+              onChange={(e) => setCreating(e.target.value as 'manual' | 'search')}
+            >
+              <option value="manual">Manual list</option>
+              <option value="search">Saved search</option>
+            </select>
+          </label>
+          <label className="field">
+            <span className="label">Name</span>
+            <input value={name} onChange={(e) => setName(e.target.value)} maxLength={60} />
+          </label>
           {creating === 'search' && (
-            <input
-              placeholder="query — words, or tag:x / category:x / entity:x"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              style={{ flex: 2, minWidth: 200 }}
-            />
+            <label className="field">
+              <span className="label">Query</span>
+              <input
+                placeholder="words, or tag:x / category:x / entity:x"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+              <span className="help">
+                {preview != null
+                  ? `${preview} matching item${preview === 1 ? '' : 's'}`
+                  : 'Matches update as you type.'}
+              </span>
+            </label>
           )}
-          {preview != null && <span className="small muted">{preview} match</span>}
-          <button type="submit" className="primary">
-            Create
-          </button>
-          <button type="button" className="ghost" onClick={() => setCreating(null)}>
-            Cancel
-          </button>
+          <div className="form-actions">
+            <button type="button" className="ghost" onClick={() => setCreating(null)}>
+              Cancel
+            </button>
+            <button type="submit" className="primary">
+              Create
+            </button>
+          </div>
         </form>
       )}
-      {err && <div className="msg error">{err}</div>}
+      {err && (
+        <div className="banner error" role="alert">
+          <Icon name="alert" />
+          <span>{err}</span>
+        </div>
+      )}
     </div>
   );
 }
@@ -365,10 +445,13 @@ export function CollectionPicker({ chatId }: { chatId: string }) {
   }
   const inNames = cols.filter((c) => mine.includes(c.id)).map((c) => c.name);
   return (
-    <div className="stack" style={{ gap: 4 }}>
-      <div className="row small">
-        <button type="button" className="chip" onClick={() => setOpen(!open)}>
-          ☰ {inNames.length ? inNames.join(', ') : 'Add to collection'}
+    <div className="stack tight">
+      <div className="row">
+        <button type="button" className="chip" aria-expanded={open} onClick={() => setOpen(!open)}>
+          <Icon name="list" size={16} />
+          <span className="truncate">
+            {inNames.length ? inNames.join(', ') : 'Add to collection'}
+          </span>
         </button>
       </div>
       {open && (
@@ -394,11 +477,22 @@ export function CollectionPicker({ chatId }: { chatId: string }) {
               }
             }}
           >
-            <input name="name" className="tag-input" placeholder="new list…" maxLength={60} />
+            <input
+              name="name"
+              className="tag-input"
+              placeholder="New list…"
+              aria-label="New collection name"
+              maxLength={60}
+            />
           </form>
         </div>
       )}
-      {err && <div className="msg error">{err}</div>}
+      {err && (
+        <div className="banner error" role="alert">
+          <Icon name="alert" />
+          <span>{err}</span>
+        </div>
+      )}
     </div>
   );
 }

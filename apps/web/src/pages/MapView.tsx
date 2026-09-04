@@ -3,6 +3,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { useEffect, useRef, useState } from 'react';
 import { ApiError, api } from '../api';
+import { Icon } from '../components/Icon';
 import { useLive } from '../live';
 import { Link, navigate } from '../router';
 import { mapsUrl } from './Library';
@@ -27,7 +28,7 @@ function popupHtml(h: EntityHit): string {
     .map((k) => h.attributes[k])
     .filter((v): v is string => typeof v === 'string' && v.length > 0);
   const link = h.url
-    ? `<a href="${escapeHtml(h.url)}" target="_blank" rel="noopener noreferrer">link ↗</a>`
+    ? `<a href="${escapeHtml(h.url)}" target="_blank" rel="noopener noreferrer">Open link</a>`
     : '';
   return `<b>${escapeHtml(h.name)}</b>${attrs.length ? `<br><span class="muted">${escapeHtml(attrs.join(' · '))}</span>` : ''}
 <br><a href="/chat/${escapeHtml(h.chatId)}" data-chat="${escapeHtml(h.chatId)}">from: ${escapeHtml(h.itemTitle)}</a> ${link}`;
@@ -37,7 +38,7 @@ export function MapView() {
   const [hits, setHits] = useState<EntityHit[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const box = useRef<HTMLDivElement>(null);
+  const box = useRef<HTMLElement>(null);
   const map = useRef<L.Map | null>(null);
   const layer = useRef<L.LayerGroup | null>(null);
 
@@ -119,36 +120,54 @@ export function MapView() {
   };
 
   return (
-    <div className="page stack">
-      <div className="row">
-        <h3 style={{ margin: 0, flex: 1 }}>Map</h3>
-        <Link to="/entities/place" className="small">
-          list view
+    <div className="page stack loose">
+      <div className="page-head">
+        <Link to="/entities/place" className="icon-link" aria-label="Back to places list">
+          <Icon name="arrow-left" />
         </Link>
+        <h2>Map</h2>
         {unlocated.length > 0 && (
           <button
             type="button"
+            className="ghost small"
             disabled={busy}
             onClick={backfill}
             title="Ask the geocoder about places without coordinates"
           >
+            <Icon name="map-pin" size={16} />
             {busy ? 'Locating…' : `Locate ${unlocated.length} more`}
           </button>
         )}
       </div>
-      {err && <div className="msg error">{err}</div>}
-      <div ref={box} className="map" />
-      {hits && hits.length === 0 && <div className="card muted">No places yet.</div>}
+      {err && (
+        <div className="banner" role="status">
+          <Icon name="info" />
+          <span>{err}</span>
+        </div>
+      )}
+      <section ref={box} className="map" aria-label="Map of saved places" />
+      {hits && hits.length === 0 && (
+        <div className="card quiet empty">
+          <Icon name="map-pin" className="icon-lg" />
+          <p>No places yet. Places mentioned in answers show up here.</p>
+        </div>
+      )}
       {hits && hits.length > 0 && located.length === 0 && (
-        <div className="card muted">
-          {hits.length} places saved but none located yet. Enable the geocoder (GEOCODER in .env) or
-          use “Locate”.
+        <div className="card quiet">
+          <p>
+            {hits.length} places saved but none located yet. Enable the geocoder (GEOCODER in .env)
+            or use “Locate”.
+          </p>
         </div>
       )}
       {unlocated.length > 0 && (
-        <details className="card small">
-          <summary>{unlocated.length} without coordinates</summary>
-          <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>
+        <details className="card">
+          <summary>
+            <Icon name="map-pin" />
+            <span className="grow">{unlocated.length} without coordinates</span>
+            <Icon name="chevron-down" className="chev" />
+          </summary>
+          <ul className="md">
             {unlocated.map((h) => {
               const g = mapsUrl(h);
               return (
@@ -156,9 +175,9 @@ export function MapView() {
                   <Link to={`/chat/${h.chatId}`}>{h.name}</Link>
                   {g && (
                     <>
-                      {' '}
+                      {' · '}
                       <a href={g} target="_blank" rel="noopener noreferrer">
-                        search ↗
+                        Search in maps
                       </a>
                     </>
                   )}

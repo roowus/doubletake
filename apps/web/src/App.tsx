@@ -1,6 +1,7 @@
 import type { EntityKind } from '@doubletake/shared';
 import { useEffect, useState } from 'react';
 import { getToken } from './api';
+import { Icon } from './components/Icon';
 import { resetLive } from './live';
 import { installNativeListeners, pendingShareToPath, takePendingShare } from './native';
 import { Chat } from './pages/Chat';
@@ -74,15 +75,20 @@ export function App() {
     <div className="app">
       <header className="topbar">
         <Link to="/" className="brand">
+          <span className="brand-mark">
+            <Icon name="sparkles" size={18} />
+          </span>
           Doubletake
         </Link>
         <span className="spacer" />
-        <Link to="/compose" className="small">
-          + New
-        </Link>
-        <Link to="/settings" className="small">
-          Settings
-        </Link>
+        <nav className="actions" aria-label="Primary">
+          <Link to="/compose" className="icon-link" aria-label="New item" title="New item">
+            <Icon name="plus" size={22} />
+          </Link>
+          <Link to="/settings" className="icon-link" aria-label="Settings" title="Settings">
+            <Icon name="settings" size={22} />
+          </Link>
+        </nav>
       </header>
       <main>{page}</main>
     </div>

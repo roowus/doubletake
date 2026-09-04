@@ -1,3 +1,4 @@
+import type React from 'react';
 import { useEffect, useState } from 'react';
 
 /** Minimal history-based router: one hook, one navigate function. Keeps the bundle small. */
@@ -21,18 +22,27 @@ export function navigate(to: string, replace = false): void {
   window.dispatchEvent(new Event('doubletake:navigate'));
 }
 
-export function Link(props: { to: string; className?: string; children: React.ReactNode }) {
+export function Link({
+  to,
+  children,
+  onClick,
+  ...rest
+}: { to: string; children: React.ReactNode } & Omit<
+  React.AnchorHTMLAttributes<HTMLAnchorElement>,
+  'href'
+>) {
   return (
     <a
-      href={props.to}
-      className={props.className}
+      href={to}
+      {...rest}
       onClick={(e) => {
-        if (e.metaKey || e.ctrlKey) return;
+        onClick?.(e);
+        if (e.defaultPrevented || e.metaKey || e.ctrlKey) return;
         e.preventDefault();
-        navigate(props.to);
+        navigate(to);
       }}
     >
-      {props.children}
+      {children}
     </a>
   );
 }
