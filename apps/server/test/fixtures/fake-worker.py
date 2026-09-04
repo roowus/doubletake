@@ -2,12 +2,14 @@
 
 - url containing "crash"  → exit(3) without answering (simulates a worker crash)
 - url containing "fail"   → error result, code download_failed
+- url containing "slow"   → sleeps 5 s before answering (for the timeout test)
 - otherwise               → progress + a result with one transcript containing an injected instruction
 """
 
 import json
 import os
 import sys
+import time
 
 
 def send(obj):
@@ -37,6 +39,8 @@ for raw in sys.stdin:
                 os.makedirs(req["out_dir"], exist_ok=True)
                 open(marker, "w").close()
                 sys.exit(3)
+        if "slow" in url:
+            time.sleep(5)
         if "fail" in url:
             send(
                 {

@@ -197,7 +197,12 @@ export class QueueWorker extends EventEmitter {
     this.repo.updateRun(run.id, { status: 'extracting', startedAt: started });
     this.repo.updateItem(item.id, { status: 'extracting' });
     this.emit('chat_updated', chat.id);
-    const timer = setTimeout(() => ac.abort(), MODE_BUDGETS[run.mode as Mode].wallClockMs + 60_000);
+    // Hard ceiling for the whole run. Research runs also get the media budget because the media
+    // stage (which has its own per-request timeout) runs before the mode clock is meaningful.
+    const budget = MODE_BUDGETS[run.mode as Mode];
+    const ceilingMs =
+      budget.wallClockMs + (run.kind === 'followup' ? 0 : budget.mediaWallClockMs) + 60_000;
+    const timer = setTimeout(() => ac.abort(), ceilingMs);
 
     try {
       const result =

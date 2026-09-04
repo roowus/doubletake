@@ -36,9 +36,12 @@ JSON-lines over stdio. Server → worker requests, worker → server responses a
 
 Paths in results are absolute; the server stores them relative to the data dir. Other ops:
 `ping` → `{ ok, pong: true }`, `version`, `shutdown`. One request in flight at a time. If the
-process exits or a request outlives its mode's wall clock, every in-flight request fails with
-`worker_crashed` (retryable); the client respawns on the next request and retries an `extract`
-once. `transcribe_model` is the mode name; the worker maps it to a model. Budgets come from
+process exits, every in-flight request fails with `worker_crashed` (retryable); the client
+respawns on the next request and retries an `extract` once. Each `extract` also carries the
+mode's **media wall clock** (`mediaWallClockMs`: Quick 3 min, Standard 10 min, Deep 20 min,
+separate from the research clock so a slow download cannot starve the agent): when it expires
+the client kills the process, fails the request with `timeout` (retryable, not auto-retried) and
+spawns a fresh worker for the next request. `transcribe_model` is the mode name; the worker maps it to a model. Budgets come from
 `MODE_BUDGETS` (frames 4/12/40, comments 20/100/500 — doubled when `focus` is not `whole`,
 `vision_frames` = half the frames). A failed stage becomes a `Media pipeline (<code>): …`
 warning in the chat and the run continues with page-level extraction. Planned ops not yet
@@ -138,6 +141,8 @@ instructs the brain to treat the discussion as the main object; `focus=whole` �
 
 ## Failure modes surfaced in chat
 `download_failed` (with the yt-dlp message and a hint to enable cookies), `private_or_removed`,
-`too_long`, `no_speech`, `tool_missing`, `worker_crashed` (auto-retried once),
-`worker_unavailable`. All appear as a `warning` status event and a `Media pipeline (<code>)`
+`too_long`, `no_speech`, `tool_missing`, `worker_crashed` (auto-retried once), `timeout` (the
+media wall clock expired; the process is replaced), `worker_unavailable`. Frame descriptions
+have their own failure line, `Frame descriptions failed: …`; the vision one-shot pins the
+configured brain model and a 120 s timer per batch. All appear as a `warning` status event and a `Media pipeline (<code>)`
 line in the chat; the run itself still finishes on page-level extraction.

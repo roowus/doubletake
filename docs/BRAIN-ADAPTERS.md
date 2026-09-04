@@ -101,9 +101,13 @@ Uses `@anthropic-ai/claude-agent-sdk` `query({ prompt, options })`.
   carries no structured block is reported as `stopReason: 'error'` with the message "model
   returned no text" — proxies (9Router, rewter, …) routing to a free or misconfigured model do
   exactly this, and a blank answer stored as success is worse than a visible failure.
-- `describeImages`: a one-turn `query` with image content blocks, no tools.
+- `describeImages`: a one-turn `query` with image content blocks, no tools, 120 s per batch.
 - `classify`: one-turn `query` with `maxTurns: 1`, no tools, fast model, hard 45 s timeout
   independent of the run budget (a hung classifier must not stall the queue).
+- Both one-shot calls pass the configured `model` explicitly and throw on any non-`success`
+  result (`error_max_budget_usd`, …). Without the pinned model the CLI picks its own default,
+  which behind a router can be a slow or empty-answering tier that silently burns the one-shot
+  budget — this is what made the first live M3 run time out.
 - Model: `DOUBLETAKE_BRAIN_MODEL` is passed as `options.model`; empty means the SDK/CLI default.
   `ANTHROPIC_BASE_URL` and `ANTHROPIC_API_KEY` are inherited by the SDK subprocess, so a local
   router works, but pick a model that actually answers there (the smoke test used

@@ -80,7 +80,7 @@ export class MediaWorkerError extends Error {
 export interface MediaClient {
   extract(
     params: ExtractParams,
-    opts: { signal: AbortSignal; onProgress?: (p: WorkerProgress) => void },
+    opts: { signal: AbortSignal; timeoutMs?: number; onProgress?: (p: WorkerProgress) => void },
   ): Promise<ExtractOutput>;
   ping(): Promise<boolean>;
   stop(): Promise<void>;

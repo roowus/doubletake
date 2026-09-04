@@ -190,6 +190,32 @@ describe('claude-agent-sdk adapter', () => {
     expect(String(calls[0]?.prompt)).toContain('and then?');
   });
 
+  it('one-shot calls (classify, describeImages) pin the configured model and surface error results', async () => {
+    const calls: QueryParams[] = [];
+    const frame = path.join(tmp, 'frame.jpg');
+    fs.writeFileSync(frame, Buffer.from([0xff, 0xd8, 0xff, 0xd9]));
+    const ok = new ClaudeAgentSdkAdapter({
+      cwd: tmp,
+      model: 'cc/claude-haiku-4-5-20251001',
+      query: fakeQuery(() => [init(), success('["an elephant"]')], calls),
+    });
+    expect(await ok.describeImages([{ path: frame, mimeType: 'image/jpeg' }], 'Describe.')).toEqual(
+      ['an elephant'],
+    );
+    expect(calls[0]?.options?.model).toBe('cc/claude-haiku-4-5-20251001');
+    expect(calls[0]?.options?.maxTurns).toBe(1);
+    expect(calls[0]?.options?.tools).toEqual([]);
+
+    const budget = new ClaudeAgentSdkAdapter({
+      cwd: tmp,
+      query: fakeQuery(() => [
+        init(),
+        { ...(maxTurns() as object), subtype: 'error_max_budget_usd' } as unknown as SDKMessage,
+      ]),
+    });
+    await expect(budget.classify('{"x":1}')).rejects.toThrow(/error_max_budget_usd/);
+  });
+
   it('canUseTool denies unknown tools and enforces the search budget', async () => {
     const calls: QueryParams[] = [];
     const adapter = new ClaudeAgentSdkAdapter({
