@@ -92,6 +92,11 @@ delete of either side. Migration `0004_collections.sql`.
 `push_subscriptions`: `id`, `device_id`, `kind` (`webpush` · `fcm`; ntfy/Telegram are not rows here, see [ADR 0019](adr/0019-owner-notification-channels.md)), `endpoint_or_token`,
 `keys` JSON (webpush p256dh/auth), `failed_count`, `created_at`.
 
+### pending_notifications
+Run notifications parked during quiet hours ([ADR 0020](adr/0020-quiet-hours-digest.md)):
+`id`, `chat_id`, `title`, `body`, `url`, `tag`, `created_at`. Rows are deleted when the digest
+goes out; they survive restarts. Migration `0005_pending_notifications.sql`.
+
 ### ig_accounts / ig_events
 `ig_accounts`: `ig_user_id` pk, `username`, `access_token_enc` (SecretBox ciphertext, ADR 0018),
 `expires_at`, `refreshed_at`, `created_at`, `updated_at`. One row at most.
@@ -105,7 +110,8 @@ completion reaction), `received_at`, `processed_at`, `error`. Migration `0003_in
 
 ### settings
 `key` pk, `value` text, `encrypted` bool. Secrets (`ig_app_secret`, `vapid_private`, API keys
-entered via UI) are encrypted with the keyfile per ADR 0018.
+entered via UI) are encrypted with the keyfile per ADR 0018. Plain keys: `owner_password_hash`,
+`vapid_public`, `quiet_hours` (JSON `{ enabled, start, end, timeZone }`, ADR 0020).
 
 ### items_fts (FTS5)
 Columns: `item_id` unindexed, `title`, `note`, `transcript`, `ocr`, `answer`, `tags`, `entities`

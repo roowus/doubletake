@@ -1,6 +1,14 @@
 import { QRCodeSVG } from 'qrcode.react';
 import { useEffect, useState } from 'react';
-import { ApiError, api, type Device, type IgStatus, type Status, setToken } from '../api';
+import {
+  ApiError,
+  api,
+  type Device,
+  type IgStatus,
+  type QuietHours,
+  type Status,
+  setToken,
+} from '../api';
 import {
   apiBase,
   disableNativePush,
@@ -26,6 +34,8 @@ export function Settings() {
     native || pushSupported() ? 'busy' : 'unsupported',
   );
   const [pushMsg, setPushMsg] = useState<string | null>(null);
+  const [quiet, setQuiet] = useState<QuietHours | null>(null);
+  const [quietMsg, setQuietMsg] = useState<string | null>(null);
   const [ig, setIg] = useState<IgStatus | 'off' | null>(null);
   const [igMsg, setIgMsg] = useState<string | null>(() => {
     const q = new URLSearchParams(location.search);
@@ -44,7 +54,10 @@ export function Settings() {
     if (health === 'refresh') setChecking(true);
     api
       .status(health)
-      .then(setStatus)
+      .then((st) => {
+        setStatus(st);
+        setQuiet((q) => q ?? st.push.quietHours);
+      })
       .catch((e) => setErr(String(e.message ?? e)))
       .finally(() => setChecking(false));
     api
@@ -210,6 +223,95 @@ export function Settings() {
             >
               Send test to channels
             </button>
+          </div>
+        )}
+        {status && quiet && (
+          <div className="stack quiet-hours">
+            <label className="row">
+              <input
+                type="checkbox"
+                checked={quiet.enabled}
+                onChange={(e) => setQuiet({ ...quiet, enabled: e.target.checked })}
+              />
+              <span>
+                <b>Quiet hours</b>
+                <span className="small muted">
+                  {' '}
+                  — hold notifications and send one digest when the window ends
+                </span>
+              </span>
+            </label>
+            <div className="row">
+              <label className="small muted">
+                From{' '}
+                <input
+                  type="time"
+                  value={quiet.start}
+                  onChange={(e) => setQuiet({ ...quiet, start: e.target.value })}
+                />
+              </label>
+              <label className="small muted">
+                to{' '}
+                <input
+                  type="time"
+                  value={quiet.end}
+                  onChange={(e) => setQuiet({ ...quiet, end: e.target.value })}
+                />
+              </label>
+              <label className="small muted">
+                zone{' '}
+                <input
+                  className="tz"
+                  value={quiet.timeZone}
+                  onChange={(e) => setQuiet({ ...quiet, timeZone: e.target.value })}
+                  list="tz-list"
+                />
+                <datalist id="tz-list">
+                  {[Intl.DateTimeFormat().resolvedOptions().timeZone, 'UTC'].map((z) => (
+                    <option key={z} value={z} />
+                  ))}
+                </datalist>
+              </label>
+              <button
+                type="button"
+                onClick={() =>
+                  api
+                    .setQuietHours(quiet)
+                    .then((r) => {
+                      setQuiet(r.quietHours);
+                      setQuietMsg('Saved.');
+                      load();
+                    })
+                    .catch((e) => setQuietMsg(String(e.message ?? e)))
+                }
+              >
+                Save
+              </button>
+            </div>
+            {status.push.pending > 0 && (
+              <div className="row">
+                <span className="small muted">
+                  {status.push.pending} notification{status.push.pending === 1 ? '' : 's'} waiting
+                  for the digest.
+                </span>
+                <button
+                  type="button"
+                  className="ghost"
+                  onClick={() =>
+                    api
+                      .flushDigest()
+                      .then((r) => {
+                        setQuietMsg(`Digest sent (${r.sent}).`);
+                        load();
+                      })
+                      .catch((e) => setQuietMsg(String(e.message ?? e)))
+                  }
+                >
+                  Send now
+                </button>
+              </div>
+            )}
+            {quietMsg && <div className="small muted">{quietMsg}</div>}
           </div>
         )}
       </div>

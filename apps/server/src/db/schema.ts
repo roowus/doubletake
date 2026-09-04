@@ -228,6 +228,17 @@ export const pushSubscriptions = sqliteTable('push_subscriptions', {
   createdAt: text('created_at').notNull(),
 });
 
+/** Run notifications parked during quiet hours, flushed as one digest (ADR 0020). */
+export const pendingNotifications = sqliteTable('pending_notifications', {
+  id: text('id').primaryKey(),
+  chatId: text('chat_id').notNull(),
+  title: text('title').notNull(),
+  body: text('body').notNull(),
+  url: text('url').notNull(),
+  tag: text('tag').notNull(),
+  createdAt: text('created_at').notNull(),
+});
+
 export const costLedger = sqliteTable(
   'cost_ledger',
   {

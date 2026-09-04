@@ -82,6 +82,10 @@ phone and desktop.
   browser flow from a real terminal.
 - Subscriptions that the push service reports as gone, or that fail 8 times in a row, are
   removed automatically; the client re-subscribes on next open.
+- **Quiet hours** ([ADR 0020](adr/0020-quiet-hours-digest.md)): Settings → Notifications →
+  Quiet hours. Inside the window nothing is sent (devices and owner channels alike); when it
+  ends, one digest ("3 answers ready") arrives within a minute. **Send now** pushes the digest
+  early. The window is stored server-side with an explicit time zone, so set it to the phone's.
 - **ntfy** ([ADR 0019](adr/0019-owner-notification-channels.md)): set `NTFY_TOPIC` (and
   `NTFY_URL` for a self-hosted server, `NTFY_TOKEN` for a protected topic) and subscribe to the
   topic in the ntfy app. Every finished/failed/capped run publishes a message whose **Click**

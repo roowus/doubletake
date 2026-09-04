@@ -33,7 +33,7 @@ channel; the Instagram bot is optional and documented as fragile.
 | Content safety | Scraped content wrapped and labelled untrusted; file reads = home dir minus deny list; writes = notes dir only; no shell | [0005](adr/0005-untrusted-content-and-file-policy.md) |
 | Instagram | Official "Instagram API with Instagram Login" on a shadow Business account; DM share + comment @mention; mention semantics set `focus`; bot silent in comments; Graph data enters as extractions + media hints, raw-body HMAC, host confinement, polling fallback | [0006](adr/0006-instagram-official-api-and-mention-semantics.md), [0018](adr/0018-instagram-channel-and-keyfile-secrets.md) |
 | Mobile | One PWA; Android via Capacitor with a custom translucent share activity; desktop = installed PWA; iOS/Windows lower priority | [0007](adr/0007-capacitor-and-custom-share-activity.md) |
-| Notifications | Web Push (VAPID) + Android FCM per device + IG reaction on the source DM; ntfy and Telegram as owner-level broadcasters configured in `.env` | [0008](adr/0008-notifications.md), [0019](adr/0019-owner-notification-channels.md) |
+| Notifications | Web Push (VAPID) + Android FCM per device + IG reaction on the source DM; ntfy and Telegram as owner-level broadcasters configured in `.env`; owner-set quiet hours park notifications and send one digest | [0008](adr/0008-notifications.md), [0019](adr/0019-owner-notification-channels.md), [0020](adr/0020-quiet-hours-digest.md) |
 | Push keys | VAPID pair auto-generated into `settings` unless env-provided; FCM HTTP v1 with a hand-rolled service-account JWT; `gone` prunes, 8 failures prune | [0016](adr/0016-push-keys-and-fcm-http-v1.md) |
 | Network | Bind loopback; Tailscale serve by default; Cloudflare Tunnel or Tailscale Funnel only for the IG webhook path | [0009](adr/0009-networking.md) |
 | Auth | Owner password at setup + long-lived per-device tokens via QR pairing | [0010](adr/0010-auth-owner-password-device-tokens.md) |
@@ -226,7 +226,7 @@ and is authenticated by Meta's signature instead.
 
 | route | purpose |
 |---|---|
-| `GET health`, `GET status` | liveness; brain id/model, spend today vs cap, notes dir, `push: { kinds, vapidPublicKey }` |
+| `GET health`, `GET status` | liveness; brain id/model, spend today vs cap, notes dir, `push: { kinds, channels, vapidPublicKey, quietHours, pending }` |
 | `POST setup`, `POST login` | create owner password once; exchange password for a device token |
 | `POST pair/start`, `POST pair/redeem`, `GET/DELETE devices[/:id]` | 10-minute single-use pairing codes; device list and revocation |
 | `POST ingest` | `{ url? , text?, note?, channel, mode? }` → `202 { itemId, chatId, runId }` |
@@ -241,6 +241,7 @@ and is authenticated by Meta's signature instead.
 | `GET events` (WebSocket, `?token=`) | `run_event` and `chat_updated` frames for live views |
 | `POST push/subscribe { kind: webpush\|fcm, endpoint, keys? }`, `POST push/unsubscribe { endpoint }`, `GET push/subscriptions`, `POST push/test` | register this device's push endpoint (webpush needs `keys`; 409 when the kind is not configured on the server); list/remove; send a test notification to this device only |
 | `POST push/channels/test` | send a test message to the owner channels (ntfy, Telegram) only; 404 when none is configured. `GET status` lists them as `push.channels` |
+| `PUT push/quiet-hours { enabled, start, end, timeZone }`, `POST push/digest/flush` | set the quiet window (`HH:MM`, IANA zone; disabling flushes at once); send the parked digest now ([ADR 0020](adr/0020-quiet-hours-digest.md)) |
 | `GET ig/status`, `POST ig/connect`, `GET ig/callback`, `DELETE ig/account` | shadow-account state (username, expiry, polling); start OAuth (`{ url }`, 409 when unconfigured); OAuth redirect → `/settings?ig=connected\|error`; disconnect |
 | `POST ig/refresh`, `POST ig/poll`, `POST ig/test { recipientId, text? }`, `POST ig/simulate-mention { media_id?, comment_id? }` | force token refresh; run one mention poll; send a DM to yourself; replay a mention through the handler |
 | `GET/POST /webhooks/instagram` | Meta handshake (`hub.challenge`) and signed deliveries; `401` on bad signature, `200` then async processing |

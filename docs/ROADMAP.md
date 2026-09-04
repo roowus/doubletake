@@ -126,4 +126,4 @@ and a Reddit video.
 (worker on another machine, shared data dir) · MCP server exposing the library to other
 agents · Karakeep / Memos import and export · shareable read-only collection pages (SaveToList's
 shared lists) · cross-library chat ("what did I save about ski wax?") over FTS, Recall-style ·
-map view over place entities · digest notifications (batch quiet-hours pushes).
+map view over place entities · ~~digest notifications (batch quiet-hours pushes)~~ (done 2026-09-04, [ADR 0020](adr/0020-quiet-hours-digest.md)).

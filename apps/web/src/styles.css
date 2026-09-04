@@ -405,3 +405,12 @@ textarea {
 .entity .row a {
   color: var(--accent);
 }
+
+.quiet-hours input[type="time"],
+.quiet-hours input.tz {
+  padding: 2px 8px;
+  font-size: 0.9em;
+}
+.quiet-hours input.tz {
+  width: 11em;
+}

@@ -19,6 +19,7 @@ import {
   seedAutoCollections,
 } from '../library/collections.js';
 import type { NotificationHub } from '../notify/hub.js';
+import { type DigestGate, parseHHMM, validTimeZone } from '../notify/quiet.js';
 import type { QueueWorker } from '../queue/worker.js';
 import { toChatDetail, toChatSummary, toEntityHit, toRunDto } from './dto.js';
 import { ftsQuery } from './fts.js';
@@ -34,6 +35,8 @@ export interface ServerDeps {
   /** Push fan-out; when absent the push routes report `enabled: false`. */
   hub?: NotificationHub;
   vapidPublicKey?: string;
+  /** Quiet-hours gate in front of the hub; when absent quiet hours report disabled. */
+  digest?: DigestGate;
   /** Instagram channel; when absent the webhook and /api/ig routes are not registered. */
   ig?: InstagramChannel;
 }
@@ -420,6 +423,8 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
         kinds: deps.hub?.kinds() ?? [],
         channels: deps.hub?.channels() ?? [],
         vapidPublicKey: deps.vapidPublicKey ?? null,
+        quietHours: deps.digest?.quietHours() ?? null,
+        pending: deps.digest?.pendingCount() ?? 0,
       },
     };
   });
@@ -489,6 +494,27 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
       url: cfg.publicUrl ? `${cfg.publicUrl.replace(/\/$/, '')}/` : '/',
       tag: 'test',
     });
+  });
+
+  // ---- quiet hours / digest (ADR 0020) ----
+  const QuietHoursBody = z.object({
+    enabled: z.boolean(),
+    start: z.string().refine((v) => parseHHMM(v) !== null, 'HH:MM expected'),
+    end: z.string().refine((v) => parseHHMM(v) !== null, 'HH:MM expected'),
+    timeZone: z.string().refine(validTimeZone, 'unknown IANA time zone'),
+  });
+  app.put('/api/push/quiet-hours', async (req, reply) => {
+    if (!deps.digest) return reply.code(409).send({ error: 'push not configured' });
+    const body = QuietHoursBody.parse(req.body);
+    deps.digest.setQuietHours(body);
+    // Turning quiet hours off releases anything parked right away.
+    if (!body.enabled) await deps.digest.flush();
+    return { quietHours: deps.digest.quietHours(), pending: deps.digest.pendingCount() };
+  });
+  /** "Send now": pushes the digest of parked notifications even inside quiet hours. */
+  app.post('/api/push/digest/flush', async (_req, reply) => {
+    if (!deps.digest) return reply.code(409).send({ error: 'push not configured' });
+    return deps.digest.flush(true);
   });
 
   // ---- live events ----
