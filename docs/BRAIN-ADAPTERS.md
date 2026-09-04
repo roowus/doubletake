@@ -142,8 +142,9 @@ Runs any CLI harness as a child process, one process per run or follow-up
   "resumeArgs": ["--resume", "{sessionId}"],   // omit ⇒ capabilities.resume = false
   "modelArgs": ["--model", "{model}"],          // appended only when a model is configured
   "promptMode": "arg",                          // arg | stdin
-  "outputParser": "claude-json"                 // claude-json | jsonl | plain
-}
+  "outputParser": "claude-json",                // claude-json | jsonl | plain
+  "sessionIdPattern": "session_id:\\s*(\\S+)"    // optional; for `plain` parsers whose harness
+}                                               // prints a session id (stderr checked, then stdout)
 ```
 
 Presets shipped (`HEADLESS_PRESETS`):
@@ -154,7 +155,7 @@ Presets shipped (`HEADLESS_PRESETS`):
 | `codex` | `codex exec --json --skip-git-repo-check -C <sandbox>` | stdin | `jsonl` (`item.completed`/`agent_message`, `turn.completed.usage`) | no |
 | `gemini-cli` | `gemini -p …` | arg | `plain` | no |
 | `opencode` | `opencode run …` | arg | `plain` | no |
-| `hermes` | `hermes chat -q …` | arg | `plain` | no |
+| `hermes` | `hermes chat -Q --oneshot --source tool --max-turns N -q …` | arg | `plain` + `sessionIdPattern` (`session_id: …` on stderr) | `--resume <id>` |
 
 `DOUBLETAKE_HEADLESS_CMD` and `DOUBLETAKE_HEADLESS_ARGS` (JSON array) override a preset's
 executable and argument template, so any other harness that prints its answer to stdout works
@@ -183,9 +184,11 @@ Behaviour:
 - `healthcheck()` only checks the executable is on `PATH`; it does not run the harness.
 
 `claude-code` was verified live 2026-09-04 (`claude -p … --output-format json` through 9Router:
-answer, `total_cost_usd`, `session_id`, and a `--resume` follow-up, ~9 s). The other four
-presets' flags were taken from each CLI's documentation and are **unverified** against the
-installed tools.
+answer, `total_cost_usd`, `session_id`, and a `--resume` follow-up, ~9 s). `hermes` was verified
+live 2026-09-04 against Hermes Agent v0.21.0: `-Q --oneshot` prints only the answer on stdout and
+`session_id: <id>` on stderr, `--resume <id>` continues that session, `--source tool` keeps the
+runs out of the owner's own session list. `codex`, `gemini-cli` and `opencode` flags were taken
+from each CLI's documentation and are **unverified** against the installed tools.
 
 ### openai-compatible
 
