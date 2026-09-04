@@ -58,7 +58,13 @@ stays a v2 item.
 
 ## M3 — Media pipeline
 
-Status: **code complete 2026-09-03**; live acceptance on real reels/videos pending.
+Status: **live-verified 2026-09-03** on YouTube (quick run, 73 s end to end: yt-dlp download,
+captions, 2 scene frames, RapidOCR, 2 cloud frame descriptions in 9 s, classify, agent answer with
+claims table, Markdown export, $0.09) and on Instagram (public reel, page-level + media). The
+mlx-whisper path was exercised on the same clip's audio (`whisper-small-mlx`, 2 s warm, ~15 s
+first-time model download). The first live run timed out because one-shot brain calls did not
+pin the model (fixed in `94c26a1`). Remaining: a caption-less video through the full pipeline
+and a Reddit video.
 
 - Worker protocol (JSON-lines over stdio) implemented; server restarts a crashed worker.
 - Instagram reel / YouTube / Reddit video: download, transcript (mlx-whisper on Apple Silicon,
