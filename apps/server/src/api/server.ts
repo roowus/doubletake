@@ -25,6 +25,13 @@ import {
   importKarakeep,
   KarakeepExport,
 } from '../library/interchange.js';
+import {
+  newShareToken,
+  renderSharePage,
+  SHARE_PATH_PREFIX,
+  sharedItems,
+  shareUrl,
+} from '../library/share.js';
 import { MCP_PATH, registerMcpRoutes } from '../mcp/index.js';
 import type { NotificationHub } from '../notify/hub.js';
 import { type DigestGate, parseHHMM, validTimeZone } from '../notify/quiet.js';
@@ -230,6 +237,38 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
   app.get('/api/tags', async () => repo.listAllTags());
 
   // ---- collections + entity views (M6) ----
+  const toShareUrl = (token: string) => shareUrl(cfg, token);
+
+  // Shareable read-only pages (ADR 0025). Outside /api on purpose: the token in the path is
+  // the whole credential; the page carries no script and no owner note.
+  app.post('/api/collections/:id/share', async (req, reply) => {
+    const { id } = z.object({ id: z.string() }).parse(req.params);
+    const c = repo.getCollection(id);
+    if (!c) return reply.code(404).send({ error: 'no such collection' });
+    if (c.auto) return reply.code(400).send({ error: 'auto collections cannot be shared' });
+    const token = c.shareToken ?? newShareToken();
+    if (!c.shareToken) repo.updateCollection(id, { shareToken: token });
+    return { shareUrl: toShareUrl(token) };
+  });
+  app.delete('/api/collections/:id/share', async (req, reply) => {
+    const { id } = z.object({ id: z.string() }).parse(req.params);
+    const c = repo.getCollection(id);
+    if (!c) return reply.code(404).send({ error: 'no such collection' });
+    repo.updateCollection(id, { shareToken: null });
+    return { shareUrl: null };
+  });
+  app.get(`${SHARE_PATH_PREFIX}:token`, async (req, reply) => {
+    const { token } = z.object({ token: z.string().min(8).max(64) }).parse(req.params);
+    const c = repo.findCollectionByShareToken(token);
+    if (!c || c.hidden) return reply.code(404).type('text/plain').send('not found');
+    return reply
+      .type('text/html; charset=utf-8')
+      .header('cache-control', 'no-store')
+      .header('x-robots-tag', 'noindex, nofollow')
+      .header('referrer-policy', 'no-referrer')
+      .header('content-security-policy', "default-src 'none'; style-src 'unsafe-inline'")
+      .send(renderSharePage(c.name, sharedItems(repo, c)));
+  });
 
   app.get('/api/collections', async (req) => {
     const q = z
@@ -238,7 +277,7 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
         all: z.coerce.boolean().default(false),
       })
       .parse(req.query);
-    return listCollections(repo, q.hidden, !q.all);
+    return listCollections(repo, q.hidden, !q.all, toShareUrl);
   });
 
   app.post('/api/collections', async (req, reply) => {
@@ -256,7 +295,9 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
       manual,
       auto: false,
     });
-    return reply.code(201).send(listCollections(repo, true, false).find((c) => c.id === id));
+    return reply
+      .code(201)
+      .send(listCollections(repo, true, false, toShareUrl).find((c) => c.id === id));
   });
 
   app.post('/api/collections/:id', async (req, reply) => {
@@ -277,7 +318,7 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
       ...(body.query !== undefined && !c.manual ? { query: body.query } : {}),
       ...(body.hidden !== undefined ? { hidden: body.hidden } : {}),
     });
-    return listCollections(repo, true, false).find((x) => x.id === id);
+    return listCollections(repo, true, false, toShareUrl).find((x) => x.id === id);
   });
 
   app.delete('/api/collections/:id', async (req, reply) => {

@@ -180,14 +180,20 @@ export const itemTags = sqliteTable(
   (t) => [uniqueIndex('item_tags_pk').on(t.itemId, t.tagId)],
 );
 
-export const collections = sqliteTable('collections', {
-  id: text('id').primaryKey(),
-  name: text('name').notNull(),
-  query: text('query').notNull(),
-  manual: integer('manual', { mode: 'boolean' }).notNull().default(false),
-  auto: integer('auto', { mode: 'boolean' }).notNull().default(false),
-  hidden: integer('hidden', { mode: 'boolean' }).notNull().default(false),
-});
+export const collections = sqliteTable(
+  'collections',
+  {
+    id: text('id').primaryKey(),
+    name: text('name').notNull(),
+    query: text('query').notNull(),
+    manual: integer('manual', { mode: 'boolean' }).notNull().default(false),
+    auto: integer('auto', { mode: 'boolean' }).notNull().default(false),
+    hidden: integer('hidden', { mode: 'boolean' }).notNull().default(false),
+    /** Random secret in the public read-only URL `/s/<token>` (ADR 0025); null = not shared. */
+    shareToken: text('share_token'),
+  },
+  (t) => [uniqueIndex('collections_share_token_idx').on(t.shareToken)],
+);
 
 export const collectionItems = sqliteTable(
   'collection_items',

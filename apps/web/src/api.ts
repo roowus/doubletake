@@ -182,6 +182,10 @@ export const api = {
   updateCollection: (id: string, patch: { name?: string; query?: string; hidden?: boolean }) =>
     call<CollectionDto>('POST', `/api/collections/${id}`, patch),
   deleteCollection: (id: string) => call<void>('DELETE', `/api/collections/${id}`),
+  shareCollection: (id: string) =>
+    call<{ shareUrl: string }>('POST', `/api/collections/${id}/share`),
+  unshareCollection: (id: string) =>
+    call<{ shareUrl: null }>('DELETE', `/api/collections/${id}/share`),
   previewCollection: (query: string) =>
     call<{ count: number }>('GET', `/api/collections/preview?query=${encodeURIComponent(query)}`),
   addToCollection: (id: string, chatId: string) =>

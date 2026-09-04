@@ -225,6 +225,8 @@ export const CollectionDto = z.object({
   auto: z.boolean(),
   hidden: z.boolean(),
   count: z.number().int(),
+  /** Public read-only page URL when the owner shares this collection (ADR 0025). */
+  shareUrl: z.string().nullable(),
 });
 export type CollectionDto = z.infer<typeof CollectionDto>;
 

@@ -23,6 +23,7 @@ export function tempEnv(prefix = 'dt-test-') {
     bind: '127.0.0.1',
     port: 0,
     publicUrl: null,
+    sharePublic: false,
     brain: 'fake',
     brainModel: null,
     brainModes: {},

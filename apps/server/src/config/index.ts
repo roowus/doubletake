@@ -40,6 +40,11 @@ export interface Config {
   bind: string;
   port: number;
   publicUrl: string | null;
+  /**
+   * Let `/s/<token>` shared collection pages through the public tunnel hostname too (ADR 0025).
+   * Off by default: then share links only work for people who can reach the tailnet URL.
+   */
+  sharePublic: boolean;
   brain: string;
   brainModel: string | null;
   /** Per-mode adapter override: `DOUBLETAKE_BRAIN_<MODE>=adapter[@model]` (docs/BRAIN-ADAPTERS.md). */
@@ -120,6 +125,7 @@ export function loadConfig(): Config {
     bind: env('DOUBLETAKE_BIND', '127.0.0.1') ?? '127.0.0.1',
     port: Number(env('DOUBLETAKE_PORT', '7391')),
     publicUrl: env('DOUBLETAKE_PUBLIC_URL') ?? null,
+    sharePublic: (env('DOUBLETAKE_SHARE_PUBLIC', 'off') ?? 'off') === 'on',
     brain: env('DOUBLETAKE_BRAIN', 'claude-agent-sdk') ?? 'claude-agent-sdk',
     brainModel: env('DOUBLETAKE_BRAIN_MODEL') ?? null,
     brainModes: {

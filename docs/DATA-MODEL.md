@@ -88,13 +88,14 @@ URLs. Migration `0006_place_geo`.
 `item_tags`: `item_id`, `tag_id`, `confidence` (auto only; null for manual links). Removing the
 last link deletes the tag row.
 `collections`: `id`, `name`, `query` (`category:<c>`, `entity:<kind>`, `tag:<name>`, or an FTS
-string; empty for manual lists), `manual` bool, `auto` bool, `hidden` bool, `created_at`. Auto
+string; empty for manual lists), `manual` bool, `auto` bool, `hidden` bool, `share_token`
+(nullable, unique; the read-only page credential, [ADR 0025](adr/0025-shareable-collection-pages.md)), `created_at`. Auto
 collections are seeded idempotently at every boot (`library/collections.ts`: one per category,
 one per entity kind, matched by `query`) and cannot be deleted or retargeted, only hidden. A
 collection's members are resolved at read time: manual → `collection_items`, otherwise the
 query (`resolveQuery`, capped at 500 items).
 `collection_items`: `collection_id`, `item_id`, `added_at`; unique on the pair, cascade on
-delete of either side. Migration `0004_collections.sql`.
+delete of either side. Migrations `0004_collections.sql`, `0007_collection_share.sql`.
 
 ### devices / push_subscriptions
 `devices`: `id`, `name`, `platform` (`android` · `ios` · `web`), `token_hash`, `created_at`,

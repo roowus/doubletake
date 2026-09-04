@@ -205,6 +205,26 @@ export function CollectionBar({
       setErr(ex instanceof ApiError ? ex.message : String(ex));
     }
   }
+  const [shared, setShared] = useState<string | null>(null);
+  async function share(c: CollectionDto) {
+    try {
+      if (c.shareUrl) {
+        await api.unshareCollection(c.id);
+        setShared(null);
+      } else {
+        const r = await api.shareCollection(c.id);
+        setShared(r.shareUrl);
+        try {
+          await navigator.clipboard.writeText(r.shareUrl);
+        } catch {
+          // clipboard needs a secure context; the link is shown below anyway
+        }
+      }
+      load();
+    } catch (ex) {
+      setErr(ex instanceof ApiError ? ex.message : String(ex));
+    }
+  }
   async function hide(c: CollectionDto) {
     try {
       if (c.auto) await api.updateCollection(c.id, { hidden: true });
@@ -231,6 +251,7 @@ export function CollectionBar({
           >
             {c.manual ? '☰ ' : c.auto ? '' : '🔍 '}
             {c.name} <span className="muted">{c.count}</span>
+            {c.shareUrl && <span title="Shared read-only link">🔗</span>}
           </button>
         ))}
         <button
@@ -240,12 +261,30 @@ export function CollectionBar({
         >
           + collection
         </button>
+        {cur && !cur.auto && (
+          <button
+            type="button"
+            className="chip"
+            onClick={() => share(cur)}
+            title={cur.shareUrl ? 'Revoke the read-only link' : 'Create a read-only link'}
+          >
+            {cur.shareUrl ? 'unshare' : 'share'}
+          </button>
+        )}
         {cur && (
           <button type="button" className="chip" onClick={() => hide(cur)} title="Hide or delete">
             {cur.auto ? 'hide' : 'delete'} “{cur.name}”
           </button>
         )}
       </div>
+      {cur?.shareUrl && (
+        <div className="muted" style={{ fontSize: 13, wordBreak: 'break-all' }}>
+          Shared read-only{shared === cur.shareUrl ? ' (link copied)' : ''}:{' '}
+          <a href={cur.shareUrl} target="_blank" rel="noreferrer">
+            {cur.shareUrl}
+          </a>
+        </div>
+      )}
       {creating && (
         <form
           className="row card"
