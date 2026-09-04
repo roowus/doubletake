@@ -11,7 +11,9 @@
 - **Untrusted**: everything scraped from platforms or fetched from the web; anyone who can DM
   or mention the shadow account (public accounts can mention it); anyone who can reach the
   public webhook URL.
-- **Semi-trusted**: the model provider (sees whatever the brain reads); external CLI harnesses.
+- **Semi-trusted**: the model provider (sees whatever the brain reads); external CLI harnesses;
+  the geocoder (receives place names and locality strings from `place` entities, nothing else)
+  and the OpenStreetMap tile server (the browser fetches tiles directly while the map is open).
 - **Trusted**: the owner's devices holding tokens; the laptop.
 
 ## Threats and mitigations
@@ -29,6 +31,7 @@
 | T9 | SSRF via web_fetch to the laptop's own services | Private-range and localhost refusal after DNS resolution; redirect re-check | DNS rebinding within TTL |
 | T10 | Media file exploits (crafted MP4) | ffmpeg/yt-dlp kept current; worker runs as the user (no extra privilege) | Sandbox the worker later (container / seatbelt) |
 | T11 | Supply-chain compromise of a dependency | Lockfiles; CI on PRs; minimal dependency set | Same as any Node/Python project |
+| T12 | Geocoder or tile server learns what the owner saved | Only place name + city/region/country attributes are sent, never notes, answers or source URLs; `GEOCODER=off` or `GEOCODER_URL` to a self-hosted instance; the server never proxies tiles | The set of saved place names is visible to the geocoder operator; an injected entity name could be a payload the geocoder receives as a plain query string (no request body, no auth headers) |
 
 ## Non-goals
 Multi-user isolation (single owner), protection against a compromised laptop, hiding the

@@ -7,6 +7,7 @@ import { InstagramChannel } from './channels/instagram/index.js';
 import { loadConfig } from './config/index.js';
 import { openDb } from './db/index.js';
 import { Repo } from './db/repo.js';
+import { Geocoder } from './geo/index.js';
 import { MediaWorkerClient } from './media/worker-client.js';
 import { createHub } from './notify/index.js';
 import { DigestGate } from './notify/quiet.js';
@@ -54,6 +55,9 @@ export async function main(): Promise<void> {
     worker.onOutcome = (item, outcome) => ig?.onOutcome(item, outcome) ?? Promise.resolve();
     worker.mediaHints = (item) => ig?.mediaHints(item) ?? {};
   }
+  // Map view: place entities get coordinates from a Nominatim-compatible geocoder (ADR 0022).
+  const geocoder = new Geocoder(cfg.geocoder, repo, { log: console });
+  if (geocoder.enabled) worker.locatePlaces = (itemId) => geocoder.locateItem(itemId);
   const app = await buildServer({
     cfg,
     repo,
@@ -63,6 +67,7 @@ export async function main(): Promise<void> {
     digest,
     vapidPublicKey: vapid.publicKey,
     ...(ig ? { ig } : {}),
+    geocoder,
   });
   const media = cfg.media.enabled ? new MediaWorkerClient(cfg, app.log) : null;
   worker.media = media;

@@ -110,6 +110,8 @@ export class QueueWorker extends EventEmitter {
     | null = null;
   /** Channel-supplied media shortcuts for an item (Instagram CDN url); consulted per run. */
   mediaHints: ((item: ItemRow) => ExtractParams['hints']) | null = null;
+  /** Locates place entities after a research run (ADR 0022); null when no geocoder is configured. */
+  locatePlaces: ((itemId: string) => Promise<void>) | null = null;
 
   private push(item: ItemRow, chatId: string, outcome: 'answered' | 'failed' | 'capped'): void {
     if (this.onOutcome) this.onOutcome(item, outcome).catch(() => {});
@@ -584,7 +586,15 @@ export class QueueWorker extends EventEmitter {
       unread: true,
     });
     if (structured) {
-      if (r.kind === 'research') this.repo.replaceEntities(item.id, run.id, structured.entities);
+      if (r.kind === 'research') {
+        this.repo.replaceEntities(item.id, run.id, structured.entities);
+        if (this.locatePlaces && structured.entities.some((e) => e.kind === 'place')) {
+          // Off the run's critical path: the answer, push and export never wait on the geocoder.
+          void this.locatePlaces(item.id)
+            .then(() => this.emit('chat_updated', chatId))
+            .catch(() => {});
+        }
+      }
       if (structured.tags.length) this.repo.setAutoTags(item.id, structured.tags);
       this.repo.updateItem(item.id, { category: structured.category });
     }

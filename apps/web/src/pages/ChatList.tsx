@@ -104,6 +104,7 @@ export function ChatList() {
       <CollectionBar selected={collection} onSelect={setCollection} />
       <div className="row small muted">
         <Link to="/entities/place">Places</Link>
+        <Link to="/map">Map</Link>
         <Link to="/entities/recipe">Recipes</Link>
         <Link to="/entities/product">Products</Link>
         <Link to="/entities/tool">Tools</Link>

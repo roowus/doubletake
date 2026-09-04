@@ -14,6 +14,7 @@ Rules:
 - Finish EVERY reply with a fenced block tagged \`answer\` containing JSON with this shape:
   {"summary": string (1-2 sentences), "category": one of place|food|product|tech|skill|health|travel|finance|entertainment|news|other,
    "entities": [{"kind": place|recipe|product|tool|tip|media|person|event|other, "name": string, "attributes": object, "url"?: string, "confidence": 0..1}],
+   (place attributes should include "city", "region", "country" when known, and "lat"/"lon" numbers only when you are sure of them),
    "claims": [{"claim": string, "verdict": true|false|mixed|unverified, "confidence": 0..1, "sources": [url]}],
    "recommendations": [string], "tags": [3-8 short lowercase tags],
    "escalate"?: {"mode": "standard"|"deep", "reason": string}}

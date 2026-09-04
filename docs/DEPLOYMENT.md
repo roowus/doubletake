@@ -99,6 +99,16 @@ phone and desktop.
   public URL. Both channels are owner-level: no device subscription, no toggle in the UI,
   failures are logged (`… notification failed: …`) and never disable the channel.
 
+### Map view geocoder
+The map ([ADR 0022](adr/0022-map-view-place-geocoding.md)) locates saved places with the public
+OpenStreetMap Nominatim service by default (one request per new place, 1 s apart, results
+cached in the database). Set `GEOCODER_EMAIL` to a contact address as Nominatim's usage
+policy asks, point `GEOCODER_URL` at a self-hosted Nominatim or Photon-compatible instance to
+keep place names off the public service, or set `GEOCODER=off` to send nothing (the map then
+shows only places the brain located). Map tiles are fetched by the browser from
+`tile.openstreetmap.org`; the server never proxies them. After upgrading, open **Map** and
+press **Locate N more** once to geocode places saved earlier.
+
 ### Instagram webhook (public, one path)
 Pick one:
 - **Cloudflare Tunnel**: `cloudflared tunnel create doubletake`, route a hostname, config

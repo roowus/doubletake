@@ -7,6 +7,7 @@ import { Chat } from './pages/Chat';
 import { ChatList } from './pages/ChatList';
 import { Compose } from './pages/Compose';
 import { ENTITY_KINDS, Entities } from './pages/Library';
+import { MapView } from './pages/MapView';
 import { Settings } from './pages/Settings';
 import { Welcome } from './pages/Welcome';
 import { Link, navigate, usePath } from './router';
@@ -62,6 +63,7 @@ export function App() {
       />
     );
   else if (url.pathname === '/settings') page = <Settings />;
+  else if (url.pathname === '/map') page = <MapView />;
   else if (url.pathname.startsWith('/entities/')) {
     const kind = url.pathname.slice('/entities/'.length) as EntityKind;
     page = <Entities kind={ENTITY_KINDS.includes(kind) ? kind : 'place'} />;

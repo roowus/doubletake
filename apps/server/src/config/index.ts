@@ -58,6 +58,8 @@ export interface Config {
   /** Owner notification channels (ADR 0019); null = not configured. */
   ntfy: { url: string; topic: string; token: string | null } | null;
   telegram: { botToken: string; chatId: string } | null;
+  /** Geocoder for place entities (ADR 0022); `off` leaves the map to brain-supplied coordinates only. */
+  geocoder: { provider: 'nominatim' | 'off'; url: string; email: string | null };
   /** Media worker (docs/MEDIA-PIPELINE.md). `off` skips download/transcription entirely. */
   media: {
     enabled: boolean;
@@ -146,6 +148,11 @@ export function loadConfig(): Config {
       env('TELEGRAM_BOT_TOKEN') && env('TELEGRAM_CHAT_ID')
         ? { botToken: env('TELEGRAM_BOT_TOKEN') ?? '', chatId: env('TELEGRAM_CHAT_ID') ?? '' }
         : null,
+    geocoder: {
+      provider: env('GEOCODER', 'nominatim') === 'off' ? 'off' : 'nominatim',
+      url: env('GEOCODER_URL', 'https://nominatim.openstreetmap.org') ?? '',
+      email: env('GEOCODER_EMAIL') ?? null,
+    },
     media: {
       enabled: (env('DOUBLETAKE_MEDIA_WORKER', 'on') ?? 'on') !== 'off',
       command: list(env('DOUBLETAKE_MEDIA_WORKER_CMD', 'uv,run,--frozen,doubletake-media')),

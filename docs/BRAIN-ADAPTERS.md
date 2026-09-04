@@ -67,6 +67,9 @@ The adapter asks the model for `Answer` as a fenced JSON block after the Markdow
 parses it leniently; a missing or malformed block yields `structured: undefined` and the run
 still succeeds. Entities are requested in every mode so that `save_for_later` runs file the
 place, recipe, or product they saw ([ADR 0014](adr/0014-structured-extraction-and-categories.md)).
+For places the prompt asks for `city`/`region`/`country` when known and for `lat`/`lon` only
+when the model is sure; the map uses those before asking a geocoder
+([ADR 0022](adr/0022-map-view-place-geocoding.md)).
 
 `ResearchBrief` (in `packages/shared`) holds: `systemFraming`, `untrusted: UntrustedBlock[]`
 (each `{ source, kind, content }` rendered as `<untrusted source="…" kind="…">…</untrusted>`

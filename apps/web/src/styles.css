@@ -406,6 +406,19 @@ textarea {
   color: var(--accent);
 }
 
+.map {
+  height: min(70vh, 640px);
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+}
+.leaflet-container {
+  font: inherit;
+}
+.leaflet-popup-content a[href] {
+  color: var(--accent);
+}
+
 .quiet-hours input[type="time"],
 .quiet-hours input.tz {
   padding: 2px 8px;

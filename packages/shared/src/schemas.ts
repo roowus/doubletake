@@ -226,11 +226,22 @@ export const CollectionDto = z.object({
 });
 export type CollectionDto = z.infer<typeof CollectionDto>;
 
+/** Where a place entity sits on the map (ADR 0022): from the brain's own lat/lon or the geocoder. */
+export const EntityGeo = z.object({
+  lat: z.number(),
+  lon: z.number(),
+  label: z.string().nullable(),
+  source: z.enum(['brain', 'geocoder']),
+});
+export type EntityGeo = z.infer<typeof EntityGeo>;
+
 export const EntityHit = Entity.extend({
   chatId: z.string(),
   itemTitle: z.string(),
   platform: Platform,
   createdAt: z.string(),
+  /** Only on `place` entities that have been located; absent while geocoding is pending or failed. */
+  geo: EntityGeo.optional(),
 });
 export type EntityHit = z.infer<typeof EntityHit>;
 

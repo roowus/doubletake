@@ -542,6 +542,37 @@ export class Repo {
       .all();
   }
 
+  // ---- place geocache (ADR 0022) ----
+  getPlaceGeo(query: string) {
+    return this.db.select().from(s.placeGeo).where(eq(s.placeGeo.query, query)).get();
+  }
+  putPlaceGeo(row: {
+    query: string;
+    lat: number | null;
+    lon: number | null;
+    label: string | null;
+    provider: string;
+  }) {
+    this.db
+      .insert(s.placeGeo)
+      .values({ ...row, resolvedAt: nowIso() })
+      .onConflictDoUpdate({
+        target: s.placeGeo.query,
+        set: {
+          lat: row.lat,
+          lon: row.lon,
+          label: row.label,
+          provider: row.provider,
+          resolvedAt: nowIso(),
+        },
+      })
+      .run();
+  }
+  /** Every cached geocode, for joining onto place entities in one pass. */
+  listPlaceGeo() {
+    return this.db.select().from(s.placeGeo).all();
+  }
+
   // ---- FTS ----
 
   upsertFts(
