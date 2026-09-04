@@ -55,8 +55,8 @@ export function Settings() {
       } else if (native) {
         if (!status?.push.kinds.includes('fcm'))
           throw new Error('The server has no FCM credentials (set FCM_SERVICE_ACCOUNT_PATH).');
+        // Resolves only once the FCM token has been posted to the server (or throws why not).
         await enableNativePush();
-        // The FCM token arrives asynchronously via the `registration` listener, which registers it.
         setPush('on');
         setPushMsg('Notifications enabled on this device.');
       } else {

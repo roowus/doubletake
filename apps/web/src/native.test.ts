@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
-import { parsePairingInput, pendingShareToPath, targetPath } from './native';
+import { fcmErrorMessage, parsePairingInput, pendingShareToPath, targetPath } from './native';
 
 describe('parsePairingInput', () => {
   it('accepts the QR URL form', () => {
@@ -38,5 +38,24 @@ describe('pendingShareToPath', () => {
     expect(u.searchParams.get('url')).toBe('https://x.com/a/status/1');
     expect(u.searchParams.get('title')).toBe('T');
     expect(u.searchParams.get('channel')).toBe('android_share');
+  });
+});
+
+describe('fcmErrorMessage', () => {
+  it('explains SERVICE_NOT_AVAILABLE as a reachability problem', () => {
+    const m = fcmErrorMessage({
+      error: 'java.util.concurrent.ExecutionException: java.io.IOException: SERVICE_NOT_AVAILABLE',
+    });
+    expect(m).toMatch(/could not reach Firebase/);
+    expect(m).toMatch(/DNS/);
+  });
+  it('points at the missing Firebase config', () => {
+    expect(fcmErrorMessage({ error: 'Default FirebaseApp is not initialized' })).toMatch(
+      /google-services\.json/,
+    );
+  });
+  it('falls back to the raw message', () => {
+    expect(fcmErrorMessage({ error: 'boom' })).toBe('FCM registration failed: boom');
+    expect(fcmErrorMessage(undefined)).toBe('FCM registration failed: unknown error');
   });
 });

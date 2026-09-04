@@ -120,10 +120,14 @@ export function installNativeListeners(): void {
     navigate(targetPath(data));
   });
   void PushNotifications.addListener('registration', (t) => {
-    void onFcmToken(t.value);
+    onFcmToken(t.value).then(
+      () => settleRegistration(null),
+      (e) => settleRegistration(e instanceof Error ? e : new Error(String(e))),
+    );
   });
   void PushNotifications.addListener('registrationError', (e) => {
     console.warn('FCM registration failed', e);
+    settleRegistration(new Error(fcmErrorMessage(e)));
   });
   // Cold start from a notification and resumes both land here; pending shares are handled by App.
   void CapApp.addListener('appUrlOpen', (ev) => {
@@ -158,8 +162,36 @@ async function onFcmToken(token: string): Promise<void> {
   localStorage.setItem(KEY_FCM_TOKEN, token);
 }
 
-/** Ask for permission, create the channel the server targets, and register with FCM. */
-export async function enableNativePush(): Promise<void> {
+/** Resolves the `enableNativePush` caller once the FCM token is known and posted, or fails. */
+let pendingRegistration: { resolve: () => void; reject: (e: Error) => void } | null = null;
+
+function settleRegistration(err: Error | null): void {
+  const p = pendingRegistration;
+  pendingRegistration = null;
+  if (!p) return;
+  if (err) p.reject(err);
+  else p.resolve();
+}
+
+/** Turn the plugin's `registrationError` payload into something a person can act on. */
+export function fcmErrorMessage(e: unknown): string {
+  const raw = String((e as { error?: unknown })?.error ?? e ?? '');
+  if (/SERVICE_NOT_AVAILABLE|Installations Service is unavailable/i.test(raw))
+    return 'Google Play services could not reach Firebase (SERVICE_NOT_AVAILABLE). Check that the phone resolves DNS and can reach googleapis.com, then try again.';
+  if (/MISSING_INSTANCEID_SERVICE|Google Play services/i.test(raw))
+    return 'Google Play services are missing or outdated on this device; FCM needs them.';
+  if (/google-services|FirebaseApp|Default FirebaseApp is not initialized/i.test(raw))
+    return 'This build has no Firebase config (google-services.json); rebuild the APK with it.';
+  return `FCM registration failed: ${raw || 'unknown error'}`;
+}
+
+/**
+ * Ask for permission, create the channel the server targets, register with FCM and wait until
+ * the token has been posted to the server. Rejects with a readable message when Firebase or the
+ * server refuse, so the UI never claims "enabled" for a device the server cannot reach.
+ */
+export async function enableNativePush(timeoutMs = 30_000): Promise<void> {
+  installNativeListeners();
   const perm = await PushNotifications.requestPermissions();
   if (perm.receive !== 'granted') throw new Error('Notification permission was not granted.');
   await PushNotifications.createChannel({
@@ -169,7 +201,23 @@ export async function enableNativePush(): Promise<void> {
     importance: 4,
     visibility: 1,
   });
-  await PushNotifications.register();
+  const done = new Promise<void>((resolve, reject) => {
+    pendingRegistration = { resolve, reject };
+  });
+  const timer = setTimeout(
+    () =>
+      settleRegistration(
+        new Error(`FCM did not return a registration token within ${timeoutMs / 1000}s.`),
+      ),
+    timeoutMs,
+  );
+  try {
+    await PushNotifications.register();
+    await done;
+  } finally {
+    clearTimeout(timer);
+    pendingRegistration = null;
+  }
 }
 
 export async function disableNativePush(): Promise<void> {
