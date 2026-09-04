@@ -27,6 +27,7 @@ opt tailscale "brew install tailscale (default network path, DEPLOYMENT.md)"
 opt cloudflared "brew install cloudflared (public webhook tunnel alternative)"
 opt java      "JDK 21 for apps/mobile (Android Studio's JBR: export JAVA_HOME=\"/Applications/Android Studio.app/Contents/jbr/Contents/Home\")"
 opt adb       "Android platform-tools (apps/mobile; export ANDROID_HOME=~/Library/Android/sdk)"
+opt xcodebuild "Xcode 26 for apps/mobile/ios (sudo xcode-select -s /Applications/Xcode.app/Contents/Developer)"
 opt ffprobe   "ships with ffmpeg (media worker probes duration before downloading)"
 opt tesseract "brew install tesseract (OCR fallback when rapidocr is not synced)"
 if command -v uv >/dev/null 2>&1 && [ -d "$ROOT/workers/media" ]; then

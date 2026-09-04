@@ -27,4 +27,5 @@ the Google Services plugin only when it is present.
 
 Generated and ignored: `android/app/src/main/assets/public`, `android/app/src/main/res/xml/config.xml`,
 `android/capacitor-cordova-android-plugins`, `android/app/capacitor.build.gradle` is regenerated
-by `cap sync`. iOS target: not yet.
+by `cap sync`. iOS target: `ios/` (App + `ShareExtension`,
+Swift `Pairing`), committed and **unverified**; see `docs/channels/ios-share.md`.

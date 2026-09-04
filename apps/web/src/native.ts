@@ -9,13 +9,16 @@ import { navigate } from './router';
  * Native (Capacitor) glue. Everything here is a no-op on the plain web build, where the PWA
  * is served by the Doubletake server itself and same-origin URLs just work.
  *
- * On Android the WebView loads the bundled PWA from `https://localhost`, so:
+ * On Android the WebView loads the bundled PWA from `https://localhost` (iOS:
+ * `capacitor://localhost`), so:
  * - the server URL is stored at pairing time and prefixed onto every API call (`apiBase`);
  * - the device token and server URL are mirrored into Capacitor Preferences, which is the
- *   `CapacitorStorage` SharedPreferences group that the native `ShareReceiverActivity` reads;
- * - push goes through FCM (`@capacitor/push-notifications`) instead of Web Push.
+ *   `CapacitorStorage` SharedPreferences group that the native `ShareReceiverActivity` reads
+ *   (on iOS `SceneDelegate` copies the same keys into the App Group for the Share Extension);
+ * - push goes through FCM (`@capacitor/push-notifications`) instead of Web Push on Android;
+ *   iOS has no push in v1 (ADR 0027).
  *
- * Keys mirror `apps/mobile/android/.../Pairing.kt`.
+ * Keys mirror `apps/mobile/android/.../Pairing.kt` and `apps/mobile/ios/.../Pairing.swift`.
  */
 export const KEY_SERVER_URL = 'doubletake.serverUrl';
 export const KEY_TOKEN = 'doubletake.token';
@@ -98,12 +101,22 @@ export async function takePendingShare(): Promise<PendingShare | null> {
   }
 }
 
-export function pendingShareToPath(s: PendingShare): string {
+/** The channel a native share sheet records: `android_share` or `ios_share` by platform. */
+export type NativeShareChannel = 'android_share' | 'ios_share';
+
+export function nativeShareChannel(platform: string = nativePlatform()): NativeShareChannel {
+  return platform === 'ios' ? 'ios_share' : 'android_share';
+}
+
+export function pendingShareToPath(
+  s: PendingShare,
+  channel: NativeShareChannel = nativeShareChannel(),
+): string {
   const q = new URLSearchParams();
   if (s.url) q.set('url', s.url);
   if (s.text) q.set('text', s.text);
   if (s.title) q.set('title', s.title);
-  q.set('channel', 'android_share');
+  q.set('channel', channel);
   return `/share?${q.toString()}`;
 }
 

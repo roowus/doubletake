@@ -57,8 +57,9 @@ export function App() {
           ...(url.searchParams.get('text') ? { text: url.searchParams.get('text') ?? '' } : {}),
           ...(url.searchParams.get('title') ? { title: url.searchParams.get('title') ?? '' } : {}),
         }}
-        {...(url.searchParams.get('channel') === 'android_share'
-          ? { channel: 'android_share' as const }
+        {...(url.searchParams.get('channel') === 'android_share' ||
+        url.searchParams.get('channel') === 'ios_share'
+          ? { channel: url.searchParams.get('channel') as 'android_share' | 'ios_share' }
           : {})}
       />
     );

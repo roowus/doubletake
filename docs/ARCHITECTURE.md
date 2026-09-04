@@ -32,7 +32,7 @@ channel; the Instagram bot is optional and documented as fragile.
 | Modes | Quick / Standard / Deep, auto-picked from note keywords + cheap classifier, overridable | [0004](adr/0004-research-modes.md) |
 | Content safety | Scraped content wrapped and labelled untrusted; file reads = home dir minus deny list; writes = notes dir only; no shell | [0005](adr/0005-untrusted-content-and-file-policy.md) |
 | Instagram | Official "Instagram API with Instagram Login" on a shadow Business account; DM share + comment @mention; mention semantics set `focus`; bot silent in comments; Graph data enters as extractions + media hints, raw-body HMAC, host confinement, polling fallback | [0006](adr/0006-instagram-official-api-and-mention-semantics.md), [0018](adr/0018-instagram-channel-and-keyfile-secrets.md) |
-| Mobile | One PWA; Android via Capacitor with a custom translucent share activity; desktop = installed PWA; iOS/Windows lower priority | [0007](adr/0007-capacitor-and-custom-share-activity.md) |
+| Mobile | One PWA; Android via Capacitor with a custom translucent share activity; iOS via the same wrapper plus a native Share Extension (App Group bridge, no push, **unverified**); desktop = installed PWA; Windows lower priority | [0007](adr/0007-capacitor-and-custom-share-activity.md), [0027](adr/0027-ios-share-extension.md) |
 | Notifications | Web Push (VAPID) + Android FCM per device + IG reaction on the source DM; ntfy and Telegram as owner-level broadcasters configured in `.env`; owner-set quiet hours park notifications and send one digest | [0008](adr/0008-notifications.md), [0019](adr/0019-owner-notification-channels.md), [0020](adr/0020-quiet-hours-digest.md) |
 | Push keys | VAPID pair auto-generated into `settings` unless env-provided; FCM HTTP v1 with a hand-rolled service-account JWT; `gone` prunes, 8 failures prune | [0016](adr/0016-push-keys-and-fcm-http-v1.md) |
 | Network | Bind loopback; Tailscale serve by default; Cloudflare Tunnel or Tailscale Funnel only for the IG webhook path | [0009](adr/0009-networking.md) |
@@ -60,7 +60,8 @@ channel; the Instagram bot is optional and documented as fragile.
                                  │ SQLite (~/.doubletake/doubletake.db) + blobs + FTS5 + md export     │
                                  └────────────────────────────────────────────────────────────────────┘
  PWA (Vite + React) ◀── same origin: /api + WebSocket for live run events; installed on desktop,
-                        wrapped by Capacitor on Android (share-target activity + FCM)
+                        wrapped by Capacitor on Android (share-target activity + FCM) and iOS
+                        (Share Extension, no push)
 ```
 
 - **One process by default.** The server hosts the API, serves the built PWA, runs the queue
@@ -88,7 +89,8 @@ apps/server       Fastify + TS: api/ (REST + WebSocket), auth/, brains/ (adapter
                   (collections, cross-library ask, Karakeep/Memos interchange)
 apps/web          Vite + React PWA: chats, chat view, compose, settings, pairing, service worker,
                   native.ts (Capacitor glue: server-URL prefix, Preferences mirror, FCM, deep links)
-apps/mobile       Capacitor 8 Android: ShareReceiverActivity + Pairing (Kotlin); iOS scaffold later
+apps/mobile       Capacitor 8 Android: ShareReceiverActivity + Pairing (Kotlin); iOS: App +
+                  ShareExtension targets, Pairing (Swift), committed Xcode project
 packages/shared   zod schemas + types (Item, Run, Message, events, API DTOs, untrusted wrappers)
 packages/brain-sdk BrainAdapter interface, ToolPolicy, contract test harness
 workers/media     Python 3.12 (uv): download, transcribe, OCR, frames, comments
@@ -97,7 +99,7 @@ scripts/          doctor.sh, dev.sh, install-service.sh, check-links.py
 ```
 
 Toolchain: Node 22, pnpm 10, TypeScript 5 strict, Fastify 5, drizzle-orm + better-sqlite3
-(WAL), zod, vitest, biome; Vite, React 19, vite-plugin-pwa; Capacitor 8 (Java 21, SDK 36);
+(WAL), zod, vitest, biome; Vite, React 19, vite-plugin-pwa; Capacitor 8 (Android: Java 21, SDK 36; iOS: Xcode 26, iOS 15+);
 Python 3.12, uv,
 ruff, pytest.
 
@@ -184,6 +186,14 @@ every configured adapter and Settings shows them ([guide](BRAIN-ADAPTERS.md#sele
   device: FCM for the Android app, Web Push for installed PWAs. Owner-level channels (ntfy
   topic, Telegram chat; [ADR 0019](adr/0019-owner-notification-channels.md)) are configured
   in `.env` and receive every notification too.
+- **iOS share extension** ([guide](channels/ios-share.md),
+  [ADR 0027](adr/0027-ios-share-extension.md), **unverified** on a device): native
+  `ShareExtension` target with the same card (URL or text preview, note, mode chips) posting to
+  `/api/ingest` as `channel=ios_share`. The extension cannot read Capacitor Preferences, so
+  `SceneDelegate` mirrors the server URL and token into the App Group
+  `group.com.roowus.doubletake`; when unpaired the extension stashes the share there and opens
+  `doubletake://share`, which the app replays into `/share` after pairing. No push on iOS in
+  v1 (no APNs); Settings points at ntfy/Telegram.
 - **In-app compose**: URL or free text plus note and mode.
 - **Library chat** (`channel=library`, [ADR 0021](adr/0021-cross-library-chat.md)): a question
   about everything already saved. `library/ask.ts` turns it into an FTS query (filler words
@@ -281,8 +291,8 @@ connection recipe in [DEPLOYMENT.md](DEPLOYMENT.md#connect-an-agent-mcp)).
 | `GET export/karakeep`, `GET export/memos`, `POST import/karakeep?research=quick\|standard\|deep` | download the library as a Karakeep export file / as Memos `{ memos: [{ content, visibility, create_time }] }`; import a Karakeep file → `{ imported, skipped, collections, runs }` (32 MiB body limit; 400 when not that shape; [ADR 0024](adr/0024-karakeep-memos-interchange.md)) |
 | `POST /mcp` (`GET`/`DELETE` → 405) | Streamable HTTP MCP, stateless, JSON responses. Tools: `search_library { query, limit }`, `list_chats { collection?, tag?, limit }`, `get_chat { chat_id, include_extractions, wait_seconds ≤120 }`, `list_collections`, `list_tags`, `list_entities { kind, limit }` (read-only); `save { url?, text?, note?, mode }` → channel `mcp`, `ask_library { question, mode }` → channel `library` (enqueue only) |
 
-CORS is enabled for `capacitor://localhost`, `https://localhost` and `http://localhost` so the
-Capacitor WebView can call the API on a different origin; every other origin is same-origin only.
+CORS is enabled for `capacitor://localhost` (the iOS WebView origin), `https://localhost` and
+`http://localhost` (Android) so the Capacitor WebView can call the API on a different origin; every other origin is same-origin only.
 On the Android side the WebView allows mixed content and the network security config permits
 cleartext to `localhost`/`127.0.0.1` only, so `adb reverse` device testing works while any real
 server URL stays https ([android-share.md](channels/android-share.md)).
