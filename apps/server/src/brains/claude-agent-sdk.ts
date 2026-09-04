@@ -267,24 +267,36 @@ export class ClaudeAgentSdkAdapter implements BrainAdapter {
     let result: RunResult | undefined;
     const emit = (type: EmitType, payload: Record<string, unknown>) => sink.emit({ type, payload });
 
+    // One gate, consulted twice: `canUseTool` for our MCP tools, and a PreToolUse hook for the
+    // built-in WebSearch/WebFetch, whose bare `allowedTools` entries auto-approve before
+    // `canUseTool` is ever asked (the SDK warns about exactly this shadowing).
+    const gate = (toolName: string): string | null => {
+      if (!allowed.includes(toolName)) return `${toolName} is not available in this run.`;
+      if (toolName === 'WebSearch' && ++counters.searches > policy.maxSearches)
+        return `Search budget of ${policy.maxSearches} used up; answer with what you have.`;
+      if (toolName === 'WebFetch' && ++counters.fetches > policy.maxFetches)
+        return `Fetch budget of ${policy.maxFetches} used up; answer with what you have.`;
+      return null;
+    };
     const canUseTool: sdk.CanUseTool = async (toolName, input) => {
-      if (!allowed.includes(toolName))
-        return { behavior: 'deny', message: `${toolName} is not available in this run.` };
-      if (toolName === 'WebSearch') {
-        if (++counters.searches > policy.maxSearches)
-          return {
-            behavior: 'deny',
-            message: `Search budget of ${policy.maxSearches} used up; answer with what you have.`,
-          };
-      }
-      if (toolName === 'WebFetch') {
-        if (++counters.fetches > policy.maxFetches)
-          return {
-            behavior: 'deny',
-            message: `Fetch budget of ${policy.maxFetches} used up; answer with what you have.`,
-          };
-      }
-      return { behavior: 'allow', updatedInput: input };
+      const denied = gate(toolName);
+      return denied
+        ? { behavior: 'deny', message: denied }
+        : { behavior: 'allow', updatedInput: input };
+    };
+    const preToolUse: sdk.HookCallback = async (input) => {
+      if (input.hook_event_name !== 'PreToolUse') return {};
+      if (input.tool_name.startsWith('mcp__')) return {}; // canUseTool already ran for these
+      const denied = gate(input.tool_name);
+      if (!denied) return {};
+      emit('status', { stage: 'tool_denied', tool: input.tool_name, reason: denied });
+      return {
+        hookSpecificOutput: {
+          hookEventName: 'PreToolUse',
+          permissionDecision: 'deny',
+          permissionDecisionReason: denied,
+        },
+      };
     };
 
     try {
@@ -322,6 +334,7 @@ export class ClaudeAgentSdkAdapter implements BrainAdapter {
           ],
           mcpServers: { [MCP_NAME]: this.mcpServer(policy) },
           canUseTool,
+          hooks: { PreToolUse: [{ hooks: [preToolUse] }] },
           abortController: ac,
           ...(opts.sessionId && !flags.fresh ? { resume: opts.sessionId } : {}),
           settingSources: [],

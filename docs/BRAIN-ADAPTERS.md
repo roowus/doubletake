@@ -93,7 +93,12 @@ Uses `@anthropic-ai/claude-agent-sdk` `query({ prompt, options })`.
 - `canUseTool`: second gate that re-checks every path against `readRoots` / `readDeny` /
   `writeRoot` and every URL against the SSRF guard, and counts searches/fetches. Deny returns a
   message the model sees.
-- `hooks`: `PreToolUse` / `PostToolUse` mirrored into `run_events`.
+- `hooks.PreToolUse`: the same gate again for the built-in `WebSearch` / `WebFetch`. A bare
+  name in `allowedTools` auto-approves the tool *before* `canUseTool` is consulted (the SDK
+  logs `CLAUDE_SDK_CAN_USE_TOOL_SHADOWED`), so the search/fetch budgets are enforced from the
+  hook with `permissionDecision: 'deny'`; a denial is emitted as a `status` run event
+  (`stage: tool_denied`). Our MCP tools are skipped by the hook because `canUseTool` already
+  ran for them.
 - Session id: captured from the first system/init message *inside* the async iterator loop,
   before any `catch`, so a failed run still yields a resumable session.
 - Result: branch on `is_error` and presence of `result`; read `total_cost_usd`, `usage`,
