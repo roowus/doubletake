@@ -114,9 +114,19 @@ phrase, `url` the deep link `/chat/<id>`; the answer text never leaves the serve
   FCM is the only native channel.
 - **Pairing input.** The code field accepts the QR URL or `{url, code}` JSON and splits it into
   server URL + code only when both are present, so typing a URL by hand is not split mid-way.
+- **Plain-http server URLs (device testing over `adb reverse`).** The bundle is served from
+  `https://localhost`, so `fetch("http://localhost:7391/…")` is *mixed content* and the WebView
+  drops it with a bare `TypeError: Failed to fetch` (nothing reaches the server, nothing in
+  logcat). `capacitor.config.ts` sets `android.allowMixedContent: true` and the manifest points
+  at `res/xml/network_security_config.xml`, which permits cleartext to `localhost` and
+  `127.0.0.1` only; every other host must be https (Tailscale). First hit on a Pixel 4 XL
+  (Android 13, WebView 151) — the S25 FE had accepted the same URL before the flag existed, so
+  do not rely on a single WebView version for this. The native share sheet uses
+  `HttpURLConnection`, which honours the same network security config.
 
 ## Verified on device (Galaxy S25 FE, Android 16, 2026-09-03)
-Over `adb reverse tcp:7391` with `DOUBLETAKE_PUBLIC_URL=http://localhost:7391`:
+Over `adb reverse tcp:7391` with `DOUBLETAKE_PUBLIC_URL=http://localhost:7391` (that build
+predates the mixed-content allowance above; the Pixel 4 XL needed it — see the WebView notes):
 pairing by code and by typed QR URL; `ShareReceiverActivity` for a URL share (item lands with
 `channel: android_share`, note, chosen mode; the run answers and the chat list updates live) and
 for a text-only share; unreachable server shows the toast and keeps the text, retry succeeds;
