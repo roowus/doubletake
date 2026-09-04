@@ -42,6 +42,14 @@ export function tempEnv(prefix = 'dt-test-') {
       whisperBackend: 'off',
       ytdlpCookiesFromBrowser: null,
     },
+    ig: {
+      appId: 'app123',
+      appSecret: 'shh-secret',
+      verifyToken: 'verify-me',
+      webhookPublicHost: 'hook.example.com',
+      mentionPolling: false,
+      graphBase: 'https://graph.example.test/v25.0',
+    },
   };
   fs.mkdirSync(cfg.dataDir, { recursive: true });
   const { db, sqlite, close } = openDb(path.join(cfg.dataDir, 'doubletake.db'));

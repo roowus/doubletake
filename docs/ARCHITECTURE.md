@@ -31,7 +31,7 @@ channel; the Instagram bot is optional and documented as fragile.
 | Brain | Pluggable `BrainAdapter`; v1 adapters: Claude Agent SDK (default), headless CLI, OpenAI/Anthropic-compatible API with built-in tool loop | [0003](adr/0003-brain-adapter-interface.md) |
 | Modes | Quick / Standard / Deep, auto-picked from note keywords + cheap classifier, overridable | [0004](adr/0004-research-modes.md) |
 | Content safety | Scraped content wrapped and labelled untrusted; file reads = home dir minus deny list; writes = notes dir only; no shell | [0005](adr/0005-untrusted-content-and-file-policy.md) |
-| Instagram | Official "Instagram API with Instagram Login" on a shadow Business account; DM share + comment @mention; mention semantics set `focus`; bot silent in comments | [0006](adr/0006-instagram-official-api-and-mention-semantics.md) |
+| Instagram | Official "Instagram API with Instagram Login" on a shadow Business account; DM share + comment @mention; mention semantics set `focus`; bot silent in comments; Graph data enters as extractions + media hints, raw-body HMAC, host confinement, polling fallback | [0006](adr/0006-instagram-official-api-and-mention-semantics.md), [0018](adr/0018-instagram-channel-and-keyfile-secrets.md) |
 | Mobile | One PWA; Android via Capacitor with a custom translucent share activity; desktop = installed PWA; iOS/Windows lower priority | [0007](adr/0007-capacitor-and-custom-share-activity.md) |
 | Notifications | Web Push (VAPID) + Android FCM + IG reaction on the source DM; channel interface for Telegram/ntfy later | [0008](adr/0008-notifications.md) |
 | Push keys | VAPID pair auto-generated into `settings` unless env-provided; FCM HTTP v1 with a hand-rolled service-account JWT; `gone` prunes, 8 failures prune | [0016](adr/0016-push-keys-and-fcm-http-v1.md) |
@@ -78,7 +78,7 @@ apps/server       Fastify + TS: api/ (REST + WebSocket), auth/, brains/ (adapter
                   tools), config/, db/ (drizzle + migrations, repo), export/ (Markdown),
                   extract/ (platform extractor registry + HTTP with SSRF guard), ingest/
                   (normalise + classify), media/ (worker client + stage), notify/ (push),
-                  queue/ (worker). Later: channels/
+                  queue/ (worker), channels/instagram/ (Graph client + channel), secrets/ (SecretBox)
 apps/web          Vite + React PWA: chats, chat view, compose, settings, pairing, service worker,
                   native.ts (Capacitor glue: server-URL prefix, Preferences mirror, FCM, deep links)
 apps/mobile       Capacitor 8 Android: ShareReceiverActivity + Pairing (Kotlin); iOS scaffold later
@@ -168,9 +168,14 @@ preamble for external CLI harnesses; the default adapter can be overridden per m
   (`NotificationHub`, [ADR 0016](adr/0016-push-keys-and-fcm-http-v1.md)) to every subscribed
   device: FCM for the Android app, Web Push for installed PWAs.
 - **In-app compose**: URL or free text plus note and mode.
-- **Instagram** ([guide](channels/instagram-setup.md)): DM share (reliable path) and comment
-  @mention (top-level ⇒ `focus=comments`; reply inside a thread ⇒ `focus=thread:<parent_id>`).
-  The bot never posts publicly. Webhook payloads are signature-checked and deduplicated.
+- **Instagram** ([guide](channels/instagram-setup.md), [ADR 0018](adr/0018-instagram-channel-and-keyfile-secrets.md)):
+  DM share (reliable path) and comment @mention (top-level ⇒ `focus=comments`; reply inside a
+  thread ⇒ `focus=thread:<parent_id>`). `InstagramChannel` verifies and deduplicates webhook
+  deliveries, stores caption/comments/thread from the Graph API as `instagram-graph`
+  extractions (merged into the brief as untrusted blocks), hands the CDN URL to the media stage
+  via `mediaHints`, polls `/tags` every 2 min as a mention fallback, refreshes the token every
+  30 days and reacts `love` to the originating DM via `onOutcome`. The bot never posts publicly.
+  Enabled only when `IG_APP_ID` + `IG_APP_SECRET` are set; boot log prints `instagram: …`.
 - **AI-chat share links** (Gemini, ChatGPT, Claude): treated as web pages with a dedicated
   readable-text extractor; no login.
 - **Web Share Target** in the PWA manifest so an installed PWA can receive shares on
@@ -184,17 +189,19 @@ search; chat view with answer, entity cards, claims table, sources, live run tim
 `/api/events` WebSocket, cost line, follow-up composer, **Research this** (Quick/Standard/Deep
 re-run); compose (URL or text + note + mode); `/share` receives Web Share Target requests;
 settings (status, spend vs cap, **Notifications** enable/disable + send test, QR pairing,
-devices, sign out; brains/Instagram/network arrive with their milestones). The service worker
+devices, sign out; **Instagram** connect/disconnect/status; brains/network arrive with their milestones). The service worker
 is a custom `src/sw.ts` (vite-plugin-pwa `injectManifest`): Workbox precache for the shell,
 never the API, plus `push` (shows the notification) and `notificationclick` (focuses an open
 window and navigates to `/chat/<id>`, else opens one) handlers. First run asks for the owner password; other devices redeem a pairing
 code shown as a QR. Android wraps this in Capacitor and adds the native share activity and FCM.
 Desktop uses the installed PWA over Tailscale.
 
-### API surface (M1 + M2)
+### API surface (M1 + M2 + M4)
 
 All routes under `/api` take `Authorization: Bearer <device token>` except `health`,
-`setup/status`, `setup` (first run only), `login`, and `pair/redeem`.
+`setup/status`, `setup` (first run only), `login`, `pair/redeem` and `ig/callback` (OAuth
+redirect, protected by a 10-minute random `state`). `/webhooks/instagram` is outside `/api`
+and is authenticated by Meta's signature instead.
 
 | route | purpose |
 |---|---|
@@ -208,6 +215,9 @@ All routes under `/api` take `Authorization: Bearer <device token>` except `heal
 | `GET chats/:id/runs/:runId/events`, `POST runs/:id/cancel` | backfill run events; abort |
 | `GET events` (WebSocket, `?token=`) | `run_event` and `chat_updated` frames for live views |
 | `POST push/subscribe { kind: webpush\|fcm, endpoint, keys? }`, `POST push/unsubscribe { endpoint }`, `GET push/subscriptions`, `POST push/test` | register this device's push endpoint (webpush needs `keys`; 409 when the kind is not configured on the server); list/remove; send a test notification to this device only |
+| `GET ig/status`, `POST ig/connect`, `GET ig/callback`, `DELETE ig/account` | shadow-account state (username, expiry, polling); start OAuth (`{ url }`, 409 when unconfigured); OAuth redirect → `/settings?ig=connected\|error`; disconnect |
+| `POST ig/refresh`, `POST ig/poll`, `POST ig/test { recipientId, text? }`, `POST ig/simulate-mention { media_id?, comment_id? }` | force token refresh; run one mention poll; send a DM to yourself; replay a mention through the handler |
+| `GET/POST /webhooks/instagram` | Meta handshake (`hub.challenge`) and signed deliveries; `401` on bad signature, `200` then async processing |
 
 CORS is enabled for `capacitor://localhost`, `https://localhost` and `http://localhost` so the
 Capacitor WebView can call the API on a different origin; every other origin is same-origin only.
@@ -224,8 +234,10 @@ Detailed in [SECURITY.md](SECURITY.md) and [THREAT-MODEL.md](THREAT-MODEL.md).
   `~/Doubletake`. No shell.
 - Brain network access only through `web_search` and `web_fetch` (SSRF guard: no private
   ranges, size caps, no credentials).
-- Every API route requires a device token except the signature-verified webhook. Secrets at
-  rest are encrypted with a key derived from the owner password and a machine keyfile.
+- Every API route requires a device token except the signature-verified webhook and the
+  state-checked OAuth callback. When `DOUBLETAKE_WEBHOOK_PUBLIC_HOST` is set, requests carrying
+  that `Host` get `404` for every path but the webhook. Secrets at rest (`SecretBox`) are sealed
+  with ChaCha20-Poly1305 under `~/.doubletake/keyfile` ([ADR 0018](adr/0018-instagram-channel-and-keyfile-secrets.md)).
 - Cost: per-run `maxBudgetUsd` and the daily cap in `cost_ledger`.
 
 ## 11. Operations

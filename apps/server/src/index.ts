@@ -2,12 +2,15 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { buildServer } from './api/server.js';
 import { createBrain } from './brains/registry.js';
+import { IgGraphClient } from './channels/instagram/graph.js';
+import { InstagramChannel } from './channels/instagram/index.js';
 import { loadConfig } from './config/index.js';
 import { openDb } from './db/index.js';
 import { Repo } from './db/repo.js';
 import { MediaWorkerClient } from './media/worker-client.js';
 import { createHub } from './notify/index.js';
 import { QueueWorker } from './queue/worker.js';
+import { SecretBox } from './secrets/box.js';
 
 export { buildServer } from './api/server.js';
 export { loadConfig } from './config/index.js';
@@ -31,7 +34,29 @@ export async function main(): Promise<void> {
   const worker = new QueueWorker(repo, brain, cfg);
   const { hub, vapid } = createHub(cfg, repo);
   worker.notifier = hub;
-  const app = await buildServer({ cfg, repo, worker, brain, hub, vapidPublicKey: vapid.publicKey });
+  // Instagram channel: routes exist whenever the Meta app credentials are configured.
+  let ig: InstagramChannel | undefined;
+  if (cfg.ig.appId && cfg.ig.appSecret) {
+    ig = new InstagramChannel({
+      cfg,
+      repo,
+      graph: new IgGraphClient(cfg.ig.graphBase, cfg.ig.appId, cfg.ig.appSecret),
+      box: SecretBox.open(cfg.dataDir),
+      adapterId: brain.id,
+      log: console,
+    });
+    worker.onOutcome = (item, outcome) => ig?.onOutcome(item, outcome) ?? Promise.resolve();
+    worker.mediaHints = (item) => ig?.mediaHints(item) ?? {};
+  }
+  const app = await buildServer({
+    cfg,
+    repo,
+    worker,
+    brain,
+    hub,
+    vapidPublicKey: vapid.publicKey,
+    ...(ig ? { ig } : {}),
+  });
   const media = cfg.media.enabled ? new MediaWorkerClient(cfg, app.log) : null;
   worker.media = media;
   if (media) {
@@ -41,13 +66,16 @@ export async function main(): Promise<void> {
   }
 
   worker.start();
+  ig?.start();
   await app.listen({ host: cfg.bind, port: cfg.port });
+  const igState = ig ? (ig.status().connected ? 'connected' : 'not connected') : 'off';
   app.log.info(
-    `Doubletake listening on http://${cfg.bind}:${cfg.port} (brain: ${brain.id}, push: ${hub.kinds().join('+') || 'none'}, media: ${media ? `${cfg.media.command.join(' ')} vision=${cfg.media.vision}` : 'off'}, data: ${cfg.dataDir})`,
+    `Doubletake listening on http://${cfg.bind}:${cfg.port} (brain: ${brain.id}, push: ${hub.kinds().join('+') || 'none'}, media: ${media ? `${cfg.media.command.join(' ')} vision=${cfg.media.vision}` : 'off'}, instagram: ${igState}, data: ${cfg.dataDir})`,
   );
 
   const shutdown = async () => {
     app.log.info('shutting down');
+    ig?.stop();
     await worker.stop();
     await media?.stop();
     await app.close();

@@ -77,6 +77,10 @@ export class Repo {
   getChat(id: string) {
     return this.db.select().from(s.chats).where(eq(s.chats.id, id)).get();
   }
+  listItems(limit = 200) {
+    return this.db.select().from(s.items).orderBy(desc(s.items.createdAt)).limit(limit).all();
+  }
+
   getChatByItem(itemId: string) {
     return this.db.select().from(s.chats).where(eq(s.chats.itemId, itemId)).get();
   }
@@ -422,6 +426,85 @@ export class Repo {
       .where(eq(s.costLedger.day, day))
       .get();
     return r?.total ?? 0;
+  }
+
+  // ---- instagram ----
+
+  getIgAccount(): typeof s.igAccounts.$inferSelect | undefined {
+    return this.db.select().from(s.igAccounts).limit(1).get();
+  }
+  upsertIgAccount(row: {
+    igUserId: string;
+    username: string | null;
+    accessTokenEnc: string;
+    expiresAt: string | null;
+    refreshedAt: string | null;
+  }) {
+    const now = nowIso();
+    // v1 holds exactly one shadow account; connecting another replaces it.
+    this.db.delete(s.igAccounts).run();
+    this.db
+      .insert(s.igAccounts)
+      .values({ ...row, createdAt: now, updatedAt: now })
+      .run();
+  }
+  updateIgAccount(
+    igUserId: string,
+    patch: Partial<
+      Pick<
+        typeof s.igAccounts.$inferInsert,
+        'accessTokenEnc' | 'expiresAt' | 'refreshedAt' | 'username'
+      >
+    >,
+  ) {
+    this.db
+      .update(s.igAccounts)
+      .set({ ...patch, updatedAt: nowIso() })
+      .where(eq(s.igAccounts.igUserId, igUserId))
+      .run();
+  }
+  deleteIgAccount() {
+    this.db.delete(s.igAccounts).run();
+  }
+
+  /** Returns false when the event id was already recorded (webhook redelivery). */
+  recordIgEvent(row: {
+    id: string;
+    kind: string;
+    raw: unknown;
+    senderId?: string | null;
+  }): boolean {
+    const res = this.db
+      .insert(s.igEvents)
+      .values({
+        id: row.id,
+        kind: row.kind,
+        raw: JSON.stringify(row.raw),
+        senderId: row.senderId ?? null,
+        receivedAt: nowIso(),
+      })
+      .onConflictDoNothing()
+      .run();
+    return res.changes > 0;
+  }
+  markIgEvent(id: string, patch: { itemId?: string | null; error?: string | null }) {
+    this.db
+      .update(s.igEvents)
+      .set({ ...patch, processedAt: nowIso() })
+      .where(eq(s.igEvents.id, id))
+      .run();
+  }
+  /** DM-share events that produced this item (for the completion reaction). */
+  igEventsForItem(itemId: string): (typeof s.igEvents.$inferSelect)[] {
+    return this.db.select().from(s.igEvents).where(eq(s.igEvents.itemId, itemId)).all();
+  }
+  listIgEvents(limit = 50): (typeof s.igEvents.$inferSelect)[] {
+    return this.db
+      .select()
+      .from(s.igEvents)
+      .orderBy(desc(s.igEvents.receivedAt))
+      .limit(limit)
+      .all();
   }
 
   // ---- settings / devices ----

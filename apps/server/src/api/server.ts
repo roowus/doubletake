@@ -8,12 +8,14 @@ import fastifyWebsocket from '@fastify/websocket';
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { Auth, AuthError } from '../auth/index.js';
+import type { InstagramChannel } from '../channels/instagram/index.js';
 import type { Config } from '../config/index.js';
 import type { Repo } from '../db/repo.js';
 import { IngestError, ingest } from '../ingest/index.js';
 import type { NotificationHub } from '../notify/hub.js';
 import type { QueueWorker } from '../queue/worker.js';
 import { toChatDetail, toChatSummary, toRunDto } from './dto.js';
+import { hostAllowed, IG_PUBLIC_PATHS, registerInstagramRoutes } from './instagram.js';
 
 export interface ServerDeps {
   cfg: Config;
@@ -24,6 +26,8 @@ export interface ServerDeps {
   /** Push fan-out; when absent the push routes report `enabled: false`. */
   hub?: NotificationHub;
   vapidPublicKey?: string;
+  /** Instagram channel; when absent the webhook and /api/ig routes are not registered. */
+  ig?: InstagramChannel;
 }
 
 const PUBLIC_PATHS = new Set([
@@ -32,6 +36,7 @@ const PUBLIC_PATHS = new Set([
   '/api/setup/status',
   '/api/login',
   '/api/pair/redeem',
+  ...IG_PUBLIC_PATHS,
 ]);
 
 /**
@@ -50,8 +55,11 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
     methods: ['GET', 'POST', 'DELETE', 'OPTIONS'],
   });
 
-  // ---- auth gate ----
+  // ---- public-host guard + auth gate ----
   app.addHook('onRequest', async (req, reply) => {
+    // Through the tunnel hostname only the Instagram webhook exists (docs/DEPLOYMENT.md).
+    if (!hostAllowed(cfg, req.headers.host, req.url))
+      return reply.code(404).send({ error: 'not found' });
     if (!req.url.startsWith('/api/')) return;
     const pathOnly = req.url.split('?')[0] ?? req.url;
     if (PUBLIC_PATHS.has(pathOnly)) return;
@@ -71,6 +79,8 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
     app.log.error(e);
     return reply.code(e.statusCode ?? 500).send({ error: e.message });
   });
+
+  if (deps.ig) await registerInstagramRoutes(app, { cfg, ig: deps.ig });
 
   // ---- public ----
   app.get('/api/health', async () => ({

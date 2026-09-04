@@ -11,7 +11,7 @@ import { PAGE_ONLY } from '../extract/platforms/_shared.js';
 import { extractUrl } from '../extract/registry.js';
 import type { ExtractResult } from '../extract/types.js';
 import { classifyItem } from '../ingest/classify.js';
-import type { MediaClient } from '../media/protocol.js';
+import type { ExtractParams, MediaClient } from '../media/protocol.js';
 import { asUntrustedKind, MEDIA_PLATFORMS, runMediaStage } from '../media/stage.js';
 import type { Notification } from '../notify/types.js';
 
@@ -36,6 +36,9 @@ export interface WorkerEvents {
   run_event: (e: RunEvent) => void;
   chat_updated: (chatId: string) => void;
 }
+
+/** `extractions.tool` value for rows a channel wrote before the run (Instagram Graph API). */
+export const CHANNEL_TOOL = 'instagram-graph';
 
 /** What the worker needs from the notification layer; the hub implements it. */
 export interface RunNotifier {
@@ -94,7 +97,15 @@ export class QueueWorker extends EventEmitter {
     this.media = media;
   }
 
+  /** Channels that want to know when an item finished (Instagram reacts to the DM). */
+  onOutcome:
+    | ((item: ItemRow, outcome: 'answered' | 'failed' | 'capped') => Promise<unknown>)
+    | null = null;
+  /** Channel-supplied media shortcuts for an item (Instagram CDN url); consulted per run. */
+  mediaHints: ((item: ItemRow) => ExtractParams['hints']) | null = null;
+
   private push(item: ItemRow, chatId: string, outcome: 'answered' | 'failed' | 'capped'): void {
+    if (this.onOutcome) this.onOutcome(item, outcome).catch(() => {});
     if (!this.notifier) return;
     const n = buildNotification(item, chatId, outcome, this.cfg.publicUrl);
     this.notifier.notify(n).catch(() => {});
@@ -341,6 +352,7 @@ export class QueueWorker extends EventEmitter {
           item,
           url: item.canonicalUrl ?? url,
           mode: forced ?? 'standard',
+          hints: this.mediaHints?.(item) ?? {},
           signal,
           emit: (phase, p) => emit('status', { phase, ...p }),
         });
@@ -359,6 +371,24 @@ export class QueueWorker extends EventEmitter {
           item = { ...item, canonicalUrl: m.canonicalUrl };
         }
       }
+    }
+    // 1c. Extractions a channel stored before the run (Instagram Graph comments / thread) are
+    // authoritative for their kind and were not produced above; add them once.
+    for (const x of this.repo.listExtractions(item.id)) {
+      if (x.tool !== CHANNEL_TOOL) continue;
+      let content: unknown;
+      try {
+        content = JSON.parse(x.content);
+      } catch {
+        content = x.content;
+      }
+      const text = typeof content === 'string' ? content : JSON.stringify(content).slice(0, 12_000);
+      blocks.push({
+        source: item.platform,
+        kind: asUntrustedKind(x.kind),
+        content: text,
+        ...(x.kind === 'thread' ? { label: 'primary thread' } : {}),
+      });
     }
     if (item.text?.trim()) {
       blocks.push({ source: 'owner', kind: 'shared_text', content: item.text });

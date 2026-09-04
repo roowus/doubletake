@@ -87,16 +87,19 @@ per entity kind) and cannot be deleted, only hidden.
 `keys` JSON (webpush p256dh/auth), `failed_count`, `created_at`.
 
 ### ig_accounts / ig_events
-`ig_accounts`: `ig_user_id` pk, `username`, `access_token_enc`, `expires_at`, `refreshed_at`.
-`ig_events`: `id` (Meta event/message id) pk, `kind` (`dm_share` · `mention` · `comment` ·
-`other`), `raw` JSON, `item_id` nullable, `received_at`, `processed_at`.
+`ig_accounts`: `ig_user_id` pk, `username`, `access_token_enc` (SecretBox ciphertext, ADR 0018),
+`expires_at`, `refreshed_at`, `created_at`, `updated_at`. One row at most.
+`ig_events`: `id` pk (Meta message id, comment id, media id, or `poll:<media_id>` for the
+polling fallback), `kind` (`dm_share` · `mention` · `comment` · `other`), `raw` JSON,
+`item_id` nullable (set null on item delete), `sender_id` (IGSID of the DM sender, used for the
+completion reaction), `received_at`, `processed_at`, `error`. Migration `0003_instagram.sql`.
 
 ### cost_ledger
 `id`, `day` (YYYY-MM-DD, local), `run_id`, `adapter`, `model`, `cost_usd`. Index on `day`.
 
 ### settings
 `key` pk, `value` text, `encrypted` bool. Secrets (`ig_app_secret`, `vapid_private`, API keys
-entered via UI) are encrypted with the key derived per ADR 0010.
+entered via UI) are encrypted with the keyfile per ADR 0018.
 
 ### items_fts (FTS5)
 Columns: `item_id` unindexed, `title`, `note`, `transcript`, `ocr`, `answer`, `tags`, `entities`
@@ -107,7 +110,7 @@ Maintained by triggers on `items`, `extractions`, `messages`, `item_tags`.
 ```
 ~/.doubletake/
   doubletake.db (+ -wal, -shm)
-  keyfile
+  keyfile                       # 32 random bytes, mode 0600; root secret for SecretBox (ADR 0018)
   media/<item_id>/source.mp4 | image.jpg | frames/000123.jpg | audio.wav
   exports/<item_id>.md          # mirror of what was written to ~/Doubletake
   logs/server.log, worker.log

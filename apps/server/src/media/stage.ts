@@ -11,7 +11,12 @@ import type { Mode, UntrustedBlock } from '@doubletake/shared';
 import { MODE_BUDGETS } from '@doubletake/shared';
 import type { Config } from '../config/index.js';
 import type { ItemRow, Repo } from '../db/repo.js';
-import { type ExtractBudget, type MediaClient, MediaWorkerError } from './protocol.js';
+import {
+  type ExtractBudget,
+  type ExtractParams,
+  type MediaClient,
+  MediaWorkerError,
+} from './protocol.js';
 
 export const MEDIA_PLATFORMS = new Set(['instagram', 'tiktok', 'youtube', 'reddit', 'x']);
 
@@ -110,10 +115,13 @@ export async function runMediaStage(args: {
   item: ItemRow;
   url: string;
   mode: Mode;
+  /** Channel-supplied shortcuts (Instagram CDN url, media/comment ids); empty for most items. */
+  hints?: ExtractParams['hints'];
   signal: AbortSignal;
   emit: (phase: string, payload: Record<string, unknown>) => void;
 }): Promise<MediaStageResult> {
   const { cfg, repo, brain, media, item, url, mode, signal, emit } = args;
+  const hints = args.hints ?? {};
   const out: MediaStageResult = {
     blocks: [],
     warnings: [],
@@ -132,7 +140,7 @@ export async function runMediaStage(args: {
         platform: item.platform,
         focus: item.focus,
         mode,
-        hints: {},
+        hints,
         budget: budgetFor(mode, item.focus),
         out_dir: outDir,
       },
