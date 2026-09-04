@@ -31,6 +31,7 @@
 | T9 | SSRF via web_fetch to the laptop's own services | Private-range and localhost refusal after DNS resolution; redirect re-check | DNS rebinding within TTL |
 | T10 | Media file exploits (crafted MP4) | ffmpeg/yt-dlp kept current; worker runs as the user (no extra privilege) | Sandbox the worker later (container / seatbelt) |
 | T11 | Supply-chain compromise of a dependency | Lockfiles; CI on PRs; minimal dependency set | Same as any Node/Python project |
+| T13 | An agent connected over MCP is prompt-injected by scraped content, or its config file leaks the device token | Extractions are delivered inside the same `<untrusted>` wrapper and preamble the brain gets, off by default; the endpoint has no file, shell, network, settings or delete tools, writes only enqueue runs; the token is an ordinary device token, named and revocable in Settings → Devices, and `/mcp` is refused on the tunnel hostname | What the *calling* agent does with the text is its harness's problem; a leaked token reads the whole library and can enqueue paid runs until revoked (the daily cap still applies) |
 | T12 | Geocoder or tile server learns what the owner saved | Only place name + city/region/country attributes are sent, never notes, answers or source URLs; `GEOCODER=off` or `GEOCODER_URL` to a self-hosted instance; the server never proxies tiles | The set of saved place names is visible to the geocoder operator; an injected entity name could be a payload the geocoder receives as a plain query string (no request body, no auth headers) |
 
 ## Non-goals

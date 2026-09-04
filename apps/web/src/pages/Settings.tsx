@@ -495,6 +495,11 @@ export function Settings() {
             </button>
           </div>
         ))}
+        <p className="muted small">
+          Other agents (Claude Code, Claude Desktop, …) connect the same way: redeem a pairing code
+          for a token, then point their MCP client at <code>{window.location.origin}/mcp</code> with{' '}
+          <code>Authorization: Bearer &lt;token&gt;</code>. They appear here and can be revoked.
+        </p>
       </div>
 
       <div className="card stack">

@@ -35,6 +35,7 @@ export const Channel = z.enum([
   'ig_mention',
   'web_share_target',
   'library',
+  'mcp',
 ]);
 export type Channel = z.infer<typeof Channel>;
 
