@@ -82,6 +82,18 @@ phone and desktop.
   browser flow from a real terminal.
 - Subscriptions that the push service reports as gone, or that fail 8 times in a row, are
   removed automatically; the client re-subscribes on next open.
+- **ntfy** ([ADR 0019](adr/0019-owner-notification-channels.md)): set `NTFY_TOPIC` (and
+  `NTFY_URL` for a self-hosted server, `NTFY_TOKEN` for a protected topic) and subscribe to the
+  topic in the ntfy app. Every finished/failed/capped run publishes a message whose **Click**
+  action opens the chat (needs `DOUBLETAKE_PUBLIC_URL`). Pick a long random topic name: on
+  ntfy.sh anyone who guesses it can read it. Settings → Notifications → **Send test to
+  channels** exercises it.
+- **Telegram** (**unverified** against the live Bot API; covered by tests with a fake `fetch`):
+  create a bot with @BotFather, set `TELEGRAM_BOT_TOKEN`, send the bot one message, read your
+  chat id from `https://api.telegram.org/bot<token>/getUpdates` (`message.chat.id`) and set
+  `TELEGRAM_CHAT_ID`. Messages carry an inline **Open chat** button when the server has a
+  public URL. Both channels are owner-level: no device subscription, no toggle in the UI,
+  failures are logged (`… notification failed: …`) and never disable the channel.
 
 ### Instagram webhook (public, one path)
 Pick one:

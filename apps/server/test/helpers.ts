@@ -35,6 +35,8 @@ export function tempEnv(prefix = 'dt-test-') {
     vapidPrivateKey: null,
     vapidSubject: 'mailto:test@example.com',
     fcmServiceAccountPath: null,
+    ntfy: null,
+    telegram: null,
     media: {
       enabled: false,
       command: [],

@@ -55,6 +55,9 @@ export interface Config {
   vapidSubject: string;
   /** Firebase service-account JSON for FCM; null disables FCM (Web Push still works). */
   fcmServiceAccountPath: string | null;
+  /** Owner notification channels (ADR 0019); null = not configured. */
+  ntfy: { url: string; topic: string; token: string | null } | null;
+  telegram: { botToken: string; chatId: string } | null;
   /** Media worker (docs/MEDIA-PIPELINE.md). `off` skips download/transcription entirely. */
   media: {
     enabled: boolean;
@@ -132,6 +135,17 @@ export function loadConfig(): Config {
     vapidSubject:
       env('VAPID_SUBJECT', 'mailto:doubletake@localhost') ?? 'mailto:doubletake@localhost',
     fcmServiceAccountPath: expandHome(env('FCM_SERVICE_ACCOUNT_PATH') ?? '') || null,
+    ntfy: env('NTFY_TOPIC')
+      ? {
+          url: env('NTFY_URL', 'https://ntfy.sh') ?? 'https://ntfy.sh',
+          topic: env('NTFY_TOPIC') ?? '',
+          token: env('NTFY_TOKEN') ?? null,
+        }
+      : null,
+    telegram:
+      env('TELEGRAM_BOT_TOKEN') && env('TELEGRAM_CHAT_ID')
+        ? { botToken: env('TELEGRAM_BOT_TOKEN') ?? '', chatId: env('TELEGRAM_CHAT_ID') ?? '' }
+        : null,
     media: {
       enabled: (env('DOUBLETAKE_MEDIA_WORKER', 'on') ?? 'on') !== 'off',
       command: list(env('DOUBLETAKE_MEDIA_WORKER_CMD', 'uv,run,--frozen,doubletake-media')),

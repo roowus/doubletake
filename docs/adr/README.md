@@ -23,6 +23,7 @@ One file per decision, numbered, never deleted. Superseding a decision means a n
 | [0016](0016-push-keys-and-fcm-http-v1.md) | VAPID keys generated into settings; FCM over HTTP v1 without the Google SDK; subscription pruning | accepted |
 | [0017](0017-media-worker-process-and-vision-via-brain.md) | Media worker as a spawned Python child over JSON-lines; crash → respawn + one retry; frame descriptions via the brain | accepted |
 | [0018](0018-instagram-channel-and-keyfile-secrets.md) | Instagram channel wiring: Graph data as extractions + media hints, raw-body HMAC, host confinement, mention polling fallback; secrets at rest sealed with the machine keyfile only (amends 0006, 0010) | accepted |
+| [0019](0019-owner-notification-channels.md) | ntfy and Telegram as owner-level `Broadcaster`s configured in `.env`, not per-device push subscriptions (amends 0008) | accepted |
 
 ## Template
 

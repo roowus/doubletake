@@ -1,6 +1,6 @@
 # 0008 — Web Push + FCM + IG reaction; notifier interface
 
-- Status: accepted
+- Status: accepted (amended by [0019](0019-owner-notification-channels.md): ntfy/Telegram are broadcasters, not `Notifier`s)
 - Date: 2026-09-03
 
 ## Context
