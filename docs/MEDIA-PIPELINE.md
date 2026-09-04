@@ -1,6 +1,11 @@
 # Media pipeline
 
-Runs in `workers/media` (Python 3.12, uv). The server spawns it once and keeps it alive.
+Runs in `workers/media` (Python 3.12, uv). The server spawns it lazily on the first media item
+and keeps it alive ([ADR 0017](adr/0017-media-worker-process-and-vision-via-brain.md)).
+Server side: `apps/server/src/media/` — `protocol.ts` (wire types), `worker-client.ts` (process
+owner), `stage.ts` (runs after the page extractor, stores rows, wraps blocks). Enable/disable
+with `DOUBLETAKE_MEDIA_WORKER=on|off`; the boot log prints `media: <cmd> vision=<mode>` or
+`media: off`. Worker stderr is appended to `<dataDir>/logs/worker.log`.
 
 ## Worker protocol
 
@@ -11,7 +16,7 @@ JSON-lines over stdio. Server → worker requests, worker → server responses a
 { "id": "01J…", "op": "extract", "item_id": "…", "url": "…", "platform": "instagram",
   "focus": "thread:178…", "mode": "standard",
   "hints": { "cdn_url": "https://lookaside.fbsbx.com/…", "media_id": "…", "comment_id": "…" },
-  "budget": { "frames": 12, "vision_frames": 6, "comments": 100, "transcribe_model": "large-v3-turbo" },
+  "budget": { "frames": 12, "vision_frames": 6, "comments": 100, "transcribe_model": "standard" },
   "out_dir": "/Users/me/.doubletake/media/01J…" }
 
 // progress (many)
@@ -19,18 +24,25 @@ JSON-lines over stdio. Server → worker requests, worker → server responses a
 
 // result (one)
 { "id": "01J…", "event": "result", "ok": true,
-  "assets": [{ "kind": "video", "path": "source.mp4", "sha256": "…", "bytes": 1, "duration_s": 31.2, "width": 1080, "height": 1920, "source": "cdn" }],
-  "extractions": [{ "kind": "transcript", "tool": "mlx-whisper/large-v3-turbo", "duration_ms": 4100, "content": { … } }],
-  "vision_requests": [{ "frame_path": "frames/000004.jpg", "ts": 4.1 }],   // server fulfils via brain when vision=cloud
+  "assets": [{ "kind": "video", "path": "/Users/me/.doubletake/media/01J…/source.mp4", "sha256": "…", "bytes": 1, "duration_s": 31.2, "width": 1080, "height": 1920, "source": "ytdlp" }],
+  "extractions": [{ "kind": "transcript", "tool": "mlx-whisper:whisper-large-v3-turbo", "duration_ms": 4100, "content": { … } }],
+  "vision_requests": [{ "frame_path": "/Users/me/.doubletake/media/01J…/frames/000004.jpg", "ts": 4.1 }],   // server fulfils via brain when vision=cloud
+  "warnings": ["…"],
   "canonical_url": "https://www.instagram.com/reel/…/", "title": "…" }
 
 // error
 { "id": "01J…", "event": "result", "ok": false, "error": { "code": "download_failed", "message": "…", "retryable": true } }
 ```
 
-Other ops: `ping`, `describe_frames` (only when `DOUBLETAKE_VISION=local`), `fetch_comments`
-(re-fetch for Deep escalation), `shutdown`. The server restarts the worker on crash and fails
-the in-flight run with `retryable: true`.
+Paths in results are absolute; the server stores them relative to the data dir. Other ops:
+`ping` → `{ ok, pong: true }`, `version`, `shutdown`. One request in flight at a time. If the
+process exits or a request outlives its mode's wall clock, every in-flight request fails with
+`worker_crashed` (retryable); the client respawns on the next request and retries an `extract`
+once. `transcribe_model` is the mode name; the worker maps it to a model. Budgets come from
+`MODE_BUDGETS` (frames 4/12/40, comments 20/100/500 — doubled when `focus` is not `whole`,
+`vision_frames` = half the frames). A failed stage becomes a `Media pipeline (<code>): …`
+warning in the chat and the run continues with page-level extraction. Planned ops not yet
+implemented: `fetch_comments` (re-fetch for Deep escalation).
 
 ## Platform extractors (server side, M1)
 
@@ -85,9 +97,11 @@ Backend chosen by `DOUBLETAKE_WHISPER_BACKEND=auto`:
 
 | platform | backend | model by mode |
 |---|---|---|
-| Apple Silicon | `mlx-whisper` | quick: `large-v3-turbo` (still fast on MLX) · standard/deep: `large-v3-turbo` |
-| Apple Silicon fallback | `whisper.cpp` (Metal, CoreML encoder) | same GGML models |
-| Linux / Intel CPU | `faster-whisper` int8 | quick: `small` · standard: `medium` · deep: `large-v3-turbo` |
+| Apple Silicon (`auto` → `mlx`) | `mlx-whisper` (`uv sync --extra whisper-mlx`) | quick: `whisper-small-mlx` · standard/deep: `whisper-large-v3-turbo` |
+| Linux / Intel CPU (`auto` → `faster`) | `faster-whisper` int8 (`uv sync --extra whisper-cpu`) | quick: `small` · standard: `medium` · deep: `large-v3-turbo` |
+| any | `off` | transcription skipped, captions still used when the platform provides them |
+
+whisper.cpp is not wired in. A missing backend is a `tool_missing` warning, not a failed run.
 
 Audio extracted with ffmpeg to 16 kHz mono WAV. Output: language, segments with timestamps.
 Silence/no-speech detection short-circuits to an empty transcript (music-only reels).
@@ -98,22 +112,25 @@ capped at `budget.frames` by keeping the frames with the highest scene score. Sa
 q=85 at max 1280 px on the long side.
 
 ### OCR
-RapidOCR (ONNX runtime, CPU) on every sampled frame; Tesseract as fallback when RapidOCR is
-unavailable. Lines deduplicated across frames (normalised Levenshtein ≤ 0.15 treated as same
+RapidOCR (ONNX runtime, CPU; `uv sync --extra media`) on every sampled frame; the `tesseract`
+binary as fallback when RapidOCR is unavailable; no engine → OCR skipped with a warning. Lines deduplicated across frames (normalised Levenshtein ≤ 0.15 treated as same
 overlay). Output keeps per-frame lines plus a merged unique list.
 
 ### Vision (frame descriptions)
 Default `cloud`: the worker returns `vision_requests` and the server calls the configured
 brain's `describeImages()` with a prompt that asks for on-screen text, products, UI, people
 (no identification), and actions. Opt-in `local`: `mlx-vlm` with Qwen2.5-VL-3B-Instruct
-(Apple Silicon) or Moondream2 (CPU), run in the worker. Cost per frame in cloud mode is
-recorded on the `frame_description` extraction.
+(Apple Silicon; `uv sync --extra vision-local`), run in the worker. `off` skips descriptions.
+Cloud mode: the Claude Agent SDK adapter sends the frames as base64 image blocks in one
+tool-less turn (batches of 6) and expects a JSON array; the result is stored as a
+`frame_description` extraction with `tool` = the brain id. Cost is charged to the run.
 
 ### Comments
 - Instagram (own media): `GET /<media_id>/comments?fields=id,text,username,timestamp,like_count,replies{id,text,username,timestamp,like_count}`.
 - Instagram (someone else's media, via mention): `GET /<IG_ID>?fields=mentioned_media.media_id(<id>){caption,permalink,media_url,media_type,comments{…}}` and for a focused thread `mentioned_comment.comment_id(<id>){text,username,timestamp,like_count,replies{…}}`. **Unverified** whether `replies` is expanded on `mentioned_comment` for non-owned media; fallback is to fetch the parent via `mentioned_comment.comment_id(<parent_id>)`.
 - Reddit: from the `.json` listing, top-level sorted by score; a focused thread is walked fully. Atom fallback (when `.json` is 403): flat, feed order, no scores.
-- YouTube: `yt-dlp --write-comments` with `max_comments` from budget.
+- YouTube: `yt-dlp --write-comments` with `max_comments` from budget (top-sorted).
+- Instagram / TikTok / X comments are not fetched yet (Instagram arrives with M4).
 
 Focus rules: `focus=thread:<id>` ⇒ the thread is one `thread` extraction marked primary and
 the rest is a `comments` sample; `focus=comments` ⇒ larger comment budget (×2) and the brief
@@ -121,4 +138,6 @@ instructs the brain to treat the discussion as the main object; `focus=whole` �
 
 ## Failure modes surfaced in chat
 `download_failed` (with the yt-dlp message and a hint to enable cookies), `private_or_removed`,
-`too_long`, `no_speech`, `worker_crashed` (auto-retried once), `vision_budget_exhausted`.
+`too_long`, `no_speech`, `tool_missing`, `worker_crashed` (auto-retried once),
+`worker_unavailable`. All appear as a `warning` status event and a `Media pipeline (<code>)`
+line in the chat; the run itself still finishes on page-level extraction.

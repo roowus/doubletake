@@ -61,9 +61,11 @@ channel; the Instagram bot is optional and documented as fragile.
 ```
 
 - **One process by default.** The server hosts the API, serves the built PWA, runs the queue
-  worker, and spawns the Python media worker as a long-lived child speaking JSON-lines over
-  stdio ([Media pipeline](MEDIA-PIPELINE.md)). `DOUBLETAKE_WORKER_URL` can point at a worker on
-  another machine later without changing the protocol.
+  worker, and spawns the Python media worker lazily as a long-lived child speaking JSON-lines
+  over stdio ([Media pipeline](MEDIA-PIPELINE.md), [ADR 0017](adr/0017-media-worker-process-and-vision-via-brain.md)).
+  A crashed worker is respawned and the request retried once; a failed media stage degrades
+  the run to page-level extraction with a warning. `DOUBLETAKE_WORKER_URL` can point at a
+  worker on another machine later without changing the protocol.
 - **Reachability.** Binds `127.0.0.1`. `tailscale serve` gives HTTPS on the tailnet for
   clients. Only `/webhooks/instagram` is reachable from the public internet, through
   Cloudflare Tunnel or Tailscale Funnel; the server refuses every other route when the request
@@ -75,7 +77,8 @@ channel; the Instagram bot is optional and documented as fragile.
 apps/server       Fastify + TS: api/ (REST + WebSocket), auth/, brains/ (adapters, prompts,
                   tools), config/, db/ (drizzle + migrations, repo), export/ (Markdown),
                   extract/ (platform extractor registry + HTTP with SSRF guard), ingest/
-                  (normalise + classify), queue/ (worker). Later: channels/, media/, notify/
+                  (normalise + classify), media/ (worker client + stage), notify/ (push),
+                  queue/ (worker). Later: channels/
 apps/web          Vite + React PWA: chats, chat view, compose, settings, pairing, service worker,
                   native.ts (Capacitor glue: server-URL prefix, Preferences mirror, FCM, deep links)
 apps/mobile       Capacitor 8 Android: ShareReceiverActivity + Pairing (Kotlin); iOS scaffold later
@@ -125,11 +128,13 @@ Full column-level detail in [DATA-MODEL.md](DATA-MODEL.md).
    pulls whatever text is reachable without media: captions via oEmbed or Open Graph, Reddit's
    `.json` view, readable page text. Supported today: Instagram, TikTok, YouTube (incl. Shorts),
    X/Twitter, Reddit, AI-chat share links, generic web. Adding a platform is one file plus one
-   registry line ([how-to](MEDIA-PIPELINE.md#adding-a-platform)). The **media worker** (M3) then
-   adds, with per-mode budgets: download (CDN URL from the IG webhook first, yt-dlp second,
-   cookies opt-in third), transcription (local Whisper family), scene-change frame sampling, OCR
-   (RapidOCR, Tesseract fallback), frame descriptions (cloud via brain by default, local VLM
-   opt-in), comments (IG Graph API, Reddit JSON, yt-dlp). With `focus = thread:<id>` the whole
+   registry line ([how-to](MEDIA-PIPELINE.md#adding-a-platform)). For Instagram, TikTok, YouTube,
+   X and Reddit the **media worker** then adds, with per-mode budgets: download (CDN URL from
+   the IG webhook first, yt-dlp second, cookies opt-in third), transcription (mlx-whisper /
+   faster-whisper, captions preferred), scene-change frame sampling, OCR (RapidOCR, Tesseract
+   fallback), frame descriptions (the brain's `describeImages` by default, local VLM opt-in),
+   comments (Reddit JSON, yt-dlp; IG Graph API with M4). Every extraction is stored and enters
+   the brief only as an untrusted block. With `focus = thread:<id>` the whole
    thread is fetched and marked primary; the rest of the comments are a sample.
 4. **Research.** Build a `ResearchBrief`: system framing, untrusted content blocks, the owner's
    note, focus instructions, mode budget, tool policy. The adapter runs it, streaming

@@ -29,7 +29,8 @@ Index: `(canonical_url, focus, created_at)` for the 24 h dedupe.
 ### media_assets
 `id`, `item_id` fk, `kind` (`video` · `image` · `audio` · `thumbnail` · `frame`), `path`
 (relative to data dir), `sha256`, `bytes`, `duration_s`, `width`, `height`, `frame_ts_s`
-(for frames), `source` (`cdn` · `ytdlp` · `direct`), `created_at`.
+(for frames), `source` (`cdn` · `ytdlp` · `direct` · `ffmpeg` for derived frames/audio),
+`created_at`. Rows are replaced wholesale when an item is re-extracted.
 
 ### extractions
 `id`, `item_id` fk, `kind` (`caption` · `transcript` · `ocr` · `frame_description` ·

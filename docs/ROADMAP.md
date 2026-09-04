@@ -58,11 +58,14 @@ stays a v2 item.
 
 ## M3 — Media pipeline
 
+Status: **code complete 2026-09-03**; live acceptance on real reels/videos pending.
+
 - Worker protocol (JSON-lines over stdio) implemented; server restarts a crashed worker.
 - Instagram reel / YouTube / Reddit video: download, transcript (mlx-whisper on Apple Silicon,
   faster-whisper on Linux), scene-change frames, RapidOCR, cloud frame descriptions via the
   brain; local VLM behind `DOUBLETAKE_VISION=local`.
-- Comments fetched for Reddit and YouTube; per-mode caps respected; extraction budget per mode.
+- Comments fetched for Reddit (server extractor) and YouTube (worker); per-mode caps respected;
+  extraction budget per mode.
 - Untrusted wrappers applied to every extraction; a fixture with an injected instruction is
   ignored by the brain in tests.
 
