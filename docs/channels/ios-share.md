@@ -1,10 +1,10 @@
-# iOS share extension
-
-> **Unverified.** Nothing in `apps/mobile/ios/` has run on an iPhone or a simulator yet: the
-> development Mac has Xcode 26.2 but no device and no simulator runtime. The Swift sources
-> typecheck against the iOS 26.2 SDK and the project file parses. If you have an iPhone, follow
-> §Verify and remove these markers in the same commit. Decision record:
-> [ADR 0027](../adr/0027-ios-share-extension.md).
+> **Partly verified (2026-09-04).** Both targets build with Xcode 26.2 and the app runs in the
+> iOS 26.3.1 simulator (iPhone 17 Pro): the WebView loads the pairing screen, and
+> `SceneDelegate` mirrors the Capacitor Preferences pairing values into the App Group
+> (checked with `simctl spawn <udid> defaults read group.com.roowus.doubletake`). Not yet
+> exercised: the Share Extension end to end, the unpaired `doubletake://share` path, and any
+> real device. If you have an iPhone, follow §Verify and update this note in the same commit.
+> Decision record: [ADR 0027](../adr/0027-ios-share-extension.md).
 
 The iOS app is the same Capacitor wrapper of `apps/web` as Android
 ([android-share.md](android-share.md)) plus a native **Share Extension** that appears in the
@@ -70,9 +70,14 @@ registers the group on your team the first time). Then build and run on the phon
 `cap add ios` is **not** needed and refuses to run while `ios/` exists: the project is committed
 (Capacitor's SPM template with the extension target added). `cap sync ios` only regenerates
 `CapApp-SPM/Package.swift`, `App/App/public/` and `capacitor.config.json`. `scripts/doctor.sh`
-reports whether `xcodebuild` is available.
+reports whether `xcodebuild` is available. The committed `Package.swift` is the file
+`cap sync ios` writes (pnpm store paths under `node_modules/.pnpm`), so a sync leaves git clean.
 
 ## Verify
+Simulator shortcut without pairing through the UI: redeem a code with `curl`, then
+`xcrun simctl spawn <udid> defaults write com.roowus.doubletake CapacitorStorage.doubletake.serverUrl -string <url>`
+(and `.token`), relaunch the app once so the mirror runs, and share from Safari.
+
 1. Pair the app (QR or URL + code), then background it once so the App Group mirror runs.
 2. From Instagram, share a reel to **Doubletake**: the card shows the URL; add a note, pick a
    mode, Send. Within a second the item appears in the app's chat list with channel

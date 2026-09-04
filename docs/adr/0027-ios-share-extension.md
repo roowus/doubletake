@@ -1,7 +1,8 @@
 # 0027 — iOS share extension on the Capacitor app
 
 ## Status
-accepted (**unverified** on a device: no iPhone and no simulator runtime on the development Mac)
+accepted (builds and launches in the iOS 26.3.1 simulator, App Group mirror verified; Share
+Extension flow and real device still **unverified**)
 
 ## Date
 2026-09-04
@@ -67,7 +68,7 @@ here.
 ## Consequences
 Roughly 330 lines of Swift next to the Kotlin. Two `Pairing` implementations (Kotlin, Swift)
 share key names with `apps/web/src/native.ts` by convention; a key rename touches three files.
-The `channel` enum grows by one value everywhere it is listed. Everything iOS is marked
-**unverified**: the Swift sources typecheck against the iOS 26.2 SDK and the project file
-parses, but nothing has run on a device or simulator. The first person with an iPhone should
+The `channel` enum grows by one value everywhere it is listed. The app and extension build with Xcode 26.2 and
+the app runs in the simulator with the App Group mirror working; the extension's share flow
+and any real device are still marked **unverified**. The first person with an iPhone should
 follow `docs/channels/ios-share.md` §Verify and remove the markers in the same commit.
