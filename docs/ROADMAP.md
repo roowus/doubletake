@@ -42,9 +42,11 @@ Verified on a Galaxy S25 FE (2026-09-03): pairing (code and QR URL), share sheet
 text shares, failure toast + retry, unpaired share → pair → replay, no-FCM refusal in Settings
 (details in [android-share.md](channels/android-share.md)). Firebase project provisioned from
 the CLI ([DEPLOYMENT.md](DEPLOYMENT.md)), server boots `push: webpush+fcm`, APK carries
-`google-services.json`. Not yet verified: an FCM notification arriving on the phone, pairing
-over the tailnet, and shares from the real Instagram/Reddit/Chrome apps. Offline queue for the
-share sheet stays a v2 item.
+`google-services.json`. Verified later the same day over the tailnet (Tailscale on the phone):
+FCM notifications arrive with the app killed and deep-link to the chat; pairing by QR URL
+against the `ts.net` hostname; real shares from Chrome and the Reddit app (the Reddit app
+short link needed a resolver + an Atom fallback in the extractor). Instagram share pending an
+owner test. Offline queue for the share sheet stays a v2 item.
 
 - Capacitor project builds a debug APK; QR pairing stores server URL + device token.
 - `ShareReceiverActivity` receives `text/plain` from Instagram, Reddit, Chrome, YouTube; shows

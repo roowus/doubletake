@@ -123,9 +123,22 @@ for a text-only share; unreachable server shows the toast and keeps the text, re
 unpaired share opens the app on the pairing screen and replays into the compose sheet after
 pairing; Settings → Notifications refuses cleanly while the server has no FCM. Firebase project
 provisioned from the CLI and the server boots with `push: webpush+fcm`; the APK built with
-`google-services.json` installs. **Not verified yet:** an FCM notification arriving on the
-phone, pairing over the tailnet (the phone has no Tailscale client installed yet), and shares
-from the real Instagram/Reddit/Chrome apps (only synthetic `ACTION_SEND` intents so far).
+`google-services.json` installs.
+
+Later the same day, over the tailnet (Tailscale installed on the phone, `adb reverse`
+removed, app paired against `https://<host>.ts.net`):
+- **FCM arrives.** Settings → Notifications → Enable registers the token; Send test and a
+  finished run both post a notification with the app killed, and tapping it opens `/chat/<id>`.
+  Gotcha: with Tailscale's VPN up and a Private DNS override, the phone lost Google's
+  `mtalk` push socket for a while; toggling the VPN off/on restored delivery.
+- **Tailnet pairing** by the QR URL works end to end.
+- **Real shares:** Chrome (page URL + title) and the Reddit app (share button → *Share via*
+  → Doubletake in the system chooser) both reach `ShareReceiverActivity` and land as
+  `channel: android_share`. Reddit shares `https://www.reddit.com/r/<sub>/s/<id>` app links;
+  the extractor now follows the 301 and falls back to the thread's Atom feed when the `.json`
+  view is 403 ([MEDIA-PIPELINE.md](../MEDIA-PIPELINE.md)). The sheet closes itself after a
+  short idle, so a share left alone falls back to the underlying app.
+- **Still pending:** a share from the real Instagram app (only synthetic `ACTION_SEND` so far).
 
 ## Build
 Capacitor 8 (`@capacitor/*` 8.x), Android Gradle Plugin 8.13, Gradle 8.14 wrapper, compileSdk /
