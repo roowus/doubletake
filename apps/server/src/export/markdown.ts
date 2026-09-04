@@ -15,6 +15,17 @@ export interface ExportInput {
   /** Conversation in order: the answer first, then follow-ups. */
   messages: { role: string; kind?: string; content: string; createdAt: string }[];
   structured: Answer | null;
+  /** All tags on the item (auto + manual) from the database; falls back to `structured.tags`. */
+  tags?: string[];
+  /** Entities from the database, grouped into frontmatter arrays by kind (`places: [...]`). */
+  entities?: { kind: string; name: string }[];
+}
+
+/** Frontmatter key for an entity kind: `place` → `places`, `person` → `people`. */
+export function entityKey(kind: string): string {
+  if (kind === 'person') return 'people';
+  if (kind === 'other') return 'entities';
+  return `${kind}s`;
 }
 
 export function slugify(s: string): string {
@@ -47,7 +58,7 @@ export function exportItemMarkdown(input: ExportInput): string {
   const file = path.join(dir, `${day} ${slugify(input.title)} ${input.itemId.slice(-6)}.md`);
 
   const s = input.structured;
-  const tags = (s?.tags ?? []).map(slugify).filter(Boolean);
+  const tags = [...new Set((input.tags ?? s?.tags ?? []).map(slugify).filter(Boolean))].sort();
   const fm: string[] = ['---'];
   fm.push(`title: ${yamlStr(input.title)}`);
   fm.push(`doubletake_id: ${input.itemId}`);
@@ -58,6 +69,15 @@ export function exportItemMarkdown(input: ExportInput): string {
   if (s?.category) fm.push(`category: ${s.category}`);
   if (input.costUsd != null) fm.push(`cost_usd: ${input.costUsd.toFixed(4)}`);
   if (tags.length) fm.push(`tags: [${tags.join(', ')}]`);
+  const byKind = new Map<string, string[]>();
+  for (const e of input.entities ?? []) {
+    const k = entityKey(e.kind);
+    const arr = byKind.get(k) ?? [];
+    if (!arr.includes(e.name)) arr.push(e.name);
+    byKind.set(k, arr);
+  }
+  for (const [k, names] of [...byKind.entries()].sort(([a], [b]) => a.localeCompare(b)))
+    fm.push(`${k}: [${names.map(yamlStr).join(', ')}]`);
   fm.push('---', '');
 
   const body: string[] = [];

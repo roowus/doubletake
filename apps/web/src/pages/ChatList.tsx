@@ -1,4 +1,4 @@
-import type { ChatSummary } from '@doubletake/shared';
+import type { ChatSummary, TagDto } from '@doubletake/shared';
 import { useEffect, useState } from 'react';
 import { api } from '../api';
 import { useLive } from '../live';
@@ -28,28 +28,38 @@ function when(iso: string | null): string {
 export function ChatList() {
   const [chats, setChats] = useState<ChatSummary[] | null>(null);
   const [q, setQ] = useState(new URLSearchParams(location.search).get('q') ?? '');
-  const [tag, setTag] = useState<string | null>(null);
+  const [tag, setTag] = useState<string | null>(
+    new URLSearchParams(location.search).get('tag') || null,
+  );
+  const [allTags, setAllTags] = useState<TagDto[]>([]);
   const [err, setErr] = useState<string | null>(null);
 
   const load = () => {
     api
-      .chats(q.trim() || undefined)
+      .chats(q.trim() || undefined, tag ?? undefined)
       .then((c) => {
         setChats(c);
         setErr(null);
       })
       .catch((e) => setErr(String(e.message ?? e)));
+    api
+      .tags()
+      .then(setAllTags)
+      .catch(() => {});
   };
-  // biome-ignore lint/correctness/useExhaustiveDependencies: reload when the query changes
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reload when the query or tag changes
   useEffect(() => {
     load();
-  }, [q]);
+  }, [q, tag]);
   useLive((e) => {
     if (e.kind === 'chat_updated' || (e.kind === 'run_event' && e.type === 'done')) load();
   });
 
-  const tags = [...new Set((chats ?? []).flatMap((c) => c.tags))].sort();
-  const shown = (chats ?? []).filter((c) => !tag || c.tags.includes(tag));
+  // Server-side filter; the chip row shows every tag in use (most used first) so the owner
+  // can jump between them without clearing the current one.
+  const tags = allTags.map((t) => t.name);
+  if (tag && !tags.includes(tag)) tags.unshift(tag);
+  const shown = chats ?? [];
 
   return (
     <div className="page stack">
@@ -70,6 +80,7 @@ export function ChatList() {
               onClick={() => setTag(tag === t ? null : t)}
             >
               {t}
+              {allTags.find((x) => x.name === t)?.kind === 'manual' ? ' ✎' : ''}
             </button>
           ))}
         </div>

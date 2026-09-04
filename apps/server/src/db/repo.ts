@@ -370,6 +370,71 @@ export class Repo {
       .map((r) => r.name);
   }
 
+  /** Owner-added tag. Reuses an existing tag row of any kind; the link has no confidence. */
+  addManualTag(itemId: string, rawName: string): string | null {
+    const name = normalizeTag(rawName);
+    if (!name) return null;
+    this.db.transaction((tx) => {
+      let tag = tx.select().from(s.tags).where(eq(s.tags.name, name)).get();
+      if (!tag) {
+        tag = { id: newId(), name, kind: 'manual' };
+        tx.insert(s.tags).values(tag).run();
+      }
+      tx.insert(s.itemTags).values({ itemId, tagId: tag.id }).onConflictDoNothing().run();
+    });
+    return name;
+  }
+
+  /** Unlink a tag from an item; drops the tag row when nothing else uses it. */
+  removeTag(itemId: string, rawName: string): boolean {
+    const name = normalizeTag(rawName);
+    const tag = this.db.select().from(s.tags).where(eq(s.tags.name, name)).get();
+    if (!tag) return false;
+    const r = this.db
+      .delete(s.itemTags)
+      .where(and(eq(s.itemTags.itemId, itemId), eq(s.itemTags.tagId, tag.id)))
+      .run();
+    const left = this.db
+      .select({ n: sql<number>`count(*)` })
+      .from(s.itemTags)
+      .where(eq(s.itemTags.tagId, tag.id))
+      .get();
+    if (!left || left.n === 0) this.db.delete(s.tags).where(eq(s.tags.id, tag.id)).run();
+    return r.changes > 0;
+  }
+
+  /** Every tag in use with how many items carry it, most used first. */
+  listAllTags(): { name: string; kind: 'auto' | 'manual'; count: number }[] {
+    return this.db
+      .select({
+        name: s.tags.name,
+        kind: s.tags.kind,
+        count: sql<number>`count(${s.itemTags.itemId})`,
+      })
+      .from(s.tags)
+      .innerJoin(s.itemTags, eq(s.itemTags.tagId, s.tags.id))
+      .groupBy(s.tags.id)
+      .orderBy(desc(sql`count(${s.itemTags.itemId})`), s.tags.name)
+      .all()
+      .map((r) => ({
+        name: r.name,
+        kind: r.kind === 'manual' ? 'manual' : 'auto',
+        count: r.count,
+      }));
+  }
+
+  /** Item ids carrying the tag. */
+  itemIdsByTag(rawName: string): string[] {
+    const name = normalizeTag(rawName);
+    return this.db
+      .select({ itemId: s.itemTags.itemId })
+      .from(s.itemTags)
+      .innerJoin(s.tags, eq(s.tags.id, s.itemTags.tagId))
+      .where(eq(s.tags.name, name))
+      .all()
+      .map((r) => r.itemId);
+  }
+
   // ---- FTS ----
 
   upsertFts(
@@ -629,4 +694,9 @@ export class Repo {
       .where(eq(s.pushSubscriptions.id, id))
       .run();
   }
+}
+
+/** Tags are lowercase, trimmed, single-spaced, at most 40 chars. */
+export function normalizeTag(raw: string): string {
+  return raw.trim().toLowerCase().replace(/\s+/g, ' ').slice(0, 40);
 }

@@ -1,4 +1,11 @@
-import type { ChatDetail, ChatSummary, IngestRequest, Mode, RunEvent } from '@doubletake/shared';
+import type {
+  ChatDetail,
+  ChatSummary,
+  IngestRequest,
+  Mode,
+  RunEvent,
+  TagDto,
+} from '@doubletake/shared';
 import { apiBase, mirrorToken } from './native';
 
 const TOKEN_KEY = 'doubletake.token';
@@ -119,8 +126,18 @@ export const api = {
       '/api/ingest',
       req,
     ),
-  chats: (q?: string) =>
-    call<ChatSummary[]>('GET', q ? `/api/chats?q=${encodeURIComponent(q)}` : '/api/chats'),
+  chats: (q?: string, tag?: string) => {
+    const p = new URLSearchParams();
+    if (q) p.set('q', q);
+    if (tag) p.set('tag', tag);
+    const qs = p.toString();
+    return call<ChatSummary[]>('GET', qs ? `/api/chats?${qs}` : '/api/chats');
+  },
+  tags: () => call<TagDto[]>('GET', '/api/tags'),
+  addTag: (chatId: string, name: string) =>
+    call<{ tags: string[] }>('POST', `/api/chats/${chatId}/tags`, { name }),
+  removeTag: (chatId: string, name: string) =>
+    call<{ tags: string[] }>('DELETE', `/api/chats/${chatId}/tags/${encodeURIComponent(name)}`),
   chat: (id: string) => call<ChatDetail>('GET', `/api/chats/${id}`),
   markRead: (id: string) => call<void>('POST', `/api/chats/${id}/read`),
   sendMessage: (id: string, content: string) =>

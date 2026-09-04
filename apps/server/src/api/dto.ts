@@ -1,5 +1,6 @@
 import type { Answer, ChatDetail, ChatSummary, MessageDto, RunDto } from '@doubletake/shared';
 import type { ChatRow, ItemRow, MessageRow, Repo, RunRow } from '../db/repo.js';
+import { extractionText, parseExtraction } from '../extract/flatten.js';
 
 export function toChatSummary(repo: Repo, chat: ChatRow, item: ItemRow): ChatSummary {
   return {
@@ -72,6 +73,16 @@ export function toChatDetail(repo: Repo, chat: ChatRow, item: ItemRow): ChatDeta
       ...(e.url ? { url: e.url } : {}),
       confidence: e.confidence ?? 0.7,
     })),
+    extractions: repo
+      .listExtractions(item.id)
+      .map((e) => ({
+        id: e.id,
+        kind: e.kind,
+        tool: e.tool,
+        createdAt: e.createdAt,
+        text: extractionText(e.kind, parseExtraction(e.content)),
+      }))
+      .filter((e) => e.text.length > 0),
   };
 }
 

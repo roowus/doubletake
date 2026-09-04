@@ -4,6 +4,7 @@ import { ApiError, api } from '../api';
 import { Claims, EntityCards, Recommendations } from '../components/AnswerCards';
 import { Markdown } from '../components/Markdown';
 import { RunTimeline } from '../components/RunTimeline';
+import { Sources, TagEditor } from '../components/Sources';
 import { useLive } from '../live';
 import { navigate } from '../router';
 
@@ -62,7 +63,7 @@ export function Chat({ id }: { id: string }) {
   if (err) return <div className="page msg error">{err}</div>;
   if (!detail) return <div className="page muted">Loading…</div>;
 
-  const { chat, item, messages, runs, entities } = detail;
+  const { chat, item, messages, runs, entities, extractions } = detail;
   const active = runs.filter((r) => ACTIVE.has(r.status));
   const totalCost = runs.reduce((s, r) => s + (r.costUsd ?? 0), 0);
   const lastAnswer = [...messages].reverse().find((m) => m.kind === 'answer')?.structured ?? null;
@@ -110,14 +111,30 @@ export function Chat({ id }: { id: string }) {
           {item.questionType && <span>{item.questionType.replace(/_/g, ' ')}</span>}
           {totalCost > 0 && <span>${totalCost.toFixed(3)}</span>}
           {chat.category && <span className="tag">{chat.category}</span>}
-          {chat.tags.map((t) => (
-            <span className="tag" key={t}>
-              {t}
-            </span>
-          ))}
         </div>
+        <TagEditor
+          tags={chat.tags}
+          onAdd={async (name) => {
+            try {
+              await api.addTag(id, name);
+              load();
+            } catch (ex) {
+              setErr(ex instanceof ApiError ? ex.message : String(ex));
+            }
+          }}
+          onRemove={async (name) => {
+            try {
+              await api.removeTag(id, name);
+              load();
+            } catch (ex) {
+              setErr(ex instanceof ApiError ? ex.message : String(ex));
+            }
+          }}
+        />
         {item.note && <div className="small">Note: {item.note}</div>}
       </div>
+
+      <Sources extractions={extractions} />
 
       {capped && (
         <div className="banner small">

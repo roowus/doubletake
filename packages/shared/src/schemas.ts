@@ -202,6 +202,23 @@ export const RunDto = z.object({
 });
 export type RunDto = z.infer<typeof RunDto>;
 
+export const ExtractionDto = z.object({
+  id: z.string(),
+  kind: z.string(),
+  tool: z.string().nullable(),
+  createdAt: z.string(),
+  /** Flattened, human-readable text (transcript lines, OCR lines, comments…). */
+  text: z.string(),
+});
+export type ExtractionDto = z.infer<typeof ExtractionDto>;
+
+export const TagDto = z.object({
+  name: z.string(),
+  kind: z.enum(['auto', 'manual']),
+  count: z.number().int(),
+});
+export type TagDto = z.infer<typeof TagDto>;
+
 export const ChatDetail = z.object({
   chat: ChatSummary,
   item: z.object({
@@ -215,5 +232,6 @@ export const ChatDetail = z.object({
   messages: z.array(MessageDto),
   runs: z.array(RunDto),
   entities: z.array(Entity),
+  extractions: z.array(ExtractionDto),
 });
 export type ChatDetail = z.infer<typeof ChatDetail>;

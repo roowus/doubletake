@@ -7,6 +7,7 @@ import { BrainSet } from '../brains/registry.js';
 import type { Config } from '../config/index.js';
 import type { ItemRow, Repo, RunRow } from '../db/repo.js';
 import { exportItemMarkdown } from '../export/markdown.js';
+import { extractionText, parseExtraction } from '../extract/flatten.js';
 import { fetchText } from '../extract/http.js';
 import { PAGE_ONLY } from '../extract/platforms/_shared.js';
 import { extractUrl } from '../extract/registry.js';
@@ -385,13 +386,8 @@ export class QueueWorker extends EventEmitter {
     // authoritative for their kind and were not produced above; add them once.
     for (const x of this.repo.listExtractions(item.id)) {
       if (x.tool !== CHANNEL_TOOL) continue;
-      let content: unknown;
-      try {
-        content = JSON.parse(x.content);
-      } catch {
-        content = x.content;
-      }
-      const text = typeof content === 'string' ? content : JSON.stringify(content).slice(0, 12_000);
+      const text = extractionText(x.kind, parseExtraction(x.content)).slice(0, 12_000);
+      if (!text) continue;
       blocks.push({
         source: item.platform,
         kind: asUntrustedKind(x.kind),
@@ -485,14 +481,8 @@ export class QueueWorker extends EventEmitter {
   private storedBlocks(item: ItemRow): UntrustedBlock[] {
     const out: UntrustedBlock[] = [];
     for (const x of this.repo.listExtractions(item.id)) {
-      let content: unknown;
-      try {
-        content = JSON.parse(x.content);
-      } catch {
-        content = x.content;
-      }
-      const text = typeof content === 'string' ? content : JSON.stringify(content).slice(0, 8000);
-      out.push({ source: item.platform, kind: asUntrustedKind(x.kind), content: text });
+      const text = extractionText(x.kind, parseExtraction(x.content)).slice(0, 8000);
+      if (text) out.push({ source: item.platform, kind: asUntrustedKind(x.kind), content: text });
     }
     if (item.text?.trim()) out.push({ source: 'owner', kind: 'shared_text', content: item.text });
     return out;
@@ -556,6 +546,25 @@ export class QueueWorker extends EventEmitter {
 
     // FTS + Markdown export.
     const fresh = this.repo.getItem(item.id) ?? item;
+    const exported = this.reindex(fresh, chatId, r.mode, structured);
+    if (exported.file) emit('status', { phase: 'exported', file: exported.file });
+    else if (exported.error)
+      emit('status', { phase: 'warning', message: `Markdown export failed: ${exported.error}` });
+    emit('done', { stopReason: r.stopReason, costUsd: cost });
+    this.push(fresh, chatId, 'answered');
+  }
+
+  /**
+   * Refresh the FTS row and rewrite the Markdown note for an item from what the database holds.
+   * Called after every finished run and after the owner edits tags, so the note and the index
+   * never drift from the chat.
+   */
+  reindex(
+    item: ItemRow,
+    chatId: string,
+    mode: string,
+    structured: Answer | null = null,
+  ): { file?: string; error?: string } {
     const messages = this.repo.listMessages(chatId).filter((m) => m.role !== 'system');
     const answerText = messages
       .filter((m) => m.role === 'assistant')
@@ -565,19 +574,18 @@ export class QueueWorker extends EventEmitter {
     const pick = (k: string) =>
       ext
         .filter((e) => e.kind === k)
-        .map((e) => e.content)
+        .map((e) => extractionText(e.kind, parseExtraction(e.content)))
         .join('\n');
+    const entities = this.repo.listEntities(item.id);
+    const tags = this.repo.listTags(item.id);
     this.repo.upsertFts(item.id, {
-      title: fresh.title ?? '',
-      note: fresh.note ?? '',
-      transcript: `${pick('transcript')}\n${pick('caption')}\n${pick('page_text')}`,
-      ocr: pick('ocr'),
+      title: item.title ?? '',
+      note: item.note ?? '',
+      transcript: `${pick('transcript')}\n${pick('caption')}\n${pick('page_text')}\n${pick('comments')}\n${pick('thread')}`,
+      ocr: `${pick('ocr')}\n${pick('frame_description')}`,
       answer: answerText,
-      tags: this.repo.listTags(item.id).join(' '),
-      entities: this.repo
-        .listEntities(item.id)
-        .map((e) => e.name)
-        .join(' '),
+      tags: tags.join(' '),
+      entities: entities.map((e) => e.name).join(' '),
     });
     const firstAnswer = messages.find((m) => m.role === 'assistant' && m.kind === 'answer');
     const structuredForExport: Answer | null = firstAnswer?.structured
@@ -587,13 +595,13 @@ export class QueueWorker extends EventEmitter {
       const file = exportItemMarkdown({
         notesDir: this.cfg.notesDir,
         itemId: item.id,
-        title: fresh.title ?? 'Untitled',
-        sourceUrl: fresh.canonicalUrl ?? fresh.sourceUrl,
-        platform: fresh.platform,
-        note: fresh.note,
-        mode: r.mode,
+        title: item.title ?? 'Untitled',
+        sourceUrl: item.canonicalUrl ?? item.sourceUrl,
+        platform: item.platform,
+        note: item.note,
+        mode,
         costUsd: this.repo.listRuns(chatId).reduce((a, x) => a + (x.costUsd ?? 0), 0),
-        createdAt: fresh.createdAt,
+        createdAt: item.createdAt,
         messages: messages.map((m) => ({
           role: m.role,
           kind: m.kind,
@@ -601,16 +609,13 @@ export class QueueWorker extends EventEmitter {
           createdAt: m.createdAt,
         })),
         structured: structuredForExport,
+        tags,
+        entities: entities.map((e) => ({ kind: e.kind, name: e.name })),
       });
-      emit('status', { phase: 'exported', file });
+      return { file };
     } catch (e) {
-      emit('status', {
-        phase: 'warning',
-        message: `Markdown export failed: ${(e as Error).message}`,
-      });
+      return { error: (e as Error).message };
     }
-    emit('done', { stopReason: r.stopReason, costUsd: cost });
-    this.push(fresh, chatId, 'answered');
   }
 }
 

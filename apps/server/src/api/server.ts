@@ -165,6 +165,7 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
     const q = z
       .object({
         q: z.string().optional(),
+        tag: z.string().optional(),
         limit: z.coerce.number().int().min(1).max(500).default(200),
       })
       .parse(req.query);
@@ -173,7 +174,34 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
       const ids = new Set(repo.searchFts(ftsQuery(q.q), q.limit));
       rows = rows.filter((r) => ids.has(r.item.id));
     }
+    if (q.tag?.trim()) {
+      const ids = new Set(repo.itemIdsByTag(q.tag));
+      rows = rows.filter((r) => ids.has(r.item.id));
+    }
     return rows.map((r) => toChatSummary(repo, r.chat, r.item));
+  });
+
+  app.get('/api/tags', async () => repo.listAllTags());
+
+  app.post('/api/chats/:id/tags', async (req, reply) => {
+    const { chat, item } = loadChat(req, reply, repo) ?? {};
+    if (!chat || !item) return;
+    const body = z.object({ name: z.string().trim().min(1).max(40) }).parse(req.body);
+    const name = repo.addManualTag(item.id, body.name);
+    if (!name) return reply.code(400).send({ error: 'empty tag' });
+    worker.reindex(item, chat.id, item.modeEffective ?? 'quick');
+    worker.emit('chat_updated', chat.id);
+    return { tags: repo.listTags(item.id) };
+  });
+
+  app.delete('/api/chats/:id/tags/:name', async (req, reply) => {
+    const { chat, item } = loadChat(req, reply, repo) ?? {};
+    if (!chat || !item) return;
+    const { name } = z.object({ name: z.string().min(1) }).parse(req.params);
+    repo.removeTag(item.id, decodeURIComponent(name));
+    worker.reindex(item, chat.id, item.modeEffective ?? 'quick');
+    worker.emit('chat_updated', chat.id);
+    return { tags: repo.listTags(item.id) };
   });
 
   app.get('/api/chats/:id', async (req, reply) => {

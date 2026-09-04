@@ -106,14 +106,17 @@ and a Reddit video.
 
 ## M6 — Search, tags, collections
 
-- FTS5 over title, note, transcript, OCR, answers, entities; search UI.
-- Auto tags from the run's `tags[]`; auto collections per category and entity kind seeded at
-  first boot; manual tags and manual collections.
+- ✅ FTS5 over title, note, transcript, OCR, answers, entities; search box + tag chips in the
+  chat list (`GET /api/chats?q=&tag=`, `GET /api/tags`).
+- ✅ Auto tags from the run's `tags[]`; manual tags (`POST/DELETE /api/chats/:id/tags`) editable
+  from the chat header.
+- Auto collections per category and entity kind seeded at first boot; manual collections.
 - Entity views per kind: places list with map links, recipes with ingredients, products with
   price and link, tools with install line.
-- Transcript and OCR visible in a tab of the chat view (the one thing reel-summariser apps
-  get right).
-- Re-export on edit; Obsidian-friendly frontmatter stable, entities as frontmatter arrays.
+- ✅ Transcript, OCR, frame descriptions, caption, comments and page text visible in the
+  **Sources** panel of the chat view (`extractions[]` on `GET /api/chats/:id`).
+- ✅ Re-export on edit; frontmatter stable (tags slugified + sorted), entities as frontmatter
+  arrays (`places:`, `recipes:`, `products:`, `tools:`, `people:`).
 
 ## Later (not scheduled)
 
