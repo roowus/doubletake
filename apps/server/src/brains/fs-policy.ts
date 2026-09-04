@@ -50,11 +50,11 @@ function denied(realPath: string, deny: string[]): string | null {
   return null;
 }
 
-/** May the brain read this path? Symlinks are resolved before roots/deny are checked. */
+/** May the brain read this path? `~` is expanded and symlinks resolved before roots/deny are checked. */
 export function checkRead(p: string, policy: ToolPolicy): FsDecision {
   let realPath: string;
   try {
-    realPath = realpathLenient(p);
+    realPath = realpathLenient(expandHome(p));
   } catch (e) {
     return { ok: false, reason: `cannot resolve path: ${(e as Error).message}` };
   }
@@ -72,7 +72,7 @@ export function checkWrite(p: string, policy: ToolPolicy): FsDecision {
   if (!policy.writeRoot) return { ok: false, reason: 'writing is disabled in this mode' };
   let realPath: string;
   try {
-    realPath = realpathLenient(p);
+    realPath = realpathLenient(expandHome(p));
   } catch (e) {
     return { ok: false, reason: `cannot resolve path: ${(e as Error).message}` };
   }

@@ -44,6 +44,17 @@ describe('fs policy', () => {
   it('allows ordinary files under the root', () => {
     expect(checkRead(path.join(home, 'docs', 'notes.md'), policy).ok).toBe(true);
   });
+  it('expands ~ to the process HOME (models write tilde paths)', () => {
+    const saved = process.env.HOME;
+    process.env.HOME = home;
+    try {
+      expect(checkRead('~/docs/notes.md', policy).ok).toBe(true);
+      expect(checkRead('~/.ssh/id_ed25519', policy).ok).toBe(false);
+      expect(checkRead('~nobody/docs/notes.md', policy).ok).toBe(false);
+    } finally {
+      process.env.HOME = saved;
+    }
+  });
   it('denies denylisted directories', () => {
     expect(checkRead(path.join(home, '.ssh', 'id_ed25519'), policy).ok).toBe(false);
   });

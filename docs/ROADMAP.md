@@ -92,14 +92,14 @@ and a Reddit video.
   [guide](channels/instagram-setup.md#6-live-verification-checklist-m4-acceptance)). Settings
   card for connect/status/poll/refresh/disconnect shipped.
 
-## M5 — More brains — code complete 2026-09-04 (new adapters unit-tested, not yet run against live providers)
+## M5 — More brains — done 2026-09-04 (`openai-compatible` verified live; non-Claude CLI presets still unverified)
 
 - ✅ `headless-cli` adapter with presets for `claude -p`, Codex, Gemini CLI, OpenCode, Hermes
   (unit-tested with a fake `spawn`; preset flags other than `claude-code` unverified live).
 - ✅ `openai-compatible` adapter with our tool loop (web_search via SearXNG/Brave/Tavily,
   web_fetch, read_file, list_dir, write_sandbox_file) and self-managed conversation storage
-  (`apps/server/src/brains/{openai-compatible.ts,tools/}`; unit-tested against a fake endpoint,
-  not yet run against a live provider).
+  (`apps/server/src/brains/{openai-compatible.ts,tools/}`; unit-tested against a fake endpoint
+  and run live against 9Router's OpenAI endpoint with tool calls + follow-up).
 - ✅ Per-mode adapter override (`DOUBLETAKE_BRAIN_QUICK/STANDARD/DEEP=adapter[@model]`, runs
   rebound after classification, follow-ups pinned to the session's adapter) and per-adapter
   healthchecks in `GET /api/status` + Settings → Server.
