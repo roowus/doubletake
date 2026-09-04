@@ -125,28 +125,60 @@ Uses `@anthropic-ai/claude-agent-sdk` `query({ prompt, options })`.
 
 ### headless-cli
 
-Runs any CLI harness as a child process. Config (per preset):
+Runs any CLI harness as a child process, one process per run or follow-up
+(`apps/server/src/brains/headless-cli.ts`). Select with `DOUBLETAKE_BRAIN=headless-cli` and
+`DOUBLETAKE_HEADLESS_PRESET`. A preset is:
 
 ```jsonc
 {
   "id": "claude-code",
   "command": "claude",
   "args": ["-p", "{prompt}", "--output-format", "json", "--max-turns", "{maxTurns}"],
-  "resumeArgs": ["--resume", "{sessionId}"],          // omit ⇒ capabilities.resume = false
-  "promptMode": "arg",                                 // arg | stdin
-  "outputParser": "claude-json",                       // claude-json | jsonl | plain
-  "cwd": "{sandboxDir}",                               // a fresh dir under data/runs/<run_id>
-  "env": { "ANTHROPIC_API_KEY": "${ANTHROPIC_API_KEY}" },
-  "timeoutMs": 1500000
+  "resumeArgs": ["--resume", "{sessionId}"],   // omit ⇒ capabilities.resume = false
+  "modelArgs": ["--model", "{model}"],          // appended only when a model is configured
+  "promptMode": "arg",                          // arg | stdin
+  "outputParser": "claude-json"                 // claude-json | jsonl | plain
 }
 ```
 
-Presets shipped: `claude-code` (`claude -p`), `codex` (`codex exec`), `gemini-cli`
-(`gemini -p`), `opencode` (`opencode run`), `hermes` (`hermes chat -q`). The brief is
-serialised to Markdown with the tool policy as a preamble; the process cwd is a sandbox
-directory and the harness's own tools are whatever it has (documented as the weaker
-enforcement model, ADR 0005). Cost is parsed when the parser knows the format
-(`claude-json` exposes `total_cost_usd`), else estimated or zero with a UI warning.
+Presets shipped (`HEADLESS_PRESETS`):
+
+| Preset | Command | Prompt | Parser | Resume |
+|---|---|---|---|---|
+| `claude-code` | `claude -p … --output-format json --max-turns N` | arg | `claude-json` (`result`, `session_id`, `total_cost_usd`, `usage`, `is_error`) | `--resume <id>` |
+| `codex` | `codex exec --json --skip-git-repo-check -C <sandbox>` | stdin | `jsonl` (`item.completed`/`agent_message`, `turn.completed.usage`) | no |
+| `gemini-cli` | `gemini -p …` | arg | `plain` | no |
+| `opencode` | `opencode run …` | arg | `plain` | no |
+| `hermes` | `hermes chat -q …` | arg | `plain` | no |
+
+`DOUBLETAKE_HEADLESS_CMD` and `DOUBLETAKE_HEADLESS_ARGS` (JSON array) override a preset's
+executable and argument template, so any other harness that prints its answer to stdout works
+with the `plain` parser. Placeholders: `{prompt}`, `{maxTurns}`, `{model}` (from
+`DOUBLETAKE_BRAIN_MODEL`), `{sessionId}`, `{sandboxDir}`.
+
+Behaviour:
+
+- The prompt is the system framing plus the rendered brief; the tool policy travels as a text
+  preamble and the harness's own tools do the work. This is the weaker enforcement model of
+  ADR 0005: Doubletake cannot stop a harness from reading a file its own permissions allow.
+  Pick a harness whose permission settings match the deny list, or use `openai-compatible`
+  where the loop is ours.
+- Each process runs in a fresh directory `<dataDir>/runs/<id>/` with `stdin` closed after the
+  prompt (or the prompt written to it for `stdin` presets). `DOUBLETAKE_HEADLESS_TIMEOUT_MS`
+  (default 25 min) and the run's abort signal both SIGTERM then SIGKILL the child.
+- Follow-ups resume with `resumeArgs` when the preset has them and the chat has a session id;
+  otherwise the transcript is replayed with a zero-tool preamble. Session ids are stored only
+  for presets that can resume.
+- `stopReason` is `done` when the harness exits 0 with text, `error` for non-zero exit (last
+  stderr lines in the message), `is_error`/`error` events, timeouts or empty output, `aborted`
+  on cancel. `max_turns` and `budget` cannot be distinguished from the outside and are reported
+  as `done`; the harness's own `--max-turns` still bounds the run.
+- Cost: `claude-json` exposes `total_cost_usd`; every other parser reports no cost
+  (`capabilities.costReporting = false`), so the daily cap only counts what other adapters spend.
+- `healthcheck()` only checks the executable is on `PATH`; it does not run the harness.
+
+The five presets' flags were taken from each CLI's documentation and are **unverified** against
+the installed tools except `claude-code`, which the Agent SDK adapter already exercises.
 
 ### openai-compatible
 
