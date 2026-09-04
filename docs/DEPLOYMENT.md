@@ -61,6 +61,25 @@ phone and desktop.
   service-account key (Project settings → Service accounts) and point
   `FCM_SERVICE_ACCOUNT_PATH` at the JSON. The boot log prints `push: webpush+fcm` when both
   are active; `FCM disabled: …` explains a missing or malformed file.
+- **FCM from the CLI** (what the dev setup used; no Firebase console needed):
+  ```sh
+  npm i -g firebase-tools && firebase login          # non-TTY shells fall back to a paste-the-code flow
+  firebase projects:create <project-id> --display-name Doubletake --non-interactive
+  firebase apps:create ANDROID Doubletake --package-name com.roowus.doubletake --project <project-id> --non-interactive
+  firebase apps:sdkconfig ANDROID --project <project-id> --out apps/mobile/android/app/google-services.json
+  gcloud auth login
+  gcloud iam service-accounts keys create ~/.doubletake/fcm-service-account.json \
+    --iam-account firebase-adminsdk-fbsvc@<project-id>.iam.gserviceaccount.com --project <project-id>
+  chmod 600 ~/.doubletake/fcm-service-account.json
+  ```
+  Firebase creates the `firebase-adminsdk-fbsvc@…` service account itself; the key is a
+  secret, keep it out of the repo (`~/.doubletake` is not a read root for the brain either).
+  Rebuild the APK after `google-services.json` lands. Gotcha on macOS: the Homebrew
+  `gcloud-cli` cask failed here (missing `virtualenv`, then a broken `pyexpat` in
+  `python@3.14`); the tarball install to `~/google-cloud-sdk` works with
+  `CLOUDSDK_PYTHON` pointed at a Python 3.10–3.13 (system Python 3.9 is unsupported).
+  `gcloud auth login --no-launch-browser` cannot take the code from a non-TTY shell; run the
+  browser flow from a real terminal.
 - Subscriptions that the push service reports as gone, or that fail 8 times in a row, are
   removed automatically; the client re-subscribes on next open.
 
