@@ -109,6 +109,38 @@ shows only places the brain located). Map tiles are fetched by the browser from
 `tile.openstreetmap.org`; the server never proxies them. After upgrading, open **Map** and
 press **Locate N more** once to geocode places saved earlier.
 
+### Connect an agent (MCP)
+The server speaks the Model Context Protocol at `https://<host>/mcp`
+([ADR 0023](adr/0023-mcp-server.md)): Streamable HTTP, stateless, authenticated with an
+ordinary device token. Mint one for the agent so it can be revoked on its own: Settings →
+**Pair a device** → **Show pairing code**, then
+
+```sh
+curl -s -X POST https://<host>/api/pair/redeem -H 'content-type: application/json' \
+  -d '{"code":"ABC123","deviceName":"claude-code","platform":"mcp"}'
+```
+
+and keep the `token` (`dt_…`). Then, for Claude Code:
+
+```sh
+claude mcp add --transport http doubletake https://<host>/mcp \
+  --header "Authorization: Bearer dt_…"
+```
+
+Claude Desktop, Cursor and most other clients take the same thing as JSON:
+
+```json
+{ "mcpServers": { "doubletake": { "type": "http", "url": "https://<host>/mcp",
+  "headers": { "Authorization": "Bearer dt_…" } } } }
+```
+
+Clients that only speak stdio can bridge with `npx mcp-remote https://<host>/mcp --header
+"Authorization: Bearer dt_…"`. The agent then has `search_library`, `list_chats`, `get_chat`,
+`list_collections`, `list_tags`, `list_entities` (read-only) plus `save` and `ask_library`,
+which queue work exactly like the share sheet; the answer arrives in the app and the agent can
+wait for it with `get_chat { wait_seconds }`. The endpoint is refused on the tunnel hostname,
+so it is reachable over the tailnet only. Revoke the agent from Settings → Devices.
+
 ### Instagram webhook (public, one path)
 Pick one:
 - **Cloudflare Tunnel**: `cloudflared tunnel create doubletake`, route a hostname, config

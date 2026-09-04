@@ -140,7 +140,12 @@ export function ChatList() {
           >
             <div className="stack" style={{ gap: 4 }}>
               <div className="title">
-                {c.channel === 'library' ? '💬' : (PLATFORM_ICON[c.platform] ?? '•')} {c.title}
+                {c.channel === 'library'
+                  ? '💬'
+                  : c.channel === 'mcp'
+                    ? '🤖'
+                    : (PLATFORM_ICON[c.platform] ?? '•')}{' '}
+                {c.title}
               </div>
               <div className="row small">
                 <span className={`status ${c.status}`}>{c.status}</span>

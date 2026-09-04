@@ -19,6 +19,7 @@ import {
   resolveQuery,
   seedAutoCollections,
 } from '../library/collections.js';
+import { MCP_PATH, registerMcpRoutes } from '../mcp/index.js';
 import type { NotificationHub } from '../notify/hub.js';
 import { type DigestGate, parseHHMM, validTimeZone } from '../notify/quiet.js';
 import type { QueueWorker } from '../queue/worker.js';
@@ -75,7 +76,7 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
     // Through the tunnel hostname only the Instagram webhook exists (docs/DEPLOYMENT.md).
     if (!hostAllowed(cfg, req.headers.host, req.url))
       return reply.code(404).send({ error: 'not found' });
-    if (!req.url.startsWith('/api/')) return;
+    if (!req.url.startsWith('/api/') && !req.url.startsWith(MCP_PATH)) return;
     const pathOnly = req.url.split('?')[0] ?? req.url;
     if (PUBLIC_PATHS.has(pathOnly)) return;
     const header = req.headers.authorization;
@@ -96,6 +97,7 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
   });
 
   if (deps.ig) await registerInstagramRoutes(app, { cfg, ig: deps.ig });
+  registerMcpRoutes(app, { repo, worker }); // ADR 0023: same token gate, see onRequest above
 
   // ---- public ----
   app.get('/api/health', async () => ({
