@@ -183,7 +183,12 @@ describe('export', () => {
       const summary = importKarakeep(other.repo, out);
       expect(summary).toEqual({ imported: 3, skipped: 0, collections: 1, runs: 0 });
       const again = exportKarakeep(other.repo);
-      const strip = (b: (typeof out.bookmarks)[number]) => ({ ...b, lists: b.lists.length });
+      // Tag order is not part of the format (a set on both sides), so compare it sorted.
+      const strip = (b: (typeof out.bookmarks)[number]) => ({
+        ...b,
+        lists: b.lists.length,
+        tags: [...b.tags].sort(),
+      });
       expect(again.bookmarks.map(strip)).toEqual(out.bookmarks.map(strip));
     } finally {
       other.cleanup();

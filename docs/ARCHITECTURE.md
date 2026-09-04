@@ -39,6 +39,7 @@ channel; the Instagram bot is optional and documented as fragile.
 | Auth | Owner password at setup + long-lived per-device tokens via QR pairing | [0010](adr/0010-auth-owner-password-device-tokens.md) |
 | Knowledge | Markdown export of every finished chat into `~/Doubletake`; FTS5 search; auto tags and collections; cross-library questions answered by the brain from FTS-retrieved chats | [0011](adr/0011-markdown-export-fts-tags.md), [0021](adr/0021-cross-library-chat.md) |
 | Integrations | Other agents read and feed the library over MCP: stateless Streamable HTTP at `/mcp` behind the device-token gate, read tools mirror the REST library routes, extractions stay `<untrusted>`-wrapped, writes only enqueue runs. Karakeep and Memos interchange as files: export in their shapes, import a Karakeep file as `import`-channel items, no runs unless asked | [0023](adr/0023-mcp-server.md), [0024](adr/0024-karakeep-memos-interchange.md) |
+| Sharing | A manual list or saved search can be shared as a read-only page at `/s/<token>` (token = credential, script-free HTML, first answers only, never notes or extractions); links stay on the tailnet unless `DOUBLETAKE_SHARE_PUBLIC=on` | [0025](adr/0025-shareable-collection-pages.md) |
 | Structure | Every run also extracts a category and typed entities (places, recipes, products, tools, tips); collections are automatic per category and entity kind; places are geocoded (brain coordinates first, else a Nominatim-compatible geocoder, cached) and shown on a Leaflet map | [0014](adr/0014-structured-extraction-and-categories.md), [0022](adr/0022-map-view-place-geocoding.md) |
 | Platforms | Server-side extractor registry, one file per platform, `web` fallback; v1: Instagram, TikTok, YouTube + Shorts, X, Reddit, AI-chat shares | [0015](adr/0015-platform-extractor-registry.md) |
 | Cost | Daily spend cap; runs queue as `capped` when hit; per-run cost shown in chat | [0012](adr/0012-cost-cap.md) |
@@ -216,7 +217,9 @@ search (the tag chips come from `GET /api/tags`, manual tags marked ✎; the sam
 **Ask library** button that turns the text into a `library` question and opens its chat, listed
 with a 💬 icon), a **collections** row
 (auto collections per category and entity kind, manual lists ☰, saved searches 🔍; selecting one
-filters the list via `?collection=<id>`; auto collections can be hidden, others deleted; a
+filters the list via `?collection=<id>`; auto collections can be hidden, others deleted or
+**shared** as a read-only page whose link is copied to the clipboard and shown under the row,
+🔗 marking shared ones ([ADR 0025](adr/0025-shareable-collection-pages.md)); a
 "+ collection" form creates a manual list or a saved search with a live match count) and links
 to the **entity views** `/entities/<kind>` (places with a Maps link, recipes with ingredients,
 products with price, tools with install line, tips, media, people, events; each card links back
@@ -258,6 +261,7 @@ connection recipe in [DEPLOYMENT.md](DEPLOYMENT.md#connect-an-agent-mcp)).
 | `GET chats?q=&tag=&collection=`, `GET chats/:id`, `POST chats/:id/read` | list (FTS when `q`, tag filter when `tag`, membership of a collection when `collection`; 404 for an unknown id), detail with messages/runs/entities/extractions (flattened text, newest per kind+tool), clear unread |
 | `GET tags`, `POST chats/:id/tags { name }`, `DELETE chats/:id/tags/:name` | all tags with counts; add a manual tag (normalised: trimmed, lowercase, ≤40 chars); remove any tag from the item. Both edits re-index FTS, re-export the note and emit `chat_updated` |
 | `GET collections?all=&hidden=`, `POST collections { name, query? }`, `POST collections/:id { name?, query?, hidden? }`, `DELETE collections/:id` | list with item counts (empty auto collections omitted unless `all=true`, hidden ones unless `hidden=true`; auto collections are seeded at boot, one per category and one per entity kind); create a manual list (no `query`) or a saved search (`query` = `category:<c>` · `entity:<kind>` · `tag:<name>` · FTS text); rename/retarget/hide (400 when giving an auto collection a query); delete (400 for auto — hide instead) |
+| `POST collections/:id/share`, `DELETE collections/:id/share`, `GET /s/:token` (no `/api` prefix, no token gate) | mint (idempotent) or revoke a read-only link for a manual list or saved search (400 for auto collections); `GET collections` carries `shareUrl` per collection; the page is self-contained HTML, `404` for unknown or revoked tokens and hidden collections ([ADR 0025](adr/0025-shareable-collection-pages.md)) |
 | `POST collections/:id/items { chatId }`, `DELETE collections/:id/items/:chatId`, `GET chats/:id/collections`, `GET collections/preview?query=` | add to / remove from a manual list (400 otherwise; emits `chat_updated`); the manual collections a chat is in; how many items a query would match |
 | `GET entities?kind=&limit=` | every entity of one kind across items, newest item first, each with `chatId`, `itemTitle`, `platform`, `createdAt` for the entity views; located places also carry `geo { lat, lon, label, source: brain \| geocoder }` |
 | `POST entities/geocode?retry=` | locate every `place` entity not yet in the `place_geo` cache through the configured geocoder (`retry=misses` forgets cached misses first); returns `{ places, located, unknown, retried }`; 409 when `GEOCODER=off` |
@@ -296,9 +300,14 @@ Detailed in [SECURITY.md](SECURITY.md) and [THREAT-MODEL.md](THREAT-MODEL.md).
   deletion. Scraped text leaves it inside the same `<untrusted>` wrapper the brain gets, and
   the calling agent is a paired device that Settings → Devices can revoke
   ([ADR 0023](adr/0023-mcp-server.md)).
-- Every API route requires a device token except the signature-verified webhook and the
-  state-checked OAuth callback. When `DOUBLETAKE_WEBHOOK_PUBLIC_HOST` is set, requests carrying
-  that `Host` get `404` for every path but the webhook. Secrets at rest (`SecretBox`) are sealed
+- Every API route requires a device token except the signature-verified webhook, the
+  state-checked OAuth callback and the shared collection pages at `/s/<token>`, where the
+  random token is the credential and the response is script-free HTML under
+  `default-src 'none'`, `noindex`, `no-store`, showing titles, tags and first answers only;
+  hidden or unshared collections answer `404` ([ADR 0025](adr/0025-shareable-collection-pages.md)).
+  When `DOUBLETAKE_WEBHOOK_PUBLIC_HOST` is set, requests carrying
+  that `Host` get `404` for every path but the webhook (and `/s/` when
+  `DOUBLETAKE_SHARE_PUBLIC=on`). Secrets at rest (`SecretBox`) are sealed
   with ChaCha20-Poly1305 under `~/.doubletake/keyfile` ([ADR 0018](adr/0018-instagram-channel-and-keyfile-secrets.md)).
 - Cost: per-run `maxBudgetUsd` and the daily cap in `cost_ledger`.
 

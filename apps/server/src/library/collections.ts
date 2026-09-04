@@ -21,6 +21,8 @@ export interface CollectionDto {
   auto: boolean;
   hidden: boolean;
   count: number;
+  /** Public read-only page URL when shared (ADR 0025), else null. */
+  shareUrl: string | null;
 }
 
 const CATEGORY_NAMES: Record<Category, string> = {
@@ -95,12 +97,14 @@ export function listCollections(
   repo: Repo,
   includeHidden: boolean,
   onlyNonEmpty: boolean,
+  /** Turns a share token into the public page URL (ADR 0025); omit → `shareUrl: null`. */
+  toShareUrl?: (token: string) => string,
 ): CollectionDto[] {
   const out: CollectionDto[] = [];
-  for (const c of repo.listCollections(includeHidden)) {
+  for (const { shareToken, ...c } of repo.listCollections(includeHidden)) {
     const count = resolveCollection(repo, c).size;
     if (onlyNonEmpty && c.auto && count === 0) continue;
-    out.push({ ...c, count });
+    out.push({ ...c, count, shareUrl: shareToken && toShareUrl ? toShareUrl(shareToken) : null });
   }
   // Manual first (owner-made), then auto by count desc, then name.
   return out.sort((a, b) =>

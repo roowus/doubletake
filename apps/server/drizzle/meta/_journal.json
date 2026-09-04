@@ -50,6 +50,13 @@
       "when": 1788700000000,
       "tag": "0006_place_geo",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1788800000000,
+      "tag": "0007_collection_share",
+      "breakpoints": true
     }
   ]
 }

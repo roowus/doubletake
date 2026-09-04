@@ -31,6 +31,10 @@ enforced in code.
 - The server binds loopback. Clients arrive via Tailscale. Only `/webhooks/instagram` is
   reachable from the public internet, through a tunnel; requests to other routes carrying the
   public hostname (`DOUBLETAKE_WEBHOOK_PUBLIC_HOST`) are answered `404` before authentication.
+  The one exception is opt-in: with `DOUBLETAKE_SHARE_PUBLIC=on` the shared collection pages
+  `/s/<token>` also answer there. Those pages are script-free HTML (`default-src 'none'`),
+  the random token is the only credential, and they show titles, tags and first answers, never
+  notes or extractions ([ADR 0025](adr/0025-shareable-collection-pages.md)).
 
 ## Authentication and secrets
 - Owner password (argon2id) set at first run; per-device long-lived tokens (random 32 bytes,

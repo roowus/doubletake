@@ -175,6 +175,14 @@ Pick one:
 
 The server rejects any non-webhook route whose `Host` equals `DOUBLETAKE_WEBHOOK_PUBLIC_HOST`.
 
+### Shared collection pages
+A shared collection's link ([ADR 0025](adr/0025-shareable-collection-pages.md)) uses
+`DOUBLETAKE_PUBLIC_URL`, so out of the box only people on your tailnet can open it. To hand
+links to anyone, set `DOUBLETAKE_SHARE_PUBLIC=on` and widen the tunnel to the `/s/` prefix as
+well (Cloudflare: a second ingress rule `path: ^/s/`; Funnel: `tailscale funnel --set-path=/s
+http://127.0.0.1:7391/s`). New links then use the public hostname; existing ones keep working
+on both. Everything else on that hostname still answers `404`.
+
 ## Backups
 Copy `~/.doubletake` (stop the service first or use `sqlite3 .backup`) and `~/Doubletake`.
 Restore = copy back. Secrets need the same owner password.

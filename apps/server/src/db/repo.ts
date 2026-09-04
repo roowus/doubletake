@@ -460,6 +460,10 @@ export class Repo {
     return this.db.select().from(s.collections).where(eq(s.collections.name, name)).get();
   }
 
+  findCollectionByShareToken(token: string) {
+    return this.db.select().from(s.collections).where(eq(s.collections.shareToken, token)).get();
+  }
+
   findCollectionByQuery(query: string) {
     return this.db.select().from(s.collections).where(eq(s.collections.query, query)).get();
   }
@@ -475,7 +479,9 @@ export class Repo {
 
   updateCollection(
     id: string,
-    patch: Partial<Pick<typeof s.collections.$inferInsert, 'name' | 'query' | 'hidden'>>,
+    patch: Partial<
+      Pick<typeof s.collections.$inferInsert, 'name' | 'query' | 'hidden' | 'shareToken'>
+    >,
   ) {
     this.db.update(s.collections).set(patch).where(eq(s.collections.id, id)).run();
   }

@@ -10,6 +10,8 @@ import {
 } from '../channels/instagram/index.js';
 import type { Config } from '../config/index.js';
 
+import { SHARE_PATH_PREFIX } from '../library/share.js';
+
 export const IG_PUBLIC_PATHS = ['/api/ig/callback'];
 export const IG_WEBHOOK_PATH = '/webhooks/instagram';
 
@@ -24,7 +26,9 @@ export function hostAllowed(cfg: Config, hostHeader: string | undefined, url: st
   const host = (hostHeader ?? '').split(':')[0]?.toLowerCase() ?? '';
   if (host !== pub) return true;
   const path = url.split('?')[0] ?? url;
-  return path === IG_WEBHOOK_PATH;
+  if (path === IG_WEBHOOK_PATH) return true;
+  // Shared read-only collection pages may opt in to the public hostname (ADR 0025).
+  return cfg.sharePublic && path.startsWith(SHARE_PATH_PREFIX);
 }
 
 export interface IgRouteDeps {
