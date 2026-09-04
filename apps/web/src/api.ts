@@ -70,6 +70,25 @@ export interface Device {
   createdAt: string;
 }
 
+export interface IgStatus {
+  configured: boolean;
+  connected: boolean;
+  igUserId: string | null;
+  username: string | null;
+  expiresAt: string | null;
+  refreshedAt: string | null;
+  webhookPublicHost: string | null;
+  mentionPolling: boolean;
+  scopes: string[];
+  recentEvents: {
+    id: string;
+    kind: string;
+    itemId: string | null;
+    receivedAt: string;
+    error: string | null;
+  }[];
+}
+
 export const api = {
   health: () => call<{ ok: boolean; hasOwner: boolean }>('GET', '/api/health', undefined, false),
   setup: (password: string, deviceName: string) =>
@@ -113,6 +132,13 @@ export const api = {
   pushSubscriptions: () => call<PushSubscriptionRow[]>('GET', '/api/push/subscriptions'),
   pushTest: () =>
     call<{ sent: number; gone: number; failed: number; skipped: number }>('POST', '/api/push/test'),
+  /** 404 when the server has no IG_APP_ID/IG_APP_SECRET (routes are not registered). */
+  igStatus: () => call<IgStatus>('GET', '/api/ig/status'),
+  igConnect: () => call<{ url: string }>('POST', '/api/ig/connect'),
+  igDisconnect: () => call<void>('DELETE', '/api/ig/account'),
+  igRefresh: () => call<IgStatus>('POST', '/api/ig/refresh'),
+  igPoll: () =>
+    call<{ handled: unknown[]; duplicates: number; ignored: number }>('POST', '/api/ig/poll'),
 };
 
 export type LiveEvent =
