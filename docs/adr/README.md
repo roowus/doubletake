@@ -30,6 +30,7 @@ One file per decision, numbered, never deleted. Superseding a decision means a n
 | [0023](0023-mcp-server.md) | MCP server for other agents: stateless Streamable HTTP at `/mcp` behind the device-token gate; read tools mirror the REST library routes as Markdown with extractions still wrapped `<untrusted>`, write tools only enqueue `save`/`ask_library`; no file, shell or network tools | accepted |
 | [0024](0024-karakeep-memos-interchange.md) | Karakeep and Memos interchange: export the library as Karakeep's own export file and as Memos create bodies; import a Karakeep file as `import`-channel items with tags, original dates and manual lists as collections, deduplicated by canonical URL over all time; no runs unless `?research=` is passed | accepted |
 | [0025](0025-shareable-collection-pages.md) | Shareable read-only collection pages: a manual list or saved search gets a random path token, `GET /s/<token>` renders a script-free HTML page of titles, tags and first answers (never the note or extractions); tailnet-only unless `DOUBLETAKE_SHARE_PUBLIC=on` opens `/s/` on the tunnel host | accepted |
+| [0026](0026-remote-media-worker.md) | Remote media worker: `doubletake-media serve` exposes the same line protocol over HTTP (NDJSON stream + `/files`) behind a bearer token on the tailnet; `DOUBLETAKE_WORKER_URL` selects `RemoteMediaClient`, which mirrors assets and frames into the server's data dir, or trusts a shared path when told to | accepted |
 
 ## Template
 

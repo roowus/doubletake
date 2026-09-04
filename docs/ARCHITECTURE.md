@@ -40,6 +40,7 @@ channel; the Instagram bot is optional and documented as fragile.
 | Knowledge | Markdown export of every finished chat into `~/Doubletake`; FTS5 search; auto tags and collections; cross-library questions answered by the brain from FTS-retrieved chats | [0011](adr/0011-markdown-export-fts-tags.md), [0021](adr/0021-cross-library-chat.md) |
 | Integrations | Other agents read and feed the library over MCP: stateless Streamable HTTP at `/mcp` behind the device-token gate, read tools mirror the REST library routes, extractions stay `<untrusted>`-wrapped, writes only enqueue runs. Karakeep and Memos interchange as files: export in their shapes, import a Karakeep file as `import`-channel items, no runs unless asked | [0023](adr/0023-mcp-server.md), [0024](adr/0024-karakeep-memos-interchange.md) |
 | Sharing | A manual list or saved search can be shared as a read-only page at `/s/<token>` (token = credential, script-free HTML, first answers only, never notes or extractions); links stay on the tailnet unless `DOUBLETAKE_SHARE_PUBLIC=on` | [0025](adr/0025-shareable-collection-pages.md) |
+| Multi-device | The media worker can run on another tailnet machine: same protocol over HTTP with a bearer token, server mirrors assets and frames into its own data dir (or trusts a shared filesystem path); database, brain, queue and vault never leave the server | [0026](adr/0026-remote-media-worker.md) |
 | Structure | Every run also extracts a category and typed entities (places, recipes, products, tools, tips); collections are automatic per category and entity kind; places are geocoded (brain coordinates first, else a Nominatim-compatible geocoder, cached) and shown on a Leaflet map | [0014](adr/0014-structured-extraction-and-categories.md), [0022](adr/0022-map-view-place-geocoding.md) |
 | Platforms | Server-side extractor registry, one file per platform, `web` fallback; v1: Instagram, TikTok, YouTube + Shorts, X, Reddit, AI-chat shares | [0015](adr/0015-platform-extractor-registry.md) |
 | Cost | Daily spend cap; runs queue as `capped` when hit; per-run cost shown in chat | [0012](adr/0012-cost-cap.md) |
@@ -66,8 +67,10 @@ channel; the Instagram bot is optional and documented as fragile.
   worker, and spawns the Python media worker lazily as a long-lived child speaking JSON-lines
   over stdio ([Media pipeline](MEDIA-PIPELINE.md), [ADR 0017](adr/0017-media-worker-process-and-vision-via-brain.md)).
   A crashed worker is respawned and the request retried once; a failed media stage degrades
-  the run to page-level extraction with a warning. `DOUBLETAKE_WORKER_URL` can point at a
-  worker on another machine later without changing the protocol.
+  the run to page-level extraction with a warning. `DOUBLETAKE_WORKER_URL` points at
+  `doubletake-media serve` on another tailnet machine instead: same protocol over HTTP with a
+  bearer token, results mirrored into the server's data dir ([ADR 0026](adr/0026-remote-media-worker.md),
+  [Deployment](DEPLOYMENT.md#media-worker-on-another-machine)).
 - **Reachability.** Binds `127.0.0.1`. `tailscale serve` gives HTTPS on the tailnet for
   clients. Only `/webhooks/instagram` is reachable from the public internet, through
   Cloudflare Tunnel or Tailscale Funnel; the server refuses every other route when the request

@@ -46,6 +46,7 @@ export function tempEnv(prefix = 'dt-test-') {
       vision: 'cloud',
       whisperBackend: 'off',
       ytdlpCookiesFromBrowser: null,
+      remote: null,
     },
     ig: {
       appId: 'app123',

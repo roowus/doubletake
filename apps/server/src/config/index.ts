@@ -76,6 +76,11 @@ export interface Config {
     vision: 'cloud' | 'local' | 'off';
     whisperBackend: string;
     ytdlpCookiesFromBrowser: string | null;
+    /**
+     * `doubletake-media serve` on another machine (ADR 0026); null = spawn the worker locally.
+     * `sharedPaths` = both machines see one filesystem at the same path, so nothing is copied.
+     */
+    remote: { url: string; token: string | null; sharedPaths: boolean } | null;
   };
   /** Instagram shadow-account channel (docs/channels/instagram-setup.md). All null = disabled. */
   ig: {
@@ -166,6 +171,13 @@ export function loadConfig(): Config {
       vision: visionMode(env('DOUBLETAKE_VISION', 'cloud')),
       whisperBackend: env('DOUBLETAKE_WHISPER_BACKEND', 'auto') ?? 'auto',
       ytdlpCookiesFromBrowser: env('DOUBLETAKE_YTDLP_COOKIES_FROM_BROWSER') ?? null,
+      remote: env('DOUBLETAKE_WORKER_URL')
+        ? {
+            url: env('DOUBLETAKE_WORKER_URL') ?? '',
+            token: env('DOUBLETAKE_WORKER_TOKEN') ?? null,
+            sharedPaths: (env('DOUBLETAKE_WORKER_SHARED_PATHS', 'off') ?? 'off') === 'on',
+          }
+        : null,
     },
     ig: {
       appId: env('IG_APP_ID') ?? null,

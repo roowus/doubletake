@@ -8,6 +8,8 @@ import { loadConfig } from './config/index.js';
 import { openDb } from './db/index.js';
 import { Repo } from './db/repo.js';
 import { Geocoder } from './geo/index.js';
+import type { MediaClient } from './media/protocol.js';
+import { RemoteMediaClient } from './media/remote-client.js';
 import { MediaWorkerClient } from './media/worker-client.js';
 import { createHub } from './notify/index.js';
 import { DigestGate } from './notify/quiet.js';
@@ -69,11 +71,20 @@ export async function main(): Promise<void> {
     ...(ig ? { ig } : {}),
     geocoder,
   });
-  const media = cfg.media.enabled ? new MediaWorkerClient(cfg, app.log) : null;
+  const media: MediaClient | null = !cfg.media.enabled
+    ? null
+    : cfg.media.remote
+      ? new RemoteMediaClient(cfg, cfg.media.remote, app.log)
+      : new MediaWorkerClient(cfg, app.log);
   worker.media = media;
   if (media) {
     void media.ping().then((ok) => {
-      if (!ok) app.log.warn('media worker did not answer ping; check logs/worker.log');
+      if (!ok)
+        app.log.warn(
+          cfg.media.remote
+            ? `remote media worker at ${cfg.media.remote.url} did not answer ping`
+            : 'media worker did not answer ping; check logs/worker.log',
+        );
     });
   }
 
@@ -87,7 +98,7 @@ export async function main(): Promise<void> {
       .map((b) => b.id)
       .join(
         '+',
-      )}, push: ${hub.kinds().join('+') || 'none'}, media: ${media ? `${cfg.media.command.join(' ')} vision=${cfg.media.vision}` : 'off'}, instagram: ${igState}, data: ${cfg.dataDir})`,
+      )}, push: ${hub.kinds().join('+') || 'none'}, media: ${media ? `${cfg.media.remote ? `remote ${cfg.media.remote.url}${cfg.media.remote.sharedPaths ? ' (shared paths)' : ''}` : cfg.media.command.join(' ')} vision=${cfg.media.vision}` : 'off'}, instagram: ${igState}, data: ${cfg.dataDir})`,
   );
 
   const shutdown = async () => {
