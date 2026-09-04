@@ -11,6 +11,7 @@ import { Auth, AuthError } from '../auth/index.js';
 import type { InstagramChannel } from '../channels/instagram/index.js';
 import type { Config } from '../config/index.js';
 import type { Repo } from '../db/repo.js';
+import { brainCoords, type Geocoder, geocodeQuery } from '../geo/index.js';
 import { IngestError, ingest } from '../ingest/index.js';
 import {
   listCollections,
@@ -21,7 +22,7 @@ import {
 import type { NotificationHub } from '../notify/hub.js';
 import { type DigestGate, parseHHMM, validTimeZone } from '../notify/quiet.js';
 import type { QueueWorker } from '../queue/worker.js';
-import { toChatDetail, toChatSummary, toEntityHit, toRunDto } from './dto.js';
+import { safeJson, toChatDetail, toChatSummary, toEntityHit, toRunDto } from './dto.js';
 import { ftsQuery } from './fts.js';
 import { hostAllowed, IG_PUBLIC_PATHS, registerInstagramRoutes } from './instagram.js';
 
@@ -39,6 +40,8 @@ export interface ServerDeps {
   digest?: DigestGate;
   /** Instagram channel; when absent the webhook and /api/ig routes are not registered. */
   ig?: InstagramChannel;
+  /** Place geocoder (ADR 0022); when absent `POST /api/entities/geocode` answers 409. */
+  geocoder?: Geocoder;
 }
 
 const PUBLIC_PATHS = new Set([
@@ -317,7 +320,49 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
         limit: z.coerce.number().int().min(1).max(1000).default(500),
       })
       .parse(req.query);
-    return repo.listEntitiesByKind(q.kind.toLowerCase(), q.limit).map((r) => toEntityHit(r));
+    const kind = q.kind.toLowerCase();
+    const rows = repo.listEntitiesByKind(kind, q.limit);
+    if (kind !== 'place') return rows.map((r) => toEntityHit(r));
+    // Places carry coordinates when known: the brain's own lat/lon, else the geocoder cache (ADR 0022).
+    const cache = new Map(repo.listPlaceGeo().map((g) => [g.query, g]));
+    return rows.map((r) => {
+      const attrs = safeJson(r.entity.attributes);
+      const own = brainCoords(attrs);
+      if (own) return toEntityHit(r, { ...own, label: null, source: 'brain' });
+      const g = cache.get(geocodeQuery({ name: r.entity.name, attributes: attrs }));
+      const geo =
+        g && g.lat !== null && g.lon !== null
+          ? { lat: g.lat, lon: g.lon, label: g.label, source: 'geocoder' as const }
+          : null;
+      return toEntityHit(r, geo);
+    });
+  });
+
+  /** Geocode every place that has no coordinates yet (backfill after enabling the geocoder). */
+  app.post('/api/entities/geocode', async (_req, reply) => {
+    if (!deps.geocoder?.enabled) return reply.code(409).send({ error: 'geocoder is off' });
+    const rows = repo.listEntitiesByKind('place', 1000);
+    const seen = new Set<string>();
+    let located = 0;
+    let unknown = 0;
+    for (const r of rows) {
+      if (seen.has(r.item.id)) continue;
+      seen.add(r.item.id);
+      await deps.geocoder.locateItem(r.item.id);
+    }
+    const cache = new Map(repo.listPlaceGeo().map((g) => [g.query, g]));
+    for (const r of rows) {
+      const attrs = safeJson(r.entity.attributes);
+      if (brainCoords(attrs)) {
+        located++;
+        continue;
+      }
+      const g = cache.get(geocodeQuery({ name: r.entity.name, attributes: attrs }));
+      if (g && g.lat !== null) located++;
+      else unknown++;
+    }
+    for (const r of rows) worker.emit('chat_updated', r.chatId);
+    return { places: rows.length, located, unknown };
   });
 
   /** Preview what a query would match without saving it. */

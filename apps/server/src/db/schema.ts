@@ -239,6 +239,16 @@ export const pendingNotifications = sqliteTable('pending_notifications', {
   createdAt: text('created_at').notNull(),
 });
 
+/** Geocoder cache for place entities, keyed by the query string; misses are stored with null coords (ADR 0022). */
+export const placeGeo = sqliteTable('place_geo', {
+  query: text('query').primaryKey(),
+  lat: real('lat'),
+  lon: real('lon'),
+  label: text('label'),
+  provider: text('provider').notNull(),
+  resolvedAt: text('resolved_at').notNull(),
+});
+
 export const costLedger = sqliteTable(
   'cost_ledger',
   {

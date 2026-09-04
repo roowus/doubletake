@@ -2,6 +2,7 @@ import type {
   Answer,
   ChatDetail,
   ChatSummary,
+  EntityGeo,
   EntityHit,
   MessageDto,
   RunDto,
@@ -105,7 +106,7 @@ function latestExtractions(rows: ReturnType<Repo['listExtractions']>): ChatDetai
     .filter((e) => e.text.length > 0);
 }
 
-function safeJson(s: string): Record<string, unknown> {
+export function safeJson(s: string): Record<string, unknown> {
   try {
     const v = JSON.parse(s);
     return v && typeof v === 'object' ? (v as Record<string, unknown>) : {};
@@ -115,12 +116,16 @@ function safeJson(s: string): Record<string, unknown> {
 }
 
 /** One entity plus where it came from, for the per-kind entity views. */
-export function toEntityHit(r: ReturnType<Repo['listEntitiesByKind']>[number]): EntityHit {
+export function toEntityHit(
+  r: ReturnType<Repo['listEntitiesByKind']>[number],
+  geo?: EntityGeo | null,
+): EntityHit {
   return {
     kind: r.entity.kind as EntityHit['kind'],
     name: r.entity.name,
     attributes: safeJson(r.entity.attributes),
     ...(r.entity.url ? { url: r.entity.url } : {}),
+    ...(geo ? { geo } : {}),
     confidence: r.entity.confidence ?? 0.7,
     chatId: r.chatId,
     itemTitle: r.item.title ?? r.item.sourceUrl ?? 'Untitled',

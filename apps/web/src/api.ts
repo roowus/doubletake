@@ -178,6 +178,9 @@ export const api = {
     call<{ collectionIds: string[] }>('GET', `/api/chats/${chatId}/collections`),
   entities: (kind: EntityKind, limit = 200) =>
     call<EntityHit[]>('GET', `/api/entities?kind=${kind}&limit=${limit}`),
+  /** Geocode every place without coordinates (409 when the server's geocoder is off). */
+  geocodePlaces: () =>
+    call<{ places: number; located: number; unknown: number }>('POST', '/api/entities/geocode'),
   addTag: (chatId: string, name: string) =>
     call<{ tags: string[] }>('POST', `/api/chats/${chatId}/tags`, { name }),
   removeTag: (chatId: string, name: string) =>

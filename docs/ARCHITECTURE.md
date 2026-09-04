@@ -38,7 +38,7 @@ channel; the Instagram bot is optional and documented as fragile.
 | Network | Bind loopback; Tailscale serve by default; Cloudflare Tunnel or Tailscale Funnel only for the IG webhook path | [0009](adr/0009-networking.md) |
 | Auth | Owner password at setup + long-lived per-device tokens via QR pairing | [0010](adr/0010-auth-owner-password-device-tokens.md) |
 | Knowledge | Markdown export of every finished chat into `~/Doubletake`; FTS5 search; auto tags and collections; cross-library questions answered by the brain from FTS-retrieved chats | [0011](adr/0011-markdown-export-fts-tags.md), [0021](adr/0021-cross-library-chat.md) |
-| Structure | Every run also extracts a category and typed entities (places, recipes, products, tools, tips); collections are automatic per category and entity kind | [0014](adr/0014-structured-extraction-and-categories.md) |
+| Structure | Every run also extracts a category and typed entities (places, recipes, products, tools, tips); collections are automatic per category and entity kind; places are geocoded (brain coordinates first, else a Nominatim-compatible geocoder, cached) and shown on a Leaflet map | [0014](adr/0014-structured-extraction-and-categories.md), [0022](adr/0022-map-view-place-geocoding.md) |
 | Platforms | Server-side extractor registry, one file per platform, `web` fallback; v1: Instagram, TikTok, YouTube + Shorts, X, Reddit, AI-chat shares | [0015](adr/0015-platform-extractor-registry.md) |
 | Cost | Daily spend cap; runs queue as `capped` when hit; per-run cost shown in chat | [0012](adr/0012-cost-cap.md) |
 | License | AGPL-3.0, public repo from day one | [0013](adr/0013-agpl-public.md) |
@@ -210,7 +210,10 @@ filters the list via `?collection=<id>`; auto collections can be hidden, others 
 "+ collection" form creates a manual list or a saved search with a live match count) and links
 to the **entity views** `/entities/<kind>` (places with a Maps link, recipes with ingredients,
 products with price, tools with install line, tips, media, people, events; each card links back
-to the chat it came from); chat view with answer,
+to the chat it came from) and to the **map** `/map` (Leaflet over OpenStreetMap tiles fetched
+by the browser; one circle marker per located place, popup linking to its chat, a list of
+unlocated places with the Maps search link and a **Locate N more** backfill button,
+[ADR 0022](adr/0022-map-view-place-geocoding.md)); chat view with answer,
 entity cards, claims table, a collapsible **Sources** panel showing every extraction the brain
 saw (transcript, on-screen text, frame descriptions, caption, comments, thread, page text)
 flattened to readable text by `extract/flatten.ts`, editable tag chips (× removes, an inline
@@ -244,7 +247,8 @@ and is authenticated by Meta's signature instead.
 | `GET tags`, `POST chats/:id/tags { name }`, `DELETE chats/:id/tags/:name` | all tags with counts; add a manual tag (normalised: trimmed, lowercase, ≤40 chars); remove any tag from the item. Both edits re-index FTS, re-export the note and emit `chat_updated` |
 | `GET collections?all=&hidden=`, `POST collections { name, query? }`, `POST collections/:id { name?, query?, hidden? }`, `DELETE collections/:id` | list with item counts (empty auto collections omitted unless `all=true`, hidden ones unless `hidden=true`; auto collections are seeded at boot, one per category and one per entity kind); create a manual list (no `query`) or a saved search (`query` = `category:<c>` · `entity:<kind>` · `tag:<name>` · FTS text); rename/retarget/hide (400 when giving an auto collection a query); delete (400 for auto — hide instead) |
 | `POST collections/:id/items { chatId }`, `DELETE collections/:id/items/:chatId`, `GET chats/:id/collections`, `GET collections/preview?query=` | add to / remove from a manual list (400 otherwise; emits `chat_updated`); the manual collections a chat is in; how many items a query would match |
-| `GET entities?kind=&limit=` | every entity of one kind across items, newest item first, each with `chatId`, `itemTitle`, `platform`, `createdAt` for the entity views |
+| `GET entities?kind=&limit=` | every entity of one kind across items, newest item first, each with `chatId`, `itemTitle`, `platform`, `createdAt` for the entity views; located places also carry `geo { lat, lon, label, source: brain \| geocoder }` |
+| `POST entities/geocode` | locate every `place` entity not yet in the `place_geo` cache through the configured geocoder; returns `{ places, located, unknown }`; 409 when `GEOCODER=off` |
 | `POST chats/:id/messages` | follow-up turn (cheap path) |
 | `POST chats/:id/research { mode?, note? }` | full re-run, session resumed |
 | `GET chats/:id/runs/:runId/events`, `POST runs/:id/cancel` | backfill run events; abort |

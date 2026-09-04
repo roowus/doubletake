@@ -43,7 +43,7 @@ function attrText(v: unknown): string {
 }
 
 /** Places get a Maps link even when the model gave no URL. */
-function mapsUrl(hit: EntityHit): string | null {
+export function mapsUrl(hit: EntityHit): string | null {
   if (hit.kind !== 'place') return null;
   const a = hit.attributes;
   const explicit = a.maps_url ?? a.map_url ?? a.google_maps;
@@ -124,6 +124,11 @@ export function Entities({ kind }: { kind: EntityKind }) {
       </div>
       <div className="row">
         <h3 style={{ margin: 0, flex: 1 }}>{spec.title}</h3>
+        {kind === 'place' && (
+          <Link to="/map" className="small">
+            map view
+          </Link>
+        )}
         <input
           placeholder="Filter…"
           value={filter}

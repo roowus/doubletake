@@ -37,6 +37,7 @@ export function tempEnv(prefix = 'dt-test-') {
     fcmServiceAccountPath: null,
     ntfy: null,
     telegram: null,
+    geocoder: { provider: 'off', url: '', email: null },
     media: {
       enabled: false,
       command: [],

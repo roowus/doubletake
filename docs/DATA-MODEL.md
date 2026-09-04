@@ -70,7 +70,16 @@ Content shapes:
 place: `address`, `city`, `cuisine`, `maps_url`; recipe: `ingredients[]`, `time_min`; product:
 `brand`, `price`, `url`; tool: `install`, `url`), `url`, `confidence`, `created_at`.
 Index `(kind, name)`. Re-runs replace the item's entities. Rendered as cards in the chat and
-listed per kind in auto collections.
+listed per kind in auto collections. Place attributes may carry brain-supplied `lat`/`lon`
+(numbers, only when the model is sure), which the map uses before asking the geocoder.
+
+### place_geo
+Geocoder cache ([ADR 0022](adr/0022-map-view-place-geocoding.md)). `query` primary key (place
+name + `address`/`city`/`town`/`region`/`state`/`country` attributes, deduplicated, ≤200
+chars), `lat`, `lon` (both null for a miss, so unknown places are asked once), `label`
+(provider display name), `provider` (`nominatim`), `resolved_at`. Filled after each research
+run that produced places and by `POST /api/entities/geocode`. Never holds notes, answers or
+URLs. Migration `0006_place_geo`.
 
 ### tags / item_tags / collections / collection_items
 `tags`: `id`, `name` unique (normalised: trimmed, lowercase, single spaces, ≤40 chars), `kind`
