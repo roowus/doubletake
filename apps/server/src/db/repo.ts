@@ -1,6 +1,6 @@
 import type { Answer, IngestRequest, Mode, Platform, RunKind } from '@doubletake/shared';
 import { newId, nowIso } from '@doubletake/shared';
-import { and, desc, eq, gte, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, isNull, sql } from 'drizzle-orm';
 import type { Db } from './index.js';
 import * as s from './schema.js';
 
@@ -567,6 +567,10 @@ export class Repo {
         },
       })
       .run();
+  }
+  /** Forget cached misses so the next lookup asks the geocoder again; returns how many. */
+  clearPlaceGeoMisses(): number {
+    return this.db.delete(s.placeGeo).where(isNull(s.placeGeo.lat)).run().changes;
   }
   /** Every cached geocode, for joining onto place entities in one pass. */
   listPlaceGeo() {
