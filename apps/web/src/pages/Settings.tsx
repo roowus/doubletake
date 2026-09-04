@@ -39,11 +39,14 @@ export function Settings() {
       .then(setIg)
       .catch((e) => setIg(e instanceof ApiError && e.status === 404 ? 'off' : null));
 
-  const load = () => {
+  const [checking, setChecking] = useState(false);
+  const load = (health: 'cached' | 'refresh' = 'cached') => {
+    if (health === 'refresh') setChecking(true);
     api
-      .status()
+      .status(health)
       .then(setStatus)
-      .catch((e) => setErr(String(e.message ?? e)));
+      .catch((e) => setErr(String(e.message ?? e)))
+      .finally(() => setChecking(false));
     api
       .devices()
       .then(setDevices)
@@ -104,6 +107,29 @@ export function Settings() {
           <div className="small stack" style={{ gap: 4 }}>
             {native && <div>Server: {apiBase()}</div>}
             <div>Brain: {status.brain}</div>
+            {status.brains.map((b) => (
+              <div key={b.id} className="row" style={{ gap: 6, alignItems: 'baseline' }}>
+                <span title={b.ok ? 'healthy' : 'unhealthy'}>{b.ok ? '✓' : '✗'}</span>
+                <span>{b.id}</span>
+                {b.default && <span className="muted">default</span>}
+                {b.modes.map((m) => (
+                  <span key={m} className="muted">
+                    {m}
+                  </span>
+                ))}
+                {b.detail && <span className="muted">— {b.detail}</span>}
+              </div>
+            ))}
+            <div className="row">
+              <button
+                type="button"
+                className="ghost"
+                disabled={checking}
+                onClick={() => load('refresh')}
+              >
+                {checking ? 'Checking…' : 'Re-check brains'}
+              </button>
+            </div>
             <div>
               Spent today: ${status.spentTodayUsd.toFixed(3)} / cap ${status.dailyCapUsd.toFixed(2)}
             </div>

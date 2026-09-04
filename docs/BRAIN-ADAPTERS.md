@@ -218,22 +218,39 @@ it when `DOUBLETAKE_VISION=cloud`; adapters without it produce a warning and no 
 
 ## Selection
 
-```jsonc
-{
-  "brain": {
-    "default": "claude-agent-sdk",
-    "modes": { "quick": "openai-compatible:deepseek-fast", "deep": "claude-agent-sdk" },
-    "instances": {
-      "claude-agent-sdk": { "model": "claude-sonnet-5" },
-      "openai-compatible:deepseek-fast": { "baseUrl": "https://api.deepseek.com", "model": "deepseek-chat", "apiKeyEnv": "DEEPSEEK_API_KEY" },
-      "openai-compatible:rewter": { "baseUrl": "http://127.0.0.1:20128/v1", "model": "auto" },
-      "headless-cli:hermes": { "preset": "hermes" }
-    }
-  }
-}
+`DOUBLETAKE_BRAIN` names the default adapter and `DOUBLETAKE_BRAIN_MODEL` its model. Each mode
+can be bound to a different adapter (and optionally a model) with
+`DOUBLETAKE_BRAIN_QUICK` / `DOUBLETAKE_BRAIN_STANDARD` / `DOUBLETAKE_BRAIN_DEEP=adapter[@model]`:
+
+```sh
+DOUBLETAKE_BRAIN=claude-agent-sdk
+DOUBLETAKE_BRAIN_MODEL=claude-sonnet-5
+DOUBLETAKE_BRAIN_QUICK=openai-compatible@deepseek-chat   # cheap tier
+DOUBLETAKE_BRAIN_DEEP=claude-agent-sdk@claude-opus-5     # same adapter, bigger model
 ```
 
-Per-run override from the UI (re-run menu) is allowed for any configured instance.
+Every adapter named here is constructed once at boot (`BrainSet.fromConfig`,
+`apps/server/src/brains/registry.ts`); a mode bound to an unknown adapter id fails boot. Each
+adapter reads its own settings (`OPENAI_*`, `DOUBLETAKE_HEADLESS_*`), so one instance per adapter
+kind exists per server; run two servers if you need two OpenAI-compatible endpoints.
+
+How a run picks its adapter:
+
+- **Research**: the run is created on the adapter bound to the requested mode (auto = default).
+  After classification the run is rebound to the effective mode's adapter and model; the change
+  is recorded on the run (`adapter`, `model` columns) and shown in the timeline as a
+  `status` event with `phase: "adapter"`. Cost is charged to the adapter that ran.
+- **Follow-ups** stay on the adapter that owns the chat's session (`chat.brain_adapter`), so
+  `resume` keeps working even when the follow-up mode is bound elsewhere. The model binding of
+  the item's effective mode still applies when it targets that same adapter.
+- **Classification** (mode picker) always uses the default adapter.
+- **Vision** (`describeImages`) uses the mode's adapter when it implements it, else the default.
+- Per-run override from the UI (re-run menu) is a roadmap item.
+
+`GET /api/status` returns `brains[]`: one `{ id, ok, detail, default, modes, checkedAt }` per
+adapter from `healthcheck()`, cached for five minutes (the Claude SDK check costs a model call)
+and limited to 20 s per adapter; `?health=refresh` re-runs them, `?health=skip` omits them.
+Settings → Server lists the adapters with their status and a **Re-check brains** button.
 
 ## Writing a new adapter
 

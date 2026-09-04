@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { buildServer } from './api/server.js';
-import { createBrain } from './brains/registry.js';
+import { BrainSet } from './brains/registry.js';
 import { IgGraphClient } from './channels/instagram/graph.js';
 import { InstagramChannel } from './channels/instagram/index.js';
 import { loadConfig } from './config/index.js';
@@ -30,8 +30,9 @@ export async function main(): Promise<void> {
   }
   const { db, sqlite, close } = openDb(path.join(cfg.dataDir, 'doubletake.db'));
   const repo = new Repo(db, sqlite);
-  const brain = createBrain(cfg);
-  const worker = new QueueWorker(repo, brain, cfg);
+  const brains = BrainSet.fromConfig(cfg);
+  const brain = brains.defaultBrain;
+  const worker = new QueueWorker(repo, brains, cfg);
   const { hub, vapid } = createHub(cfg, repo);
   worker.notifier = hub;
   // Instagram channel: routes exist whenever the Meta app credentials are configured.
@@ -42,7 +43,7 @@ export async function main(): Promise<void> {
       repo,
       graph: new IgGraphClient(cfg.ig.graphBase, cfg.ig.appId, cfg.ig.appSecret),
       box: SecretBox.open(cfg.dataDir),
-      adapterId: brain.id,
+      adapterFor: (m) => brains.forMode(m),
       log: console,
     });
     worker.onOutcome = (item, outcome) => ig?.onOutcome(item, outcome) ?? Promise.resolve();
@@ -70,7 +71,12 @@ export async function main(): Promise<void> {
   await app.listen({ host: cfg.bind, port: cfg.port });
   const igState = ig ? (ig.status().connected ? 'connected' : 'not connected') : 'off';
   app.log.info(
-    `Doubletake listening on http://${cfg.bind}:${cfg.port} (brain: ${brain.id}, push: ${hub.kinds().join('+') || 'none'}, media: ${media ? `${cfg.media.command.join(' ')} vision=${cfg.media.vision}` : 'off'}, instagram: ${igState}, data: ${cfg.dataDir})`,
+    `Doubletake listening on http://${cfg.bind}:${cfg.port} (brain: ${brains
+      .all()
+      .map((b) => b.id)
+      .join(
+        '+',
+      )}, push: ${hub.kinds().join('+') || 'none'}, media: ${media ? `${cfg.media.command.join(' ')} vision=${cfg.media.vision}` : 'off'}, instagram: ${igState}, data: ${cfg.dataDir})`,
   );
 
   const shutdown = async () => {

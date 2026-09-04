@@ -21,6 +21,7 @@ export interface ServerDeps {
   cfg: Config;
   repo: Repo;
   worker: QueueWorker;
+  /** Default adapter; per-mode bindings are read from `worker.brains`. */
   brain: BrainAdapter;
   auth?: Auth;
   /** Push fan-out; when absent the push routes report `enabled: false`. */
@@ -149,7 +150,7 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
   // ---- ingest ----
   app.post('/api/ingest', async (req, reply) => {
     const body = IngestRequest.parse(req.body);
-    const out = ingest(body, { repo, adapterId: deps.brain.id });
+    const out = ingest(body, { repo, adapterFor: (m) => worker.brains.forMode(m) });
     worker.kick();
     return reply.code(202).send({
       itemId: out.item.id,
@@ -222,12 +223,14 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
     }
     const mode = body.mode ?? (item.modeEffective as Mode | null) ?? 'standard';
     repo.updateItem(item.id, { modeRequested: mode, status: 'new' });
+    const bound = worker.brains.forMode(mode);
     const run = repo.createRun({
       itemId: item.id,
       chatId: chat.id,
       kind: 'research',
       mode,
-      adapter: deps.brain.id,
+      adapter: bound.adapter.id,
+      model: bound.model,
     });
     worker.kick();
     return reply.code(202).send({ runId: run.id });
@@ -252,16 +255,22 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
     return { cancelled: worker.cancel(id) };
   });
 
-  app.get('/api/status', async () => ({
-    spentTodayUsd: repo.spentToday(),
-    dailyCapUsd: cfg.dailyCapUsd,
-    brain: deps.brain.id,
-    notesDir: cfg.notesDir,
-    push: {
-      kinds: deps.hub?.kinds() ?? [],
-      vapidPublicKey: deps.vapidPublicKey ?? null,
-    },
-  }));
+  app.get('/api/status', async (req) => {
+    const { health } = z
+      .object({ health: z.enum(['cached', 'refresh', 'skip']).default('cached') })
+      .parse(req.query);
+    return {
+      spentTodayUsd: repo.spentToday(),
+      dailyCapUsd: cfg.dailyCapUsd,
+      brain: deps.brain.id,
+      brains: health === 'skip' ? [] : await worker.brains.healthchecks(health === 'refresh'),
+      notesDir: cfg.notesDir,
+      push: {
+        kinds: deps.hub?.kinds() ?? [],
+        vapidPublicKey: deps.vapidPublicKey ?? null,
+      },
+    };
+  });
 
   // ---- push subscriptions (per device) ----
   const PushSubscribe = z.object({

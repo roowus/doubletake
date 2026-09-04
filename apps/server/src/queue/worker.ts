@@ -3,6 +3,7 @@ import type { BrainAdapter, ResearchBrief, RunOptions, ToolPolicy } from '@doubl
 import type { Answer, Mode, QuestionType, RunEvent, UntrustedBlock } from '@doubletake/shared';
 import { FOLLOWUP_BUDGET, MODE_BUDGETS } from '@doubletake/shared';
 import { OUTPUT_TEMPLATES, SYSTEM_FRAMING } from '../brains/prompts.js';
+import { BrainSet } from '../brains/registry.js';
 import type { Config } from '../config/index.js';
 import type { ItemRow, Repo, RunRow } from '../db/repo.js';
 import { exportItemMarkdown } from '../export/markdown.js';
@@ -87,13 +88,17 @@ export class QueueWorker extends EventEmitter {
   /** Optional; the media worker client (null when `DOUBLETAKE_MEDIA_WORKER=off`). */
   media: MediaClient | null = null;
 
+  /** Default adapter plus per-mode bindings; a bare adapter is wrapped as a one-member set. */
+  readonly brains: BrainSet;
+
   constructor(
     private readonly repo: Repo,
-    private readonly brain: BrainAdapter,
+    brain: BrainAdapter | BrainSet,
     private readonly cfg: Config,
     media: MediaClient | null = null,
   ) {
     super();
+    this.brains = BrainSet.from(brain);
     this.media = media;
   }
 
@@ -267,13 +272,15 @@ export class QueueWorker extends EventEmitter {
     kind: 'research' | 'followup',
     signal: AbortSignal,
     sessionId: string | null,
+    model: string | null,
   ): RunOptions {
     const b = MODE_BUDGETS[mode];
+    const m = model ?? this.cfg.brainModel;
     return {
       mode,
       maxTurns: kind === 'followup' ? FOLLOWUP_BUDGET.maxTurns : b.maxTurns,
       maxBudgetUsd: kind === 'followup' ? FOLLOWUP_BUDGET.maxBudgetUsd : b.maxBudgetUsd,
-      ...(this.cfg.brainModel ? { model: this.cfg.brainModel } : {}),
+      ...(m ? { model: m } : {}),
       ...(sessionId ? { sessionId } : {}),
       tools: this.policyFor(mode, kind),
       signal,
@@ -307,6 +314,8 @@ export class QueueWorker extends EventEmitter {
   ) {
     // 1. Extract. Forced modes decide extraction depth; auto starts standard and is refined below.
     const forced = item.modeRequested !== 'auto' ? (item.modeRequested as Mode) : null;
+    // Provisional adapter for the extraction stage; the effective mode below may rebind it.
+    let bound = this.brains.forMode(forced ?? (run.mode as Mode));
     let extraction: ExtractResult | null = null;
     const url = item.canonicalUrl ?? item.sourceUrl;
     const blocks: UntrustedBlock[] = [];
@@ -347,7 +356,7 @@ export class QueueWorker extends EventEmitter {
         const m = await runMediaStage({
           cfg: this.cfg,
           repo: this.repo,
-          brain: this.brain,
+          brain: this.brains.visionFor(bound.adapter),
           media: this.media,
           item,
           url: item.canonicalUrl ?? url,
@@ -408,11 +417,19 @@ export class QueueWorker extends EventEmitter {
           .join('\n')
           .slice(0, 600),
       },
-      this.brain,
+      this.brains.defaultBrain,
       signal,
     );
     const mode = cls.mode;
     const questionType = cls.question_type;
+    bound = this.brains.forMode(mode);
+    const model = bound.model ?? this.cfg.brainModel;
+    let current = run;
+    if (bound.adapter.id !== run.adapter || model !== run.model) {
+      current = { ...run, adapter: bound.adapter.id, model };
+      this.repo.updateRun(run.id, { adapter: current.adapter, model });
+      emit('status', { phase: 'adapter', adapter: current.adapter, ...(model ? { model } : {}) });
+    }
     this.repo.updateRun(run.id, { mode, status: 'researching' });
     this.repo.updateItem(item.id, { modeEffective: mode, questionType, status: 'researching' });
     emit('status', { phase: 'mode', mode, questionType, source: cls.source });
@@ -420,12 +437,12 @@ export class QueueWorker extends EventEmitter {
 
     // 3. Research.
     const brief = this.buildBrief(item, blocks, questionType);
-    const opts = this.runOptions(mode, 'research', signal, null);
-    const result = await this.brain.run(brief, opts, { emit: (e) => emit(e.type, e.payload) });
+    const opts = this.runOptions(mode, 'research', signal, null, bound.model);
+    const result = await bound.adapter.run(brief, opts, { emit: (e) => emit(e.type, e.payload) });
     if (extraction?.warnings.length) {
       result.text = `${result.text}\n\n> Extraction notes: ${extraction.warnings.join('; ')}`;
     }
-    return { ...result, mode, kind: 'research' as const };
+    return { ...result, mode, run: current, kind: 'research' as const };
   }
 
   private async followUp(
@@ -444,8 +461,13 @@ export class QueueWorker extends EventEmitter {
       .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }));
     const blocks = this.storedBlocks(item);
     this.repo.updateRun(run.id, { status: 'researching' });
-    emit('status', { phase: 'followup', resume: Boolean(sessionId) });
-    const result = await this.brain.followUp(
+    // Follow-ups stay on the adapter that owns the chat's session; a per-mode model binding for
+    // that adapter still applies so the resumed session keeps its model.
+    const adapter = this.brains.get(run.adapter);
+    const bound = this.brains.forMode(mode);
+    const model = bound.adapter === adapter ? bound.model : null;
+    emit('status', { phase: 'followup', resume: Boolean(sessionId), adapter: adapter.id });
+    const result = await adapter.followUp(
       {
         chatId,
         ...(sessionId ? { sessionId } : {}),
@@ -453,10 +475,10 @@ export class QueueWorker extends EventEmitter {
         brief: this.buildBrief(item, blocks, questionType),
       },
       run.userMessage ?? '',
-      this.runOptions(mode, 'followup', signal, sessionId),
+      this.runOptions(mode, 'followup', signal, sessionId, model),
       { emit: (e) => emit(e.type, e.payload) },
     );
-    return { ...result, mode, kind: 'followup' as const };
+    return { ...result, mode, run, kind: 'followup' as const };
   }
 
   /** Rebuild untrusted blocks from stored extractions for follow-ups without native resume. */
@@ -477,12 +499,14 @@ export class QueueWorker extends EventEmitter {
   }
 
   private finish(
-    run: RunRow,
+    started: RunRow,
     item: ItemRow,
     chatId: string,
     r: Awaited<ReturnType<QueueWorker['research']>> | Awaited<ReturnType<QueueWorker['followUp']>>,
     emit: (t: RunEvent['type'], p: Record<string, unknown>) => void,
   ): void {
+    // The research stage may have rebound the run to the mode's adapter; trust its copy.
+    const run = r.run ?? started;
     const finished = new Date().toISOString();
     const ok = r.stopReason === 'done' || r.stopReason === 'max_turns' || r.stopReason === 'budget';
     if (!ok) throw new Error(r.error ?? `brain stopped: ${r.stopReason}`);

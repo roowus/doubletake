@@ -49,10 +49,22 @@ async function call<T>(method: string, url: string, body?: unknown, auth = true)
   return (await res.json()) as T;
 }
 
+export interface BrainHealth {
+  id: string;
+  ok: boolean;
+  detail: string | null;
+  /** True for the adapter that handles unbound modes, classification and follow-up fallback. */
+  default: boolean;
+  /** Modes bound to this adapter via DOUBLETAKE_BRAIN_<MODE>. */
+  modes: string[];
+  checkedAt: string;
+}
 export interface Status {
   spentTodayUsd: number;
   dailyCapUsd: number;
   brain: string;
+  /** One entry per configured adapter; empty when `health=skip`. */
+  brains: BrainHealth[];
   notesDir: string;
   push: { kinds: string[]; vapidPublicKey: string | null };
 }
@@ -121,7 +133,9 @@ export const api = {
   runEvents: (chatId: string, runId: string) =>
     call<{ events: RunEvent[] }>('GET', `/api/chats/${chatId}/runs/${runId}/events`),
   cancelRun: (runId: string) => call<void>('POST', `/api/runs/${runId}/cancel`),
-  status: () => call<Status>('GET', '/api/status'),
+  /** `refresh` re-runs every adapter healthcheck instead of serving the 5-minute cache. */
+  status: (health: 'cached' | 'refresh' | 'skip' = 'cached') =>
+    call<Status>('GET', `/api/status?health=${health}`),
   pushSubscribe: (body: {
     kind: 'webpush' | 'fcm';
     endpoint: string;

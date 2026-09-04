@@ -207,6 +207,14 @@ describe('API', () => {
       await app.inject({ method: 'GET', url: '/api/status', headers: auth() })
     ).json();
     expect(status.spentTodayUsd).toBeCloseTo(0.06);
+    expect(status.brain).toBe('fake');
+    expect(status.brains).toHaveLength(1);
+    expect(status.brains[0]).toMatchObject({ id: 'fake', ok: true, default: true, modes: [] });
+    expect(typeof status.brains[0].checkedAt).toBe('string');
+    const skipped = (
+      await app.inject({ method: 'GET', url: '/api/status?health=skip', headers: auth() })
+    ).json();
+    expect(skipped.brains).toEqual([]);
   });
 
   it('validation errors are 400 with issues', async () => {
