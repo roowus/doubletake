@@ -38,6 +38,7 @@ Two interfaces to explain instead of one, each a few lines. Owner channels canno
 from the UI, only tested; changing them means editing `.env` and restarting. Failures are
 logged and counted in the hub result but never disable the channel. The Telegram bot token
 lives in `.env` like the other secrets (ADR 0018's `SecretBox` is for tokens the server
-obtains itself). Verified live 2026-09-04 against ntfy.sh only when the owner configures a
-topic; the Telegram path is exercised by tests with an injected `fetch` and marked
-**unverified** in the deployment guide until someone runs it against the real Bot API.
+obtains itself). The ntfy path was verified live on 2026-09-04 against ntfy.sh (test button
+and a real run completion, including the click URL); the Telegram path is exercised by tests
+with an injected `fetch` and marked **unverified** in the deployment guide until someone runs
+it against the real Bot API.
