@@ -10,6 +10,7 @@ import {
   HEADLESS_PRESETS,
   HeadlessCliAdapter,
   type HeadlessPreset,
+  matchSessionId,
   parseOutput,
   substitute,
 } from '../src/brains/headless-cli.js';
@@ -153,6 +154,32 @@ describe('headless-cli adapter', () => {
     expect(res.sessionId).toBe('sess-abc123');
   });
 
+  it('hermes preset: answer on stdout, session id from stderr, resumed on follow-up', async () => {
+    const hermes = HEADLESS_PRESETS.hermes as HeadlessPreset;
+    const calls: Spawned[] = [];
+    const a = make(
+      { stdout: 'PONG\n', stderr: '\nsession_id: 20260904_121236_c417b5\nShell cwd was reset\n' },
+      calls,
+      hermes,
+    );
+    expect(a.capabilities().resume).toBe(true);
+    const res = await a.run(sampleBrief(), sampleOptions(), { emit: () => {} });
+    expect(res.text).toBe('PONG');
+    expect(res.sessionId).toBe('20260904_121236_c417b5');
+    const first = calls[0] as Spawned;
+    expect(first.command).toBe('hermes');
+    expect(first.args.slice(0, 5)).toEqual(['chat', '-Q', '--oneshot', '--source', 'tool']);
+    expect(first.args).not.toContain('--resume');
+    const fu = await a.followUp(
+      { chatId: 'c1', sessionId: '20260904_121236_c417b5', history: [], brief: sampleBrief() },
+      'again?',
+      sampleOptions(),
+      { emit: () => {} },
+    );
+    expect((calls[1] as Spawned).args.slice(-2)).toEqual(['--resume', '20260904_121236_c417b5']);
+    expect(fu.sessionId).toBe('20260904_121236_c417b5');
+  });
+
   it('without resumeArgs replays the transcript instead and reports resume=false', async () => {
     const calls: Spawned[] = [];
     const a = make({ stdout: 'Because.' }, calls, HEADLESS_PRESETS['gemini-cli']);
@@ -283,6 +310,17 @@ describe('headless-cli helpers', () => {
     );
     expect(out.isError).toBe(true);
     expect(out.text).toBe('quota');
+  });
+
+  it('matchSessionId() prefers stderr, needs a capture group, tolerates bad patterns', () => {
+    expect(
+      matchSessionId('session_id:\\s*(\\w+)', 'x\nsession_id: abc_1\n', 'session_id: zzz'),
+    ).toBe('abc_1');
+    expect(matchSessionId('session_id:\\s*(\\w+)', '', 'session_id: fromstdout')).toBe(
+      'fromstdout',
+    );
+    expect(matchSessionId('nothing here', 'session_id: abc')).toBeUndefined();
+    expect(matchSessionId('(unclosed', 'session_id: abc')).toBeUndefined();
   });
 
   it('every preset has a prompt placeholder or stdin mode', () => {

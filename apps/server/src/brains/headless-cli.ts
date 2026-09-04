@@ -37,6 +37,11 @@ export interface HeadlessPreset {
   modelArgs?: string[];
   promptMode: PromptMode;
   outputParser: OutputParser;
+  /**
+   * For parsers that carry no session id (`plain`): a regex with one capture group, matched
+   * against stderr then stdout, e.g. Hermes prints `session_id: 2026…` on stderr.
+   */
+  sessionIdPattern?: string;
   /** Extra env for the child; `${NAME}` is read from the server's environment. */
   env?: Record<string, string>;
   timeoutMs?: number;
@@ -76,13 +81,28 @@ export const HEADLESS_PRESETS: Record<string, HeadlessPreset> = {
     promptMode: 'arg',
     outputParser: 'plain',
   },
+  // Verified against Hermes Agent v0.21.0 (2026-09-04): `-Q --oneshot` prints only the answer
+  // on stdout and `session_id: <id>` on stderr; `--resume <id>` continues that session.
+  // `--source tool` keeps the runs out of the owner's own session list.
   hermes: {
     id: 'hermes',
     command: 'hermes',
-    args: ['chat', '-q', '{prompt}'],
+    args: [
+      'chat',
+      '-Q',
+      '--oneshot',
+      '--source',
+      'tool',
+      '--max-turns',
+      '{maxTurns}',
+      '-q',
+      '{prompt}',
+    ],
+    resumeArgs: ['--resume', '{sessionId}'],
     modelArgs: ['--model', '{model}'],
     promptMode: 'arg',
     outputParser: 'plain',
+    sessionIdPattern: 'session_id:\\s*([A-Za-z0-9_-]+)',
   },
 };
 
@@ -217,6 +237,10 @@ export class HeadlessCliAdapter implements BrainAdapter {
       };
     }
     const parsed = parseOutput(preset.outputParser, raw.stdout);
+    if (!parsed.sessionId && preset.sessionIdPattern) {
+      const found = matchSessionId(preset.sessionIdPattern, raw.stderr, raw.stdout);
+      if (found) parsed.sessionId = found;
+    }
     if (raw.code !== 0 && !parsed.text) {
       const detail = raw.stderr.trim().split('\n').slice(-3).join(' ').slice(0, 400);
       const error = `${preset.command} exited with ${raw.code}${detail ? `: ${detail}` : ''}`;
@@ -247,6 +271,21 @@ export class HeadlessCliAdapter implements BrainAdapter {
       ...(parsed.usage ? { usage: parsed.usage } : {}),
     };
   }
+}
+
+/** First capture group of `pattern` in stderr, then stdout; undefined when absent or invalid. */
+export function matchSessionId(pattern: string, ...sources: string[]): string | undefined {
+  let re: RegExp;
+  try {
+    re = new RegExp(pattern);
+  } catch {
+    return undefined;
+  }
+  for (const src of sources) {
+    const m = re.exec(src);
+    if (m?.[1]) return m[1];
+  }
+  return undefined;
 }
 
 /** Replace `{name}` placeholders; unknown names are left as-is. */
