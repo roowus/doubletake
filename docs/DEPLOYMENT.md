@@ -125,7 +125,10 @@ Restore = copy back. Secrets need the same owner password.
 
 ## Upgrades
 `git pull && pnpm install && (cd workers/media && uv sync) && pnpm build`, restart the service.
-Migrations run on start. Breaking changes are listed in `CHANGELOG.md` (from M1).
+Migrations run on start. Breaking changes are listed in `CHANGELOG.md` (from M1). The
+server registers the web bundle's hashed files at boot, so rebuilding `apps/web` without a
+restart leaves the new `index.html` pointing at files the running server does not know; they
+answer 404 (never `index.html`) until you restart.
 
 ## Windows
 Runs under WSL2 with the Linux instructions; native Windows is untested.

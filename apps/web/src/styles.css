@@ -414,6 +414,8 @@ textarea {
 }
 .leaflet-container {
   font: inherit;
+  /* OSM ocean colour, so the band past the Mercator poles (no tiles) looks like sea. */
+  background: #aad3df;
 }
 .leaflet-popup-content a[href] {
   color: var(--accent);
