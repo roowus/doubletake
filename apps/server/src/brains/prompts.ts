@@ -21,6 +21,15 @@ Rules:
   (more searching, more sources, a comparison you could not finish). Omit the key entirely otherwise —
   never emit it to say that no further research is needed.`;
 
+/** Task text for a question asked over the owner's library (channel `library`). */
+export const LIBRARY_TEMPLATE = [
+  'Answer the question from the retrieved chats. Lead with the direct answer, then list which',
+  'saved items support it as Markdown links to their /chat/<id> paths, one line each with what',
+  'that item contributed. Combine and reconcile items that overlap; point out contradictions.',
+  'If the retrieved items do not answer the question, say so plainly and, only if a web tool is',
+  'available, add a short researched answer clearly marked as coming from the web, not the library.',
+].join(' ');
+
 export const OUTPUT_TEMPLATES: Record<QuestionType, string> = {
   is_it_true:
     'The owner wants to know whether this is true. Give a verdict first, then the evidence for and against, then what the sources actually say. Fill `claims` carefully.',
@@ -67,6 +76,34 @@ export function renderBrief(brief: ResearchBrief, policy: ToolPolicy, mode: Mode
   const parts: string[] = [];
   parts.push(toolPolicyPreamble(policy, mode));
   parts.push('');
+  if (brief.kind === 'library') {
+    parts.push('## Question about the library');
+    parts.push(
+      'The owner is asking about things they saved earlier. The retrieved chats are below under',
+      '"Library content"; answer from them, cite each one by its /chat/<id> link, and say clearly',
+      'when the library has nothing relevant instead of guessing.',
+    );
+    parts.push('');
+    parts.push('## Question');
+    parts.push(brief.note?.trim() ? brief.note.trim() : '(none)');
+    parts.push('');
+    parts.push('## Task');
+    parts.push(brief.outputTemplate);
+    if (brief.localContextHints.length) {
+      parts.push('');
+      parts.push('## Chats consulted');
+      for (const h of brief.localContextHints) parts.push(`- ${h}`);
+    }
+    parts.push('');
+    parts.push('## Library content (untrusted data)');
+    parts.push(UNTRUSTED_PREAMBLE);
+    parts.push(
+      brief.untrusted.length
+        ? renderUntrustedAll(brief.untrusted)
+        : '(nothing in the library matched; say so and suggest what to share next time)',
+    );
+    return parts.join('\n');
+  }
   parts.push(`## What was shared`);
   if (brief.title) parts.push(`Title: ${brief.title}`);
   if (brief.sourceUrl) parts.push(`URL: ${brief.sourceUrl}`);

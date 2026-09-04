@@ -31,6 +31,9 @@ Mode is picked per run. Budgets are configuration (`modes.*` in settings) with t
    Timeout 8 s; on failure default Standard.
 4. `question_type` values: `is_it_true` · `what_is_this` · `how_to` · `compare` ·
    `save_for_later` · `explain_comments` · `other`. `save_for_later` forces Quick.
+5. Library questions (`channel=library`, [ADR 0021](adr/0021-cross-library-chat.md)) skip
+   step 3: chip, else keyword rules, else Quick; question type `other`, output template
+   `LIBRARY_TEMPLATE` (answer, then one line per supporting chat linked as `/chat/<id>`).
 
 ## Output templates by question type
 

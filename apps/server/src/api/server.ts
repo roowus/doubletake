@@ -171,6 +171,23 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
     });
   });
 
+  // Cross-library chat (ADR 0021): a question over what the owner saved, answered by the brain
+  // from FTS-retrieved past chats. Same pipeline as a share, channel `library`.
+  app.post('/api/library/chat', async (req, reply) => {
+    const body = z
+      .object({
+        question: z.string().trim().min(1).max(4000),
+        modeHint: z.enum(['auto', 'quick', 'standard', 'deep']).default('auto'),
+      })
+      .parse(req.body);
+    const out = ingest(
+      { text: body.question, channel: 'library', focus: 'whole', modeHint: body.modeHint },
+      { repo, adapterFor: (m) => worker.brains.forMode(m) },
+    );
+    worker.kick();
+    return reply.code(202).send({ itemId: out.item.id, chatId: out.chat.id, runId: out.run.id });
+  });
+
   // ---- chats ----
   app.get('/api/chats', async (req, reply) => {
     const q = z

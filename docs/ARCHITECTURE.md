@@ -37,7 +37,7 @@ channel; the Instagram bot is optional and documented as fragile.
 | Push keys | VAPID pair auto-generated into `settings` unless env-provided; FCM HTTP v1 with a hand-rolled service-account JWT; `gone` prunes, 8 failures prune | [0016](adr/0016-push-keys-and-fcm-http-v1.md) |
 | Network | Bind loopback; Tailscale serve by default; Cloudflare Tunnel or Tailscale Funnel only for the IG webhook path | [0009](adr/0009-networking.md) |
 | Auth | Owner password at setup + long-lived per-device tokens via QR pairing | [0010](adr/0010-auth-owner-password-device-tokens.md) |
-| Knowledge | Markdown export of every finished chat into `~/Doubletake`; FTS5 search; auto tags and collections | [0011](adr/0011-markdown-export-fts-tags.md) |
+| Knowledge | Markdown export of every finished chat into `~/Doubletake`; FTS5 search; auto tags and collections; cross-library questions answered by the brain from FTS-retrieved chats | [0011](adr/0011-markdown-export-fts-tags.md), [0021](adr/0021-cross-library-chat.md) |
 | Structure | Every run also extracts a category and typed entities (places, recipes, products, tools, tips); collections are automatic per category and entity kind | [0014](adr/0014-structured-extraction-and-categories.md) |
 | Platforms | Server-side extractor registry, one file per platform, `web` fallback; v1: Instagram, TikTok, YouTube + Shorts, X, Reddit, AI-chat shares | [0015](adr/0015-platform-extractor-registry.md) |
 | Cost | Daily spend cap; runs queue as `capped` when hit; per-run cost shown in chat | [0012](adr/0012-cost-cap.md) |
@@ -178,6 +178,13 @@ every configured adapter and Settings shows them ([guide](BRAIN-ADAPTERS.md#sele
   topic, Telegram chat; [ADR 0019](adr/0019-owner-notification-channels.md)) are configured
   in `.env` and receive every notification too.
 - **In-app compose**: URL or free text plus note and mode.
+- **Library chat** (`channel=library`, [ADR 0021](adr/0021-cross-library-chat.md)): a question
+  about everything already saved. `library/ask.ts` turns it into an FTS query (filler words
+  dropped, remaining terms OR-ed, bm25 rank), renders up to 8 matching chats (note, source,
+  tags, entities, latest answer, extracted text) as untrusted `library` blocks, stores them as
+  `library-fts` extractions, and the brain answers with links back to each `/chat/<id>`. No
+  classifier call; Quick unless the chip or note keywords say otherwise. Library chats are never
+  retrieved for later library questions.
 - **Instagram** ([guide](channels/instagram-setup.md), [ADR 0018](adr/0018-instagram-channel-and-keyfile-secrets.md)):
   DM share (reliable path) and comment @mention (top-level ⇒ `focus=comments`; reply inside a
   thread ⇒ `focus=thread:<parent_id>`). `InstagramChannel` verifies and deduplicates webhook
@@ -195,7 +202,9 @@ every configured adapter and Settings shows them ([guide](BRAIN-ADAPTERS.md#sele
 
 One PWA (`apps/web`, Vite + React, served by the server at `/` from `apps/web/dist`, or by
 the Vite dev server with `/api` proxied). Chat list with unread badges, tag filter and FTS
-search (the tag chips come from `GET /api/tags`, manual tags marked ✎), a **collections** row
+search (the tag chips come from `GET /api/tags`, manual tags marked ✎; the same field has an
+**Ask library** button that turns the text into a `library` question and opens its chat, listed
+with a 💬 icon), a **collections** row
 (auto collections per category and entity kind, manual lists ☰, saved searches 🔍; selecting one
 filters the list via `?collection=<id>`; auto collections can be hidden, others deleted; a
 "+ collection" form creates a manual list or a saved search with a live match count) and links
@@ -230,6 +239,7 @@ and is authenticated by Meta's signature instead.
 | `POST setup`, `POST login` | create owner password once; exchange password for a device token |
 | `POST pair/start`, `POST pair/redeem`, `GET/DELETE devices[/:id]` | 10-minute single-use pairing codes; device list and revocation |
 | `POST ingest` | `{ url? , text?, note?, channel, mode? }` → `202 { itemId, chatId, runId }` |
+| `POST library/chat` | `{ question, modeHint? }` → `202 { itemId, chatId, runId }`; a `library` item whose run answers from retrieved chats |
 | `GET chats?q=&tag=&collection=`, `GET chats/:id`, `POST chats/:id/read` | list (FTS when `q`, tag filter when `tag`, membership of a collection when `collection`; 404 for an unknown id), detail with messages/runs/entities/extractions (flattened text, newest per kind+tool), clear unread |
 | `GET tags`, `POST chats/:id/tags { name }`, `DELETE chats/:id/tags/:name` | all tags with counts; add a manual tag (normalised: trimmed, lowercase, ≤40 chars); remove any tag from the item. Both edits re-index FTS, re-export the note and emit `chat_updated` |
 | `GET collections?all=&hidden=`, `POST collections { name, query? }`, `POST collections/:id { name?, query?, hidden? }`, `DELETE collections/:id` | list with item counts (empty auto collections omitted unless `all=true`, hidden ones unless `hidden=true`; auto collections are seeded at boot, one per category and one per entity kind); create a manual list (no `query`) or a saved search (`query` = `category:<c>` · `entity:<kind>` · `tag:<name>` · FTS text); rename/retarget/hide (400 when giving an auto collection a query); delete (400 for auto — hide instead) |

@@ -25,6 +25,7 @@ One file per decision, numbered, never deleted. Superseding a decision means a n
 | [0018](0018-instagram-channel-and-keyfile-secrets.md) | Instagram channel wiring: Graph data as extractions + media hints, raw-body HMAC, host confinement, mention polling fallback; secrets at rest sealed with the machine keyfile only (amends 0006, 0010) | accepted |
 | [0019](0019-owner-notification-channels.md) | ntfy and Telegram as owner-level `Broadcaster`s configured in `.env`, not per-device push subscriptions (amends 0008) | accepted |
 | [0020](0020-quiet-hours-digest.md) | Quiet hours: a `DigestGate` parks run notifications in `pending_notifications` and sends one digest when the window ends (amends 0008) | accepted |
+| [0021](0021-cross-library-chat.md) | Cross-library chat: `library` channel, FTS OR-retrieval over past chats fed to the brain as untrusted blocks and stored as `library-fts` extractions (extends 0011) | accepted |
 
 ## Template
 
