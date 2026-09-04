@@ -34,6 +34,14 @@ export function tempEnv(prefix = 'dt-test-') {
     vapidPrivateKey: null,
     vapidSubject: 'mailto:test@example.com',
     fcmServiceAccountPath: null,
+    media: {
+      enabled: false,
+      command: [],
+      cwd: root,
+      vision: 'cloud',
+      whisperBackend: 'off',
+      ytdlpCookiesFromBrowser: null,
+    },
   };
   fs.mkdirSync(cfg.dataDir, { recursive: true });
   const { db, sqlite, close } = openDb(path.join(cfg.dataDir, 'doubletake.db'));

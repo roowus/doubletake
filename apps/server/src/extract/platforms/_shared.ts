@@ -93,5 +93,6 @@ export function result(
   return { platform, canonicalUrl, title, blocks, extractions, warnings };
 }
 
-export const MEDIA_LATER =
-  'Video/audio transcription, OCR and comments arrive with the media pipeline (M3); this run used the page text and caption only.';
+/** Emitted by page-level extractors; the media worker adds transcript/OCR/comments when enabled. */
+export const PAGE_ONLY =
+  'Page-level extraction only (caption, title). Transcript, OCR and comments come from the media worker when it is enabled.';

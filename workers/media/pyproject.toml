@@ -1,20 +1,23 @@
 [project]
 name = "doubletake-media"
-version = "0.0.0"
+version = "0.1.0"
 description = "Doubletake media worker: download, transcribe, OCR, sample frames, fetch comments"
 readme = "README.md"
 requires-python = ">=3.12"
 license = "AGPL-3.0-only"
 dependencies = [
-  # Added as each milestone needs them (M3). Kept here so `uv sync` proves the toolchain.
+  "yt-dlp>=2026.8.19",
 ]
 
 [project.optional-dependencies]
-# Planned M3 dependency groups — documented, not yet installed:
-# media = ["yt-dlp>=2026.8.19", "rapidocr-onnxruntime", "trafilatura", "pillow", "numpy"]
-# whisper-mlx = ["mlx-whisper"]            # Apple Silicon
-# whisper-cpu = ["faster-whisper"]         # Linux / Intel
-# vision-local = ["mlx-vlm"]               # Qwen2.5-VL / Moondream opt-in
+# OCR (RapidOCR, ONNX on CPU). Without it the worker falls back to a `tesseract` binary.
+media = ["rapidocr-onnxruntime>=1.4", "pillow>=10", "numpy>=1.26"]
+whisper-mlx = ["mlx-whisper>=0.4"]          # Apple Silicon (default backend there)
+whisper-cpu = ["faster-whisper>=1.1"]       # Linux / Intel
+vision-local = ["mlx-vlm>=0.1"]              # DOUBLETAKE_VISION=local opt-in
+
+[project.scripts]
+doubletake-media = "doubletake_media.__main__:main"
 
 [dependency-groups]
 dev = ["pytest>=8", "ruff>=0.12"]

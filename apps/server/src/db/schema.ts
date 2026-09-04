@@ -33,8 +33,31 @@ export const extractions = sqliteTable('extractions', {
   tool: text('tool'),
   model: text('model'),
   costUsd: real('cost_usd'),
+  durationMs: integer('duration_ms'),
   createdAt: text('created_at').notNull(),
 });
+
+/** Files the media worker produced for an item (docs/DATA-MODEL.md §media_assets). */
+export const mediaAssets = sqliteTable(
+  'media_assets',
+  {
+    id: text('id').primaryKey(),
+    itemId: text('item_id')
+      .notNull()
+      .references(() => items.id, { onDelete: 'cascade' }),
+    kind: text('kind').notNull(), // video | image | audio | thumbnail | frame
+    path: text('path').notNull(), // relative to the data dir
+    sha256: text('sha256').notNull(),
+    bytes: integer('bytes').notNull(),
+    durationS: real('duration_s'),
+    width: integer('width'),
+    height: integer('height'),
+    frameTsS: real('frame_ts_s'),
+    source: text('source').notNull(), // cdn | ytdlp | direct | ffmpeg
+    createdAt: text('created_at').notNull(),
+  },
+  (t) => [index('media_assets_item_idx').on(t.itemId)],
+);
 
 export const chats = sqliteTable('chats', {
   id: text('id').primaryKey(),

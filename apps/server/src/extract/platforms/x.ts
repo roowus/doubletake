@@ -1,5 +1,5 @@
 import type { PlatformExtractor } from '../types.js';
-import { fetchOEmbed, MEDIA_LATER, result, stripHtml } from './_shared.js';
+import { fetchOEmbed, PAGE_ONLY, result, stripHtml } from './_shared.js';
 
 const HOSTS = new Set([
   'x.com',
@@ -62,7 +62,7 @@ export const xExtractor: PlatformExtractor = {
       ],
       [
         oe
-          ? MEDIA_LATER
+          ? PAGE_ONLY
           : 'X oEmbed did not answer (deleted, protected, or rate-limited); only the URL is known.',
       ],
     );

@@ -7,9 +7,12 @@ import type { Config } from '../config/index.js';
 import type { ItemRow, Repo, RunRow } from '../db/repo.js';
 import { exportItemMarkdown } from '../export/markdown.js';
 import { fetchText } from '../extract/http.js';
+import { PAGE_ONLY } from '../extract/platforms/_shared.js';
 import { extractUrl } from '../extract/registry.js';
 import type { ExtractResult } from '../extract/types.js';
 import { classifyItem } from '../ingest/classify.js';
+import type { MediaClient } from '../media/protocol.js';
+import { asUntrustedKind, MEDIA_PLATFORMS, runMediaStage } from '../media/stage.js';
 import type { Notification } from '../notify/types.js';
 
 const MODE_RANK: Record<Mode, number> = { quick: 0, standard: 1, deep: 2 };
@@ -78,13 +81,17 @@ export class QueueWorker extends EventEmitter {
 
   /** Optional; set by the boot sequence once notifiers are configured. */
   notifier: RunNotifier | null = null;
+  /** Optional; the media worker client (null when `DOUBLETAKE_MEDIA_WORKER=off`). */
+  media: MediaClient | null = null;
 
   constructor(
     private readonly repo: Repo,
     private readonly brain: BrainAdapter,
     private readonly cfg: Config,
+    media: MediaClient | null = null,
   ) {
     super();
+    this.media = media;
   }
 
   private push(item: ItemRow, chatId: string, outcome: 'answered' | 'failed' | 'capped'): void {
@@ -319,6 +326,34 @@ export class QueueWorker extends EventEmitter {
         this.repo.updateItem(item.id, { platform: extraction.platform });
         item = { ...item, platform: extraction.platform };
       }
+      // 1b. Media pipeline (download, transcript, frames, OCR, comments) for media platforms.
+      if (this.media && this.cfg.media.enabled && MEDIA_PLATFORMS.has(item.platform)) {
+        const m = await runMediaStage({
+          cfg: this.cfg,
+          repo: this.repo,
+          brain: this.brain,
+          media: this.media,
+          item,
+          url: item.canonicalUrl ?? url,
+          mode: forced ?? 'standard',
+          signal,
+          emit: (phase, p) => emit('status', { phase, ...p }),
+        });
+        blocks.push(...m.blocks);
+        // The page extractor's "page-level only" note is moot once the worker supplied media.
+        if (m.blocks.length) {
+          extraction.warnings = extraction.warnings.filter((w) => w !== PAGE_ONLY);
+        }
+        for (const w of m.warnings) emit('status', { phase: 'warning', message: w });
+        if (m.title && (!item.title || isGenericTitle(item.title))) {
+          this.repo.updateItem(item.id, { title: m.title });
+          item = { ...item, title: m.title };
+        }
+        if (m.canonicalUrl && m.canonicalUrl !== (item.canonicalUrl ?? url)) {
+          this.repo.updateItem(item.id, { canonicalUrl: m.canonicalUrl });
+          item = { ...item, canonicalUrl: m.canonicalUrl };
+        }
+      }
     }
     if (item.text?.trim()) {
       blocks.push({ source: 'owner', kind: 'shared_text', content: item.text });
@@ -527,18 +562,4 @@ function isGenericTitle(t: string): boolean {
       t,
     ) || !t.includes(' ')
   );
-}
-
-function asUntrustedKind(kind: string): UntrustedBlock['kind'] {
-  const known: UntrustedBlock['kind'][] = [
-    'transcript',
-    'ocr',
-    'frame_description',
-    'caption',
-    'comments',
-    'page_text',
-    'thread',
-    'shared_text',
-  ];
-  return (known as string[]).includes(kind) ? (kind as UntrustedBlock['kind']) : 'page_text';
 }

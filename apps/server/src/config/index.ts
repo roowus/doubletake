@@ -52,6 +52,18 @@ export interface Config {
   vapidSubject: string;
   /** Firebase service-account JSON for FCM; null disables FCM (Web Push still works). */
   fcmServiceAccountPath: string | null;
+  /** Media worker (docs/MEDIA-PIPELINE.md). `off` skips download/transcription entirely. */
+  media: {
+    enabled: boolean;
+    /** Command that starts the worker; JSON-lines on stdio. */
+    command: string[];
+    /** Directory the command runs in (the uv project). */
+    cwd: string;
+    /** `cloud` = frames described by the brain; `local` = mlx-vlm in the worker; `off`. */
+    vision: 'cloud' | 'local' | 'off';
+    whisperBackend: string;
+    ytdlpCookiesFromBrowser: string | null;
+  };
 }
 
 export function loadConfig(): Config {
@@ -75,7 +87,25 @@ export function loadConfig(): Config {
     vapidSubject:
       env('VAPID_SUBJECT', 'mailto:doubletake@localhost') ?? 'mailto:doubletake@localhost',
     fcmServiceAccountPath: expandHome(env('FCM_SERVICE_ACCOUNT_PATH') ?? '') || null,
+    media: {
+      enabled: (env('DOUBLETAKE_MEDIA_WORKER', 'on') ?? 'on') !== 'off',
+      command: list(env('DOUBLETAKE_MEDIA_WORKER_CMD', 'uv,run,--frozen,doubletake-media')),
+      cwd: expandHome(env('DOUBLETAKE_MEDIA_WORKER_CWD', defaultWorkerDir()) ?? ''),
+      vision: visionMode(env('DOUBLETAKE_VISION', 'cloud')),
+      whisperBackend: env('DOUBLETAKE_WHISPER_BACKEND', 'auto') ?? 'auto',
+      ytdlpCookiesFromBrowser: env('DOUBLETAKE_YTDLP_COOKIES_FROM_BROWSER') ?? null,
+    },
   };
+}
+
+function visionMode(v: string | undefined): 'cloud' | 'local' | 'off' {
+  return v === 'local' || v === 'off' ? v : 'cloud';
+}
+
+/** `workers/media` inside the monorepo checkout. */
+function defaultWorkerDir(): string {
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  return path.resolve(here, '../../../../workers/media');
 }
 
 /** The PWA build sits next to the server package inside the monorepo; use it when present. */
