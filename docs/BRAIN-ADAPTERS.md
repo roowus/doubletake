@@ -177,8 +177,10 @@ Behaviour:
   (`capabilities.costReporting = false`), so the daily cap only counts what other adapters spend.
 - `healthcheck()` only checks the executable is on `PATH`; it does not run the harness.
 
-The five presets' flags were taken from each CLI's documentation and are **unverified** against
-the installed tools except `claude-code`, which the Agent SDK adapter already exercises.
+`claude-code` was verified live 2026-09-04 (`claude -p … --output-format json` through 9Router:
+answer, `total_cost_usd`, `session_id`, and a `--resume` follow-up, ~9 s). The other four
+presets' flags were taken from each CLI's documentation and are **unverified** against the
+installed tools.
 
 ### openai-compatible
 
