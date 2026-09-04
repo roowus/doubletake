@@ -72,8 +72,21 @@ phrase, `url` the deep link `/chat/<id>`; the answer text never leaves the serve
   Notifications → **Enable** in the app asks for `POST_NOTIFICATIONS`, creates the `doubletake`
   channel, registers with `@capacitor/push-notifications` and posts the registration token as
   `{ kind: "fcm", endpoint: <token> }` (`enableNativePush()` in `apps/web/src/native.ts`; a new
-  token replaces the previous one). Enable is refused with a clear message when the server
-  reports no `fcm` kind. Tapping a notification navigates to `data.url` / `/chat/<chatId>`.
+  token replaces the previous one). Enable resolves only after the token has been posted, and
+  fails within 30 s with the plugin's `registrationError` translated into a readable message, so
+  the toggle never shows "enabled" for a device the server cannot reach. Enable is refused with
+  a clear message when the server reports no `fcm` kind.
+  **Gotcha:** `SERVICE_NOT_AVAILABLE` / "Firebase Installations Service is unavailable" from
+  Google Play services means the phone's Play services cannot reach Google right now, not a
+  Firebase misconfiguration. Two causes seen on a Galaxy S25 FE with the Tailscale VPN up:
+  (1) Android **Private DNS** set to a hostname (`dns.google`) broke every lookup although
+  `ping 8.8.8.8` worked; fix with Private DNS *Automatic*
+  (`adb shell settings put global private_dns_mode opportunistic`) or off. (2) Play's push
+  socket to `mtalk.google.com:5228` failed on every VPN network ("Failed connection err:3" in
+  `adb shell dumpsys activity service GcmService`, with backoff over an hour) and reconnected
+  within a second once the VPN was disconnected. Register the token with Tailscale off, then
+  turn it back on; if pushes stop again, allow Google Play services to bypass the VPN (Tailscale
+  → Settings → "Allow LAN access"/app exclusions). Then Enable again. Tapping a notification navigates to `data.url` / `/chat/<chatId>`.
   The server sends **notification** messages (title, body, `data.chatId`, `data.url`, Android
   channel `doubletake`, high priority, collapse key `chat-<id>`) so delivery works when the app
   is killed; tapping opens `/chat/<id>`. The whole Firebase side can be provisioned from the
