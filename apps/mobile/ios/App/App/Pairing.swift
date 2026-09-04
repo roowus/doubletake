@@ -10,8 +10,8 @@ import Foundation
 /// extension writes `pendingShare` when the device is unpaired, `SceneDelegate` moves it into
 /// Capacitor Preferences on the next launch so `App.tsx` replays it (same flow as Android).
 ///
-/// Keys mirror `apps/mobile/android/.../Pairing.kt`. Everything here is **unverified** on a device
-/// (ADR 0027).
+/// Keys mirror `apps/mobile/android/.../Pairing.kt`. Verified in the iOS 26.3.1 simulator, **unverified**
+/// on a device (ADR 0027).
 enum Pairing {
     /// Must match both targets' `com.apple.security.application-groups` entitlement.
     static let appGroup = "group.com.roowus.doubletake"

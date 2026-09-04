@@ -187,7 +187,7 @@ every configured adapter and Settings shows them ([guide](BRAIN-ADAPTERS.md#sele
   topic, Telegram chat; [ADR 0019](adr/0019-owner-notification-channels.md)) are configured
   in `.env` and receive every notification too.
 - **iOS share extension** ([guide](channels/ios-share.md),
-  [ADR 0027](adr/0027-ios-share-extension.md), **unverified** on a device): native
+  [ADR 0027](adr/0027-ios-share-extension.md); simulator-verified, **unverified** on a device): native
   `ShareExtension` target with the same card (URL or text preview, note, mode chips) posting to
   `/api/ingest` as `channel=ios_share`. The extension cannot read Capacitor Preferences, so
   `SceneDelegate` mirrors the server URL and token into the App Group

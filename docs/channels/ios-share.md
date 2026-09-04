@@ -1,9 +1,11 @@
-> **Partly verified (2026-09-04).** Both targets build with Xcode 26.2 and the app runs in the
-> iOS 26.3.1 simulator (iPhone 17 Pro): the WebView loads the pairing screen, and
-> `SceneDelegate` mirrors the Capacitor Preferences pairing values into the App Group
-> (checked with `simctl spawn <udid> defaults read group.com.roowus.doubletake`). Not yet
-> exercised: the Share Extension end to end, the unpaired `doubletake://share` path, and any
-> real device. If you have an iPhone, follow §Verify and update this note in the same commit.
+> **Simulator-verified (2026-09-04).** Xcode 26.2, iPhone 17 Pro simulator, iOS 26.3.1:
+> "Doubletake" appears in Safari's share sheet, the card shows the URL, note and mode chips
+> post to `/api/ingest` and the item lands as `channel=ios_share` with the note and requested
+> mode; the sheet dismisses itself. Unpaired path: the share is stashed in the App Group, the
+> app opens on the pairing screen via `doubletake://share` and adopts the share into Capacitor
+> Preferences. App Group mirror checked in both directions. Not yet exercised: a **real
+> device** (signing team + tailnet URL), Instagram/Notes/Photos as sources, push. If you have
+> an iPhone, follow §Verify and update this note in the same commit.
 > Decision record: [ADR 0027](../adr/0027-ios-share-extension.md).
 
 The iOS app is the same Capacitor wrapper of `apps/web` as Android
@@ -67,6 +69,24 @@ your team, keep "Automatically manage signing", and confirm the App Group
 `group.com.roowus.doubletake` shows as enabled (the entitlements files already list it; Xcode
 registers the group on your team the first time). Then build and run on the phone.
 
+Simulator builds from the command line must still sign ad hoc, otherwise Xcode drops the
+entitlements and the App Group silently falls back to each target's own container (the app and
+the extension then never see each other's pairing):
+
+```sh
+cd apps/mobile/ios/App
+xcodebuild -project App.xcodeproj -scheme App -configuration Debug \
+  -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/dt-ios-dd \
+  CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=YES DEVELOPMENT_TEAM= build
+xcrun simctl install <udid> /tmp/dt-ios-dd/Build/Products/Debug-iphonesimulator/App.app
+```
+
+Do **not** pass `CODE_SIGNING_ALLOWED=NO`; check with
+`codesign -d --entitlements - <App.app>` that `com.apple.security.application-groups` is
+present. The extension opens the app with `UIApplication.open(_:options:completionHandler:)`
+found through the responder chain; iOS 26 refuses the deprecated `openURL:` selector from an
+extension ("BUG IN CLIENT OF UIKIT … Force returning false").
+
 `cap add ios` is **not** needed and refuses to run while `ios/` exists: the project is committed
 (Capacitor's SPM template with the extension target added). `cap sync ios` only regenerates
 `CapApp-SPM/Package.swift`, `App/App/public/` and `capacitor.config.json`. `scripts/doctor.sh`
@@ -76,7 +96,16 @@ reports whether `xcodebuild` is available. The committed `Package.swift` is the 
 ## Verify
 Simulator shortcut without pairing through the UI: redeem a code with `curl`, then
 `xcrun simctl spawn <udid> defaults write com.roowus.doubletake CapacitorStorage.doubletake.serverUrl -string <url>`
-(and `.token`), relaunch the app once so the mirror runs, and share from Safari.
+(and `.token`), relaunch the app once so the mirror runs, and share from Safari
+(`xcrun simctl openurl <udid> https://…`). Taps can be scripted with
+[idb](https://fbidb.io) (`brew install facebook/fb/idb-companion`, `uv tool install fb-idb`;
+`idb ui describe-all` lists labels and frames, `idb ui tap X Y`, `idb ui text "…"`). When
+inspecting `defaults read` or the group plist, redact values: the token is a live credential.
+The server must be restarted after `packages/shared` changes (`tsx watch` only watches
+`apps/server`); a stale server answers `400 invalid request` to `channel: "ios_share"`. Re-sharing
+the same URL within 24 h re-runs on the existing chat instead of creating a new item.
+
+Done in the simulator (2026-09-04): steps 1, 2 (Safari URL instead of Instagram) and 4 below.
 
 1. Pair the app (QR or URL + code), then background it once so the App Group mirror runs.
 2. From Instagram, share a reel to **Doubletake**: the card shows the URL; add a note, pick a
@@ -86,5 +115,5 @@ Simulator shortcut without pairing through the UI: redeem a code with `curl`, th
 4. Unpair (Settings → Devices → revoke, then clear the app's data or reinstall), share again:
    the app opens on the pairing screen; after pairing, the compose sheet appears pre-filled.
 5. Share a photo alone: the orange notice appears and only the note is sent.
-6. Remove the **unverified** markers here, in ADR 0027, `Pairing.swift` and
-   `ShareViewController.swift`, and note the iOS version tested.
+6. On a real device, remove the remaining **unverified** marker here, in ADR 0027 and
+   `docs/ARCHITECTURE.md`, and note the iOS version tested.
