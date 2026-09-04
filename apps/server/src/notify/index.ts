@@ -1,10 +1,13 @@
 import type { Config } from '../config/index.js';
 import type { Repo } from '../db/repo.js';
+import { type Broadcaster, NtfyBroadcaster, TelegramBroadcaster } from './broadcast.js';
 import { FcmNotifier, loadServiceAccount } from './fcm.js';
 import { NotificationHub } from './hub.js';
 import type { Notifier } from './types.js';
 import { generateVapidKeys, type VapidKeys, WebPushNotifier } from './webpush.js';
 
+export type { Broadcaster, BroadcastOutcome } from './broadcast.js';
+export { NtfyBroadcaster, TelegramBroadcaster } from './broadcast.js';
 export { FcmNotifier } from './fcm.js';
 export { NotificationHub } from './hub.js';
 export type { Notification, Notifier, PushTarget, SendOutcome } from './types.js';
@@ -50,5 +53,8 @@ export function createHub(
       log.warn(`FCM disabled: ${(e as Error).message}`);
     }
   }
-  return { hub: new NotificationHub(repo, notifiers, log), vapid };
+  const broadcasters: Broadcaster[] = [];
+  if (cfg.ntfy) broadcasters.push(new NtfyBroadcaster(cfg.ntfy));
+  if (cfg.telegram) broadcasters.push(new TelegramBroadcaster(cfg.telegram));
+  return { hub: new NotificationHub(repo, notifiers, log, broadcasters), vapid };
 }

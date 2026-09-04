@@ -187,6 +187,31 @@ export function Settings() {
         {status && status.push.kinds.length > 0 && (
           <div className="small muted">Server push: {status.push.kinds.join(', ')}</div>
         )}
+        {status && status.push.channels.length > 0 && (
+          <div className="row">
+            <span className="small muted">
+              Owner channels: {status.push.channels.join(', ')} (set in <code>.env</code>)
+            </span>
+            <button
+              type="button"
+              className="ghost"
+              onClick={() =>
+                api
+                  .pushChannelsTest()
+                  .then((r) =>
+                    setPushMsg(
+                      r.failed === 0
+                        ? `Sent to ${r.sent} channel${r.sent === 1 ? '' : 's'}.`
+                        : `${r.failed} channel(s) failed — see the server log.`,
+                    ),
+                  )
+                  .catch((e) => setPushMsg(String(e.message ?? e)))
+              }
+            >
+              Send test to channels
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="card stack">

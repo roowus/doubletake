@@ -58,7 +58,9 @@ enough for text; file shares would need POST + multipart and come with M3.
 Every finished, failed or capped run sends one notification to each subscription of every
 non-revoked device ([ADR 0016](../adr/0016-push-keys-and-fcm-http-v1.md)). Payloads are
 `{ title, body, chatId, url, tag }`: the title is the item title or note, the body a fixed
-phrase, `url` the deep link `/chat/<id>`; the answer text never leaves the server.
+phrase, `url` the deep link `/chat/<id>`; the answer text never leaves the server. The same
+notification also goes to the owner channels (ntfy, Telegram) when configured
+([Deployment](../DEPLOYMENT.md#push-notifications), [ADR 0019](../adr/0019-owner-notification-channels.md)).
 
 - **API**: `POST /api/push/subscribe { kind: "webpush" | "fcm", endpoint, keys? }` registers
   the calling device's endpoint (`keys: { p256dh, auth }` is required for `webpush`; `409` when

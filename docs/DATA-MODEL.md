@@ -89,7 +89,7 @@ delete of either side. Migration `0004_collections.sql`.
 ### devices / push_subscriptions
 `devices`: `id`, `name`, `platform` (`android` · `ios` · `web`), `token_hash`, `created_at`,
 `last_seen_at`, `revoked_at`.
-`push_subscriptions`: `id`, `device_id`, `kind` (`webpush` · `fcm`), `endpoint_or_token`,
+`push_subscriptions`: `id`, `device_id`, `kind` (`webpush` · `fcm`; ntfy/Telegram are not rows here, see [ADR 0019](adr/0019-owner-notification-channels.md)), `endpoint_or_token`,
 `keys` JSON (webpush p256dh/auth), `failed_count`, `created_at`.
 
 ### ig_accounts / ig_events

@@ -122,7 +122,7 @@ and a Reddit video.
 
 ## Later (not scheduled)
 
-Telegram and ntfy notification channels · iOS share extension · tailscale multi-device
+~~Telegram and ntfy notification channels~~ (done 2026-09-04, [ADR 0019](adr/0019-owner-notification-channels.md)) · iOS share extension · tailscale multi-device
 (worker on another machine, shared data dir) · MCP server exposing the library to other
 agents · Karakeep / Memos import and export · shareable read-only collection pages (SaveToList's
 shared lists) · cross-library chat ("what did I save about ski wax?") over FTS, Recall-style ·

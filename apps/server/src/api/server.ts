@@ -418,6 +418,7 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
       notesDir: cfg.notesDir,
       push: {
         kinds: deps.hub?.kinds() ?? [],
+        channels: deps.hub?.channels() ?? [],
         vapidPublicKey: deps.vapidPublicKey ?? null,
       },
     };
@@ -475,6 +476,19 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
       { onlySubscriptionIds: mine },
     );
     return result;
+  });
+
+  /** Owner channels (ntfy, Telegram) get a test message; 404 when none is configured. */
+  app.post('/api/push/channels/test', async (_req, reply) => {
+    if (!deps.hub || deps.hub.channels().length === 0)
+      return reply.code(404).send({ error: 'no notification channels configured' });
+    return deps.hub.broadcast({
+      title: 'Doubletake',
+      body: 'Test notification. Tap to open.',
+      chatId: '',
+      url: cfg.publicUrl ? `${cfg.publicUrl.replace(/\/$/, '')}/` : '/',
+      tag: 'test',
+    });
   });
 
   // ---- live events ----

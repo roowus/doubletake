@@ -3,6 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildServer } from '../src/api/server.js';
 import { Auth } from '../src/auth/index.js';
+import { NtfyBroadcaster, TelegramBroadcaster } from '../src/notify/broadcast.js';
 import { FcmNotifier } from '../src/notify/fcm.js';
 import { MAX_FAILED, NotificationHub } from '../src/notify/hub.js';
 import { resolveVapid } from '../src/notify/index.js';
@@ -50,7 +51,13 @@ describe('NotificationHub', () => {
     env.repo.upsertPushSubscription(dev.deviceId, 'ntfy', 'x', null); // no notifier → skipped
 
     let r = await hub.notify(note);
-    expect(r).toEqual({ sent: 2, gone: 0, failed: 0, skipped: 1 });
+    expect(r).toEqual({
+      sent: 2,
+      gone: 0,
+      failed: 0,
+      skipped: 1,
+      broadcast: { sent: 0, failed: 0 },
+    });
     expect(web.sent[0]?.target.keys).toEqual({ p256dh: 'p', auth: 'a' });
     expect(fcm.sent[0]?.target.endpoint).toBe('tok-1');
     // Payload never carries answer text: exactly these fields.
@@ -245,12 +252,77 @@ describe('buildNotification', () => {
   });
 });
 
+describe('broadcasters', () => {
+  const n: Notification = {
+    title: 'Me at the zoo',
+    body: 'Answer ready. Tap to open the chat.',
+    chatId: 'c9',
+    url: 'https://dt.example/chat/c9',
+    tag: 'chat-c9',
+  };
+
+  it('ntfy: POST <url>/<topic> with Title/Click headers; non-2xx and network errors are failed', async () => {
+    const seen: { url: string; init: RequestInit }[] = [];
+    let status = 200;
+    const b = new NtfyBroadcaster(
+      { url: 'https://ntfy.sh/', topic: 'a b', token: null },
+      async (u, i) => {
+        seen.push({ url: String(u), init: i ?? {} });
+        return new Response('nope', { status });
+      },
+    );
+    expect(await b.send(n)).toEqual({ status: 'ok' });
+    expect(seen[0]?.url).toBe('https://ntfy.sh/a%20b');
+    const h = seen[0]?.init.headers as Record<string, string>;
+    expect(h.Title).toBe('Me at the zoo');
+    expect(h.Click).toBe('https://dt.example/chat/c9');
+    expect(h.Authorization).toBeUndefined();
+    status = 403;
+    expect(await b.send(n)).toEqual({ status: 'failed', error: 'HTTP 403 nope' });
+    const dead = new NtfyBroadcaster({ url: 'https://x', topic: 't', token: null }, async () => {
+      throw new Error('ECONNREFUSED');
+    });
+    expect(await dead.send(n)).toEqual({ status: 'failed', error: 'ECONNREFUSED' });
+  });
+
+  it('telegram: sendMessage with an Open-chat button for absolute urls, plain path otherwise', async () => {
+    const seen: { url: string; body: Record<string, unknown> }[] = [];
+    const b = new TelegramBroadcaster(
+      { botToken: '123:abc', chatId: '42', apiBase: 'https://tg.example' },
+      async (u, i) => {
+        seen.push({ url: String(u), body: JSON.parse(String(i?.body)) });
+        return new Response('{"ok":true}', { status: 200 });
+      },
+    );
+    expect(await b.send(n)).toEqual({ status: 'ok' });
+    expect(seen[0]?.url).toBe('https://tg.example/bot123:abc/sendMessage');
+    expect(seen[0]?.body).toMatchObject({
+      chat_id: '42',
+      text: 'Me at the zoo\nAnswer ready. Tap to open the chat.',
+      reply_markup: {
+        inline_keyboard: [[{ text: 'Open chat', url: 'https://dt.example/chat/c9' }]],
+      },
+    });
+    await b.send({ ...n, url: '/chat/c9' });
+    expect(seen[1]?.body.reply_markup).toBeUndefined();
+    expect(seen[1]?.body.text).toBe('Me at the zoo\nAnswer ready. Tap to open the chat.\n/chat/c9');
+  });
+});
+
 describe('push API + worker integration', () => {
   const env = tempEnv('dt-push-api-');
   const brain = new FakeBrain();
   const worker = new QueueWorker(env.repo, brain, env.cfg);
   const web = new ScriptedNotifier('webpush');
-  const hub = new NotificationHub(env.repo, [web], { warn: () => {} });
+  const ntfyCalls: { url: string; init: RequestInit }[] = [];
+  const ntfy = new NtfyBroadcaster(
+    { url: 'https://ntfy.example', topic: 'dt', token: 'tok' },
+    async (url, init) => {
+      ntfyCalls.push({ url: String(url), init: init ?? {} });
+      return new Response('ok', { status: 200 });
+    },
+  );
+  const hub = new NotificationHub(env.repo, [web], { warn: () => {} }, [ntfy]);
   worker.notifier = hub;
   let app: FastifyInstance;
   let token = '';
@@ -282,7 +354,30 @@ describe('push API + worker integration', () => {
 
   it('exposes the VAPID public key and configured kinds in status', async () => {
     const st = (await app.inject({ method: 'GET', url: '/api/status', headers: auth() })).json();
-    expect(st.push).toEqual({ kinds: ['webpush'], vapidPublicKey: 'VAPIDPUB' });
+    expect(st.push).toEqual({ kinds: ['webpush'], channels: ['ntfy'], vapidPublicKey: 'VAPIDPUB' });
+  });
+
+  it('owner channels get every notification except device-targeted tests; channels/test hits them only', async () => {
+    const before = ntfyCalls.length;
+    const r = await hub.notify(note);
+    expect(r.broadcast).toEqual({ sent: 1, failed: 0 });
+    expect(ntfyCalls).toHaveLength(before + 1);
+    const call = ntfyCalls.at(-1);
+    expect(call?.url).toBe('https://ntfy.example/dt');
+    expect(call?.init.body).toBe('B');
+    const headers = (call?.init.headers ?? {}) as Record<string, string>;
+    expect(headers.Title).toBe('T');
+    expect(headers.Authorization).toBe('Bearer tok');
+    // Relative url → no Click header (ntfy needs an absolute URL).
+    expect(headers.Click).toBeUndefined();
+
+    await hub.notify(note, { onlySubscriptionIds: new Set() });
+    expect(ntfyCalls).toHaveLength(before + 1);
+
+    const t = await app.inject({ method: 'POST', url: '/api/push/channels/test', headers: auth() });
+    expect(t.json()).toEqual({ sent: 1, failed: 0 });
+    expect(ntfyCalls).toHaveLength(before + 2);
+    expect(web.sent.filter((s) => s.n.tag === 'test')).toHaveLength(0);
   });
 
   it('subscribe validates, stores per device, rejects unconfigured kinds; unsubscribe removes', async () => {
