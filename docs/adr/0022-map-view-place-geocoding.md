@@ -28,10 +28,13 @@ up once:
    render).
 
 The query is the place name plus whichever of `address`, `city`, `town`, `region`, `state`,
-`country` the entity carries, deduplicated and capped at 200 characters. Hits **and misses** are
-stored in `place_geo` keyed by that query (`lat`/`lon` null for a miss) so a place the geocoder
-does not know is never asked again; a re-run with better attributes changes the query and
-therefore retries.
+`country` the entity carries, deduplicated and capped at 200 characters. Nominatim misses long
+comma lists whose middle parts it does not know as address components ("Cerro Castor
+(Ushuaia), Tierra del Fuego, Argentina" misses while "Cerro Castor (Ushuaia), Argentina" hits),
+so the lookup tries the full query, then name + country, then the bare name, and stops at the
+first hit (`geocodeCandidates`). Hits **and misses** are stored in `place_geo` keyed by the
+**full** query (`lat`/`lon` null for a miss) so a place the geocoder does not know is asked at
+most three times, once; a re-run with better attributes changes the query and therefore retries.
 
 Geocoding is off the run's critical path: `finish()` stores the answer, sends the push and
 writes the export as before, then `Worker.locatePlaces(itemId)` runs and emits `chat_updated`
