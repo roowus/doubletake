@@ -92,7 +92,7 @@ and a Reddit video.
   [guide](channels/instagram-setup.md#6-live-verification-checklist-m4-acceptance)). Settings
   card for connect/status/poll/refresh/disconnect shipped.
 
-## M5 — More brains
+## M5 — More brains — code complete 2026-09-04 (new adapters unit-tested, not yet run against live providers)
 
 - ✅ `headless-cli` adapter with presets for `claude -p`, Codex, Gemini CLI, OpenCode, Hermes
   (unit-tested with a fake `spawn`; preset flags other than `claude-code` unverified live).
@@ -100,7 +100,9 @@ and a Reddit video.
   web_fetch, read_file, list_dir, write_sandbox_file) and self-managed conversation storage
   (`apps/server/src/brains/{openai-compatible.ts,tools/}`; unit-tested against a fake endpoint,
   not yet run against a live provider).
-- Per-mode adapter override; adapter healthcheck in settings.
+- ✅ Per-mode adapter override (`DOUBLETAKE_BRAIN_QUICK/STANDARD/DEEP=adapter[@model]`, runs
+  rebound after classification, follow-ups pinned to the session's adapter) and per-adapter
+  healthchecks in `GET /api/status` + Settings → Server.
 
 ## M6 — Search, tags, collections
 

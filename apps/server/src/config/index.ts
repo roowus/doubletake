@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import type { Mode } from '@doubletake/shared';
 
 function env(name: string, fallback?: string): string | undefined {
   const v = process.env[name];
@@ -41,6 +42,8 @@ export interface Config {
   publicUrl: string | null;
   brain: string;
   brainModel: string | null;
+  /** Per-mode adapter override: `DOUBLETAKE_BRAIN_<MODE>=adapter[@model]` (docs/BRAIN-ADAPTERS.md). */
+  brainModes: Partial<Record<Mode, { adapter: string; model: string | null }>>;
   readRoots: string[];
   readDeny: string[];
   dailyCapUsd: number;
@@ -114,6 +117,11 @@ export function loadConfig(): Config {
     publicUrl: env('DOUBLETAKE_PUBLIC_URL') ?? null,
     brain: env('DOUBLETAKE_BRAIN', 'claude-agent-sdk') ?? 'claude-agent-sdk',
     brainModel: env('DOUBLETAKE_BRAIN_MODEL') ?? null,
+    brainModes: {
+      ...modeBinding('quick', env('DOUBLETAKE_BRAIN_QUICK')),
+      ...modeBinding('standard', env('DOUBLETAKE_BRAIN_STANDARD')),
+      ...modeBinding('deep', env('DOUBLETAKE_BRAIN_DEEP')),
+    },
     readRoots: list(env('DOUBLETAKE_READ_ROOTS', home)),
     readDeny: list(env('DOUBLETAKE_READ_DENY', DEFAULT_READ_DENY.join(','))),
     dailyCapUsd: Number(env('DOUBLETAKE_DAILY_CAP_USD', '5')),
@@ -169,6 +177,15 @@ function searchProvider(v: string | undefined): Config['search']['provider'] {
 }
 
 /** `OPENAI_PRICES='{"gpt-4o-mini":{"inputPerM":0.15,"outputPerM":0.6}}'`; malformed → no prices. */
+/** `adapter` or `adapter@model`; empty ⇒ no override for that mode. */
+function modeBinding(mode: Mode, raw: string | undefined): Config['brainModes'] {
+  if (!raw?.trim()) return {};
+  const at = raw.indexOf('@');
+  const adapter = (at === -1 ? raw : raw.slice(0, at)).trim();
+  const model = at === -1 ? null : raw.slice(at + 1).trim() || null;
+  return adapter ? { [mode]: { adapter, model } } : {};
+}
+
 /** JSON array of strings; anything else ⇒ null (preset args are used). */
 function parseArgs(raw: string | undefined): string[] | null {
   if (!raw) return null;

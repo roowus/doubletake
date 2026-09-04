@@ -92,7 +92,7 @@ const ig = new InstagramChannel({
   repo: env.repo,
   graph,
   box,
-  adapterId: brain.id,
+  adapterFor: (m) => worker.brains.forMode(m),
   log,
   now: () => now,
 });

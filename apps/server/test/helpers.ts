@@ -25,6 +25,7 @@ export function tempEnv(prefix = 'dt-test-') {
     publicUrl: null,
     brain: 'fake',
     brainModel: null,
+    brainModes: {},
     readRoots: [root],
     readDeny: DEFAULT_READ_DENY,
     dailyCapUsd: 5,
@@ -85,11 +86,17 @@ export interface FakeBrainCall {
 
 /** Scriptable brain: returns canned results, records calls, emits a couple of events. */
 export class FakeBrain implements BrainAdapter {
-  readonly id = 'fake';
+  readonly id: string;
   calls: FakeBrainCall[] = [];
+  healthy: { ok: boolean; detail?: string } = { ok: true };
+  sessionId = 'sess-fake-1';
   classifyReply = '{"mode":"standard","question_type":"what_is_this","needs_comments":false}';
   nextResult: Partial<RunResult> = {};
   delayMs = 0;
+
+  constructor(id = 'fake') {
+    this.id = id;
+  }
 
   capabilities(): BrainCapabilities {
     return { resume: true, vision: false, streaming: true, costReporting: true, tools: 'native' };
@@ -111,7 +118,7 @@ export class FakeBrain implements BrainAdapter {
   }
 
   async healthcheck() {
-    return { ok: true };
+    return this.healthy;
   }
 
   private async produce(opts: RunOptions, sink: EventSink, text: string): Promise<RunResult> {
@@ -131,7 +138,7 @@ export class FakeBrain implements BrainAdapter {
         recommendations: ['Try it'],
         tags: ['Widgets', 'tools'],
       },
-      sessionId: 'sess-fake-1',
+      sessionId: this.sessionId,
       costUsd: 0.02,
       stopReason: 'done',
       ...this.nextResult,

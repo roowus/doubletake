@@ -11,9 +11,15 @@ export interface IngestOutcome {
   deduplicated: boolean;
 }
 
-export interface IngestDeps {
-  repo: Repo;
-  adapterId: string;
+/** Which adapter (and model) a new research run is recorded with, given its provisional mode. */
+export type AdapterPick = (mode: Mode) => { adapter: { id: string }; model: string | null };
+
+export type IngestDeps = { repo: Repo } & ({ adapterId: string } | { adapterFor: AdapterPick });
+
+function pickAdapter(deps: IngestDeps): AdapterPick {
+  return 'adapterFor' in deps
+    ? deps.adapterFor
+    : () => ({ adapter: { id: deps.adapterId }, model: null });
 }
 
 const DEDUPE_HOURS = 24;
@@ -50,12 +56,15 @@ export function ingest(req: IngestRequest, deps: IngestDeps): IngestOutcome {
         if (req.note?.trim()) {
           repo.addMessage({ chatId: chat.id, role: 'user', kind: 'question', content: req.note });
         }
+        const mode = forcedMode ?? (dup.modeEffective as Mode | null) ?? 'standard';
+        const bound = pickAdapter(deps)(mode);
         const run = repo.createRun({
           itemId: dup.id,
           chatId: chat.id,
           kind: 'research',
-          mode: forcedMode ?? (dup.modeEffective as Mode | null) ?? 'standard',
-          adapter: deps.adapterId,
+          mode,
+          adapter: bound.adapter.id,
+          model: bound.model,
         });
         repo.updateItem(dup.id, {
           status: 'new',
@@ -68,13 +77,17 @@ export function ingest(req: IngestRequest, deps: IngestDeps): IngestOutcome {
 
   const title = canonicalUrl ? titleFromUrl(canonicalUrl, platform) : titleFromText(req.text ?? '');
   const { item, chat } = repo.createItemWithChat(normalised, platform, canonicalUrl, title);
+  // Placeholder until the worker classifies; forced modes are final. The worker rebinds the
+  // adapter if classification lands on a mode with a different binding.
+  const mode = forcedMode ?? 'standard';
+  const bound = pickAdapter(deps)(mode);
   const run = repo.createRun({
     itemId: item.id,
     chatId: chat.id,
     kind: 'research',
-    // Placeholder until the worker classifies; forced modes are final.
-    mode: forcedMode ?? 'standard',
-    adapter: deps.adapterId,
+    mode,
+    adapter: bound.adapter.id,
+    model: bound.model,
   });
   if (req.note?.trim()) {
     repo.addMessage({ chatId: chat.id, role: 'user', kind: 'question', content: req.note });

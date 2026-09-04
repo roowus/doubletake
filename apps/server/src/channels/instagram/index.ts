@@ -11,7 +11,7 @@ import type { IngestRequest } from '@doubletake/shared';
 import type { Config } from '../../config/index.js';
 import type { ItemRow, Repo } from '../../db/repo.js';
 import { firstUrlIn } from '../../extract/registry.js';
-import { type IngestOutcome, ingest } from '../../ingest/index.js';
+import { type AdapterPick, type IngestOutcome, ingest } from '../../ingest/index.js';
 import type { ExtractParams } from '../../media/protocol.js';
 import { CHANNEL_TOOL } from '../../queue/worker.js';
 import type { SecretBox } from '../../secrets/box.js';
@@ -39,7 +39,8 @@ export interface IgChannelDeps {
   repo: Repo;
   graph: IgGraph;
   box: SecretBox;
-  adapterId: string;
+  /** Which adapter a new run is recorded with (`worker.brains.forMode`). */
+  adapterFor: AdapterPick;
   log: IgLogger;
   /** Overridable for tests. */
   now?: () => number;
@@ -415,7 +416,7 @@ export class InstagramChannel {
       modeHint: 'auto',
       ...(note ? { note } : share?.payload?.title ? { note: share.payload.title } : {}),
     };
-    const out = ingest(req, { repo: this.deps.repo, adapterId: this.deps.adapterId });
+    const out = ingest(req, { repo: this.deps.repo, adapterFor: this.deps.adapterFor });
     this.deps.repo.markIgEvent(mid, { itemId: out.item.id });
     if (cdn) this.hintCdn(out.item.id, cdn, share?.payload?.reel_video_id);
     return out;
@@ -478,7 +479,7 @@ export class InstagramChannel {
       modeHint: 'auto',
       ...(note ? { note } : {}),
     };
-    const out = ingest(req, { repo, adapterId: this.deps.adapterId });
+    const out = ingest(req, { repo, adapterFor: this.deps.adapterFor });
     repo.markIgEvent(eventId, { itemId: out.item.id });
     if (!out.deduplicated) this.storeMediaContext(out.item.id, media, comment, focus);
     if (media.media_url) this.hintCdn(out.item.id, media.media_url, media.id);
