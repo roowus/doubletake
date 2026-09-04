@@ -161,6 +161,48 @@ describe('claude-agent-sdk adapter', () => {
     expect(opts?.resume).toBeUndefined();
   });
 
+  it('gates built-in WebSearch/WebFetch through a PreToolUse hook (bare allowedTools shadow canUseTool)', async () => {
+    const calls: QueryParams[] = [];
+    const adapter = new ClaudeAgentSdkAdapter({
+      cwd: tmp,
+      query: fakeQuery(() => [init(), success('ok')], calls),
+    });
+    const events: Array<{ type: string; payload: Record<string, unknown> }> = [];
+    await adapter.run(
+      sampleBrief(),
+      sampleOptions({ tools: { ...OPEN_POLICY, maxSearches: 1, webFetch: false } }),
+      { emit: (e) => events.push(e as { type: string; payload: Record<string, unknown> }) },
+    );
+    const hook = calls[0]?.options?.hooks?.PreToolUse?.[0]?.hooks[0];
+    expect(hook).toBeTypeOf('function');
+    if (!hook) throw new Error('no hook');
+    const ask = (tool_name: string) =>
+      hook(
+        {
+          hook_event_name: 'PreToolUse',
+          tool_name,
+          tool_input: {},
+          tool_use_id: 'x',
+          session_id: SID,
+          transcript_path: '',
+          cwd: tmp,
+        } as never,
+        'x',
+        { signal: new AbortController().signal },
+      );
+    expect(await ask('WebSearch')).toEqual({});
+    const second = (await ask('WebSearch')) as {
+      hookSpecificOutput?: { permissionDecision?: string };
+    };
+    expect(second.hookSpecificOutput?.permissionDecision).toBe('deny');
+    const fetch = (await ask('WebFetch')) as {
+      hookSpecificOutput?: { permissionDecisionReason?: string };
+    };
+    expect(fetch.hookSpecificOutput?.permissionDecisionReason).toContain('not available');
+    expect(await ask('mcp__doubletake__read_file')).toEqual({});
+    expect(events.some((e) => e.payload.stage === 'tool_denied')).toBe(true);
+  });
+
   it('maps error_max_turns to max_turns and keeps the last text', async () => {
     const adapter = new ClaudeAgentSdkAdapter({
       cwd: tmp,
