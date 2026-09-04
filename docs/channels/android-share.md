@@ -138,7 +138,11 @@ removed, app paired against `https://<host>.ts.net`):
   the extractor now follows the 301 and falls back to the thread's Atom feed when the `.json`
   view is 403 ([MEDIA-PIPELINE.md](../MEDIA-PIPELINE.md)). The sheet closes itself after a
   short idle, so a share left alone falls back to the underlying app.
-- **Still pending:** a share from the real Instagram app (only synthetic `ACTION_SEND` so far).
+- **Instagram app:** reel → paper-plane → *Share* → Doubletake in the system chooser. The
+  sheet shows `https://www.instagram.com/reel/<code>/?igsi=…`; the item lands as
+  `platform: instagram` with the tracking parameter stripped, the run answers from the public
+  page's Open Graph caption plus web research, and the FCM notification arrives. Instagram
+  regains focus afterwards; the WebView never starts.
 
 ## Build
 Capacitor 8 (`@capacitor/*` 8.x), Android Gradle Plugin 8.13, Gradle 8.14 wrapper, compileSdk /
