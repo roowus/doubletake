@@ -50,6 +50,14 @@ export function tempEnv(prefix = 'dt-test-') {
       mentionPolling: false,
       graphBase: 'https://graph.example.test/v25.0',
     },
+    openai: {
+      baseUrl: 'https://llm.example.test/v1',
+      apiKey: null,
+      model: 'fake-model',
+      prices: {},
+      vision: false,
+    },
+    search: { provider: 'off', searxngUrl: '', braveKey: null, tavilyKey: null },
   };
   fs.mkdirSync(cfg.dataDir, { recursive: true });
   const { db, sqlite, close } = openDb(path.join(cfg.dataDir, 'doubletake.db'));
