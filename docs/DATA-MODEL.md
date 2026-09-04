@@ -76,7 +76,8 @@ listed per kind in auto collections. Place attributes may carry brain-supplied `
 ### place_geo
 Geocoder cache ([ADR 0022](adr/0022-map-view-place-geocoding.md)). `query` primary key (place
 name + `address`/`city`/`town`/`region`/`state`/`country` attributes, deduplicated, ≤200
-chars), `lat`, `lon` (both null for a miss, so unknown places are asked once), `label`
+chars; the fallback queries name + country and bare name are cached under this same key),
+`lat`, `lon` (both null for a miss, so unknown places are asked once), `label`
 (provider display name), `provider` (`nominatim`), `resolved_at`. Filled after each research
 run that produced places and by `POST /api/entities/geocode`. Never holds notes, answers or
 URLs. Migration `0006_place_geo`.

@@ -1,7 +1,7 @@
 import { afterAll, describe, expect, it } from 'vitest';
 import { buildServer } from '../src/api/server.js';
 import { Auth } from '../src/auth/index.js';
-import { brainCoords, Geocoder, geocodeQuery } from '../src/geo/index.js';
+import { brainCoords, Geocoder, geocodeCandidates, geocodeQuery } from '../src/geo/index.js';
 import { QueueWorker } from '../src/queue/worker.js';
 import { FakeBrain, tempEnv, waitFor } from './helpers.js';
 
@@ -67,6 +67,38 @@ describe('Geocoder', () => {
     expect(await geo.locate({ name: 'Nowhere', attributes: {} })).toBeNull();
     expect(calls).toEqual(['Las Leñas, Argentina', 'Nowhere']);
     expect(env.repo.getPlaceGeo('Nowhere')).toMatchObject({ lat: null, lon: null });
+  });
+
+  it('falls back to name + country, then bare name, caching under the full query', async () => {
+    const calls: string[] = [];
+    const fetchImpl: typeof fetch = async (input) => {
+      const q =
+        new URL(input instanceof Request ? input.url : String(input)).searchParams.get('q') ?? '';
+      calls.push(q);
+      return q === 'Cerro Castor (Ushuaia), Argentina'
+        ? nominatimHit('-54.72', '-68.03', 'Cerro Castor, Departamento Ushuaia, Argentina')
+        : new Response('[]', { status: 200, headers: { 'content-type': 'application/json' } });
+    };
+    const geo = new Geocoder(cfg, env.repo, { fetchImpl, pauseMs: 0, log: { warn: () => {} } });
+    const place = {
+      name: 'Cerro Castor (Ushuaia)',
+      attributes: { region: 'Tierra del Fuego', country: 'Argentina' },
+    };
+    expect(geocodeCandidates(place)).toEqual([
+      'Cerro Castor (Ushuaia), Tierra del Fuego, Argentina',
+      'Cerro Castor (Ushuaia), Argentina',
+      'Cerro Castor (Ushuaia)',
+    ]);
+    expect(await geo.locate(place)).toMatchObject({ lat: -54.72, lon: -68.03, source: 'geocoder' });
+    expect(calls).toEqual([
+      'Cerro Castor (Ushuaia), Tierra del Fuego, Argentina',
+      'Cerro Castor (Ushuaia), Argentina',
+    ]);
+    expect(
+      env.repo.getPlaceGeo('Cerro Castor (Ushuaia), Tierra del Fuego, Argentina'),
+    ).toMatchObject({
+      lat: -54.72,
+    });
   });
 
   it('is inert when switched off: cache still answers, network never touched', async () => {

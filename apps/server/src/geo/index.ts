@@ -66,6 +66,25 @@ export function geocodeQuery(place: PlaceLike): string {
   return parts.join(', ').replace(/\s+/g, ' ').trim().slice(0, MAX_QUERY_CHARS);
 }
 
+/**
+ * Queries to try in order, most specific first. Nominatim misses long comma lists that
+ * mix a name with a region it does not know as an address part ("Cerro Castor (Ushuaia),
+ * Tierra del Fuego, Argentina" misses; "Cerro Castor (Ushuaia), Argentina" hits), so fall
+ * back to name + country, then the bare name. Deduplicated; the first is `geocodeQuery`.
+ */
+export function geocodeCandidates(place: PlaceLike): string[] {
+  const full = geocodeQuery(place);
+  const name = place.name.replace(/\s+/g, ' ').trim().slice(0, MAX_QUERY_CHARS);
+  const country = place.attributes.country;
+  const withCountry =
+    typeof country === 'string' && country.trim() && country.trim() !== name
+      ? `${name}, ${country.trim()}`.slice(0, MAX_QUERY_CHARS)
+      : null;
+  const out: string[] = [];
+  for (const q of [full, withCountry, name]) if (q && !out.includes(q)) out.push(q);
+  return out;
+}
+
 export interface GeocoderOptions {
   fetchImpl?: typeof fetch;
   /** Override the inter-request pause (tests). */
@@ -111,7 +130,11 @@ export class Geocoder {
     const cached = this.repo.getPlaceGeo(query);
     if (cached) return toGeo(cached);
     if (!this.enabled) return null;
-    const hit = await this.enqueue(() => this.search(query));
+    let hit: { lat: number; lon: number; label: string } | null = null;
+    for (const q of geocodeCandidates(place)) {
+      hit = await this.enqueue(() => this.search(q));
+      if (hit) break;
+    }
     this.repo.putPlaceGeo({
       query,
       lat: hit?.lat ?? null,
