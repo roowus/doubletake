@@ -12,9 +12,16 @@ import type { InstagramChannel } from '../channels/instagram/index.js';
 import type { Config } from '../config/index.js';
 import type { Repo } from '../db/repo.js';
 import { IngestError, ingest } from '../ingest/index.js';
+import {
+  listCollections,
+  resolveCollection,
+  resolveQuery,
+  seedAutoCollections,
+} from '../library/collections.js';
 import type { NotificationHub } from '../notify/hub.js';
 import type { QueueWorker } from '../queue/worker.js';
-import { toChatDetail, toChatSummary, toRunDto } from './dto.js';
+import { toChatDetail, toChatSummary, toEntityHit, toRunDto } from './dto.js';
+import { ftsQuery } from './fts.js';
 import { hostAllowed, IG_PUBLIC_PATHS, registerInstagramRoutes } from './instagram.js';
 
 export interface ServerDeps {
@@ -46,6 +53,7 @@ const PUBLIC_PATHS = new Set([
  */
 export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
   const { cfg, repo, worker } = deps;
+  seedAutoCollections(repo);
   const auth = deps.auth ?? new Auth(repo);
   const app = Fastify({ logger: { level: cfg.logLevel }, bodyLimit: 1024 * 1024 });
   await app.register(fastifyWebsocket);
@@ -161,15 +169,22 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
   });
 
   // ---- chats ----
-  app.get('/api/chats', async (req) => {
+  app.get('/api/chats', async (req, reply) => {
     const q = z
       .object({
         q: z.string().optional(),
         tag: z.string().optional(),
+        collection: z.string().optional(),
         limit: z.coerce.number().int().min(1).max(500).default(200),
       })
       .parse(req.query);
     let rows = repo.listChats(q.limit);
+    if (q.collection) {
+      const c = repo.getCollection(q.collection);
+      if (!c) return reply.code(404).send({ error: 'collection not found' });
+      const ids = resolveCollection(repo, c);
+      rows = rows.filter((r) => ids.has(r.item.id));
+    }
     if (q.q?.trim()) {
       const ids = new Set(repo.searchFts(ftsQuery(q.q), q.limit));
       rows = rows.filter((r) => ids.has(r.item.id));
@@ -182,6 +197,114 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
   });
 
   app.get('/api/tags', async () => repo.listAllTags());
+
+  // ---- collections + entity views (M6) ----
+
+  app.get('/api/collections', async (req) => {
+    const q = z
+      .object({
+        hidden: z.coerce.boolean().default(false),
+        all: z.coerce.boolean().default(false),
+      })
+      .parse(req.query);
+    return listCollections(repo, q.hidden, !q.all);
+  });
+
+  app.post('/api/collections', async (req, reply) => {
+    const body = z
+      .object({
+        name: z.string().trim().min(1).max(80),
+        // Omit for a manual (hand-picked) collection; give a query for a saved search.
+        query: z.string().trim().max(200).optional(),
+      })
+      .parse(req.body);
+    const manual = !body.query;
+    const id = repo.createCollection({
+      name: body.name,
+      query: body.query ?? '',
+      manual,
+      auto: false,
+    });
+    return reply.code(201).send(listCollections(repo, true, false).find((c) => c.id === id));
+  });
+
+  app.post('/api/collections/:id', async (req, reply) => {
+    const { id } = z.object({ id: z.string() }).parse(req.params);
+    const c = repo.getCollection(id);
+    if (!c) return reply.code(404).send({ error: 'collection not found' });
+    const body = z
+      .object({
+        name: z.string().trim().min(1).max(80).optional(),
+        query: z.string().trim().max(200).optional(),
+        hidden: z.boolean().optional(),
+      })
+      .parse(req.body);
+    if (c.auto && body.query !== undefined)
+      return reply.code(400).send({ error: 'auto collections keep their query' });
+    repo.updateCollection(id, {
+      ...(body.name !== undefined ? { name: body.name } : {}),
+      ...(body.query !== undefined && !c.manual ? { query: body.query } : {}),
+      ...(body.hidden !== undefined ? { hidden: body.hidden } : {}),
+    });
+    return listCollections(repo, true, false).find((x) => x.id === id);
+  });
+
+  app.delete('/api/collections/:id', async (req, reply) => {
+    const { id } = z.object({ id: z.string() }).parse(req.params);
+    const c = repo.getCollection(id);
+    if (!c) return reply.code(404).send({ error: 'collection not found' });
+    if (c.auto) return reply.code(400).send({ error: 'auto collections can only be hidden' });
+    repo.deleteCollection(id);
+    return { ok: true };
+  });
+
+  app.post('/api/collections/:id/items', async (req, reply) => {
+    const { id } = z.object({ id: z.string() }).parse(req.params);
+    const c = repo.getCollection(id);
+    if (!c) return reply.code(404).send({ error: 'collection not found' });
+    if (!c.manual) return reply.code(400).send({ error: 'only manual collections take items' });
+    const body = z.object({ chatId: z.string() }).parse(req.body);
+    const chat = repo.getChat(body.chatId);
+    if (!chat) return reply.code(404).send({ error: 'chat not found' });
+    repo.addCollectionItem(id, chat.itemId);
+    worker.emit('chat_updated', chat.id);
+    return { count: repo.collectionItemIds(id).length };
+  });
+
+  app.delete('/api/collections/:id/items/:chatId', async (req, reply) => {
+    const { id, chatId } = z.object({ id: z.string(), chatId: z.string() }).parse(req.params);
+    const c = repo.getCollection(id);
+    if (!c) return reply.code(404).send({ error: 'collection not found' });
+    const chat = repo.getChat(chatId);
+    if (!chat) return reply.code(404).send({ error: 'chat not found' });
+    repo.removeCollectionItem(id, chat.itemId);
+    worker.emit('chat_updated', chat.id);
+    return { count: repo.collectionItemIds(id).length };
+  });
+
+  /** Which manual collections hold this chat (for the chat header picker). */
+  app.get('/api/chats/:id/collections', async (req, reply) => {
+    const { chat, item } = loadChat(req, reply, repo) ?? {};
+    if (!chat || !item) return;
+    return { collectionIds: repo.collectionsForItem(item.id) };
+  });
+
+  /** Every extracted entity of one kind across the library: places, recipes, products, tools… */
+  app.get('/api/entities', async (req) => {
+    const q = z
+      .object({
+        kind: z.string().min(1),
+        limit: z.coerce.number().int().min(1).max(1000).default(500),
+      })
+      .parse(req.query);
+    return repo.listEntitiesByKind(q.kind.toLowerCase(), q.limit).map((r) => toEntityHit(r));
+  });
+
+  /** Preview what a query would match without saving it. */
+  app.get('/api/collections/preview', async (req) => {
+    const q = z.object({ query: z.string() }).parse(req.query);
+    return { count: resolveQuery(repo, q.query).length };
+  });
 
   app.post('/api/chats/:id/tags', async (req, reply) => {
     const { chat, item } = loadChat(req, reply, repo) ?? {};
@@ -395,14 +518,7 @@ function loadChat(req: FastifyRequest, reply: FastifyReply, repo: Repo) {
   return { chat, item };
 }
 
-/** Turn free text into a safe FTS5 query: quoted terms, prefix match, no operators. */
-export function ftsQuery(q: string): string {
-  return q
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((t) => `"${t.replaceAll('"', '')}"*`)
-    .join(' ');
-}
+export { ftsQuery };
 
 declare module 'fastify' {
   interface FastifyRequest {

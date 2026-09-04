@@ -1,3 +1,4 @@
+import type { EntityKind } from '@doubletake/shared';
 import { useEffect, useState } from 'react';
 import { getToken } from './api';
 import { resetLive } from './live';
@@ -5,6 +6,7 @@ import { installNativeListeners, pendingShareToPath, takePendingShare } from './
 import { Chat } from './pages/Chat';
 import { ChatList } from './pages/ChatList';
 import { Compose } from './pages/Compose';
+import { ENTITY_KINDS, Entities } from './pages/Library';
 import { Settings } from './pages/Settings';
 import { Welcome } from './pages/Welcome';
 import { Link, navigate, usePath } from './router';
@@ -60,7 +62,10 @@ export function App() {
       />
     );
   else if (url.pathname === '/settings') page = <Settings />;
-  else page = <ChatList />;
+  else if (url.pathname.startsWith('/entities/')) {
+    const kind = url.pathname.slice('/entities/'.length) as EntityKind;
+    page = <Entities kind={ENTITY_KINDS.includes(kind) ? kind : 'place'} />;
+  } else page = <ChatList />;
 
   return (
     <div className="app">

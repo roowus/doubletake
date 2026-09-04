@@ -193,11 +193,18 @@ every configured adapter and Settings shows them ([guide](BRAIN-ADAPTERS.md#sele
 
 One PWA (`apps/web`, Vite + React, served by the server at `/` from `apps/web/dist`, or by
 the Vite dev server with `/api` proxied). Chat list with unread badges, tag filter and FTS
-search (the tag chips come from `GET /api/tags`, manual tags marked ✎); chat view with answer,
+search (the tag chips come from `GET /api/tags`, manual tags marked ✎), a **collections** row
+(auto collections per category and entity kind, manual lists ☰, saved searches 🔍; selecting one
+filters the list via `?collection=<id>`; auto collections can be hidden, others deleted; a
+"+ collection" form creates a manual list or a saved search with a live match count) and links
+to the **entity views** `/entities/<kind>` (places with a Maps link, recipes with ingredients,
+products with price, tools with install line, tips, media, people, events; each card links back
+to the chat it came from); chat view with answer,
 entity cards, claims table, a collapsible **Sources** panel showing every extraction the brain
 saw (transcript, on-screen text, frame descriptions, caption, comments, thread, page text)
 flattened to readable text by `extract/flatten.ts`, editable tag chips (× removes, an inline
-field adds a manual tag; every edit re-indexes FTS and re-exports the Markdown note), live run
+field adds a manual tag; every edit re-indexes FTS and re-exports the Markdown note), an
+**Add to collection** picker for manual lists (creates one inline), live run
 timeline over the `/api/events` WebSocket, cost line, follow-up composer, **Research this**
 (Quick/Standard/Deep re-run); compose (URL or text + note + mode); `/share` receives Web Share Target requests;
 settings (status, spend vs cap, **Notifications** enable/disable + send test, QR pairing,
@@ -221,8 +228,11 @@ and is authenticated by Meta's signature instead.
 | `POST setup`, `POST login` | create owner password once; exchange password for a device token |
 | `POST pair/start`, `POST pair/redeem`, `GET/DELETE devices[/:id]` | 10-minute single-use pairing codes; device list and revocation |
 | `POST ingest` | `{ url? , text?, note?, channel, mode? }` → `202 { itemId, chatId, runId }` |
-| `GET chats?q=&tag=`, `GET chats/:id`, `POST chats/:id/read` | list (FTS when `q`, tag filter when `tag`), detail with messages/runs/entities/extractions (flattened text, newest per kind+tool), clear unread |
+| `GET chats?q=&tag=&collection=`, `GET chats/:id`, `POST chats/:id/read` | list (FTS when `q`, tag filter when `tag`, membership of a collection when `collection`; 404 for an unknown id), detail with messages/runs/entities/extractions (flattened text, newest per kind+tool), clear unread |
 | `GET tags`, `POST chats/:id/tags { name }`, `DELETE chats/:id/tags/:name` | all tags with counts; add a manual tag (normalised: trimmed, lowercase, ≤40 chars); remove any tag from the item. Both edits re-index FTS, re-export the note and emit `chat_updated` |
+| `GET collections?all=&hidden=`, `POST collections { name, query? }`, `POST collections/:id { name?, query?, hidden? }`, `DELETE collections/:id` | list with item counts (empty auto collections omitted unless `all=true`, hidden ones unless `hidden=true`; auto collections are seeded at boot, one per category and one per entity kind); create a manual list (no `query`) or a saved search (`query` = `category:<c>` · `entity:<kind>` · `tag:<name>` · FTS text); rename/retarget/hide (400 when giving an auto collection a query); delete (400 for auto — hide instead) |
+| `POST collections/:id/items { chatId }`, `DELETE collections/:id/items/:chatId`, `GET chats/:id/collections`, `GET collections/preview?query=` | add to / remove from a manual list (400 otherwise; emits `chat_updated`); the manual collections a chat is in; how many items a query would match |
+| `GET entities?kind=&limit=` | every entity of one kind across items, newest item first, each with `chatId`, `itemTitle`, `platform`, `createdAt` for the entity views |
 | `POST chats/:id/messages` | follow-up turn (cheap path) |
 | `POST chats/:id/research { mode?, note? }` | full re-run, session resumed |
 | `GET chats/:id/runs/:runId/events`, `POST runs/:id/cancel` | backfill run events; abort |

@@ -212,6 +212,26 @@ export const ExtractionDto = z.object({
 });
 export type ExtractionDto = z.infer<typeof ExtractionDto>;
 
+export const CollectionDto = z.object({
+  id: z.string(),
+  name: z.string(),
+  /** `category:<c>`, `entity:<kind>`, `tag:<name>` or free FTS text; empty for manual. */
+  query: z.string(),
+  manual: z.boolean(),
+  auto: z.boolean(),
+  hidden: z.boolean(),
+  count: z.number().int(),
+});
+export type CollectionDto = z.infer<typeof CollectionDto>;
+
+export const EntityHit = Entity.extend({
+  chatId: z.string(),
+  itemTitle: z.string(),
+  platform: Platform,
+  createdAt: z.string(),
+});
+export type EntityHit = z.infer<typeof EntityHit>;
+
 export const TagDto = z.object({
   name: z.string(),
   kind: z.enum(['auto', 'manual']),

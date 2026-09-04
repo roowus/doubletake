@@ -435,6 +435,113 @@ export class Repo {
       .map((r) => r.itemId);
   }
 
+  // ---- collections ----
+
+  listCollections(includeHidden = false) {
+    const rows = this.db.select().from(s.collections).orderBy(s.collections.name).all();
+    return includeHidden ? rows : rows.filter((c) => !c.hidden);
+  }
+
+  getCollection(id: string) {
+    return this.db.select().from(s.collections).where(eq(s.collections.id, id)).get();
+  }
+
+  findCollectionByQuery(query: string) {
+    return this.db.select().from(s.collections).where(eq(s.collections.query, query)).get();
+  }
+
+  createCollection(c: { name: string; query: string; manual: boolean; auto: boolean }) {
+    const id = newId();
+    this.db
+      .insert(s.collections)
+      .values({ id, ...c, hidden: false })
+      .run();
+    return id;
+  }
+
+  updateCollection(
+    id: string,
+    patch: Partial<Pick<typeof s.collections.$inferInsert, 'name' | 'query' | 'hidden'>>,
+  ) {
+    this.db.update(s.collections).set(patch).where(eq(s.collections.id, id)).run();
+  }
+
+  deleteCollection(id: string): boolean {
+    return this.db.delete(s.collections).where(eq(s.collections.id, id)).run().changes > 0;
+  }
+
+  addCollectionItem(collectionId: string, itemId: string) {
+    this.db
+      .insert(s.collectionItems)
+      .values({ collectionId, itemId, addedAt: nowIso() })
+      .onConflictDoNothing()
+      .run();
+  }
+
+  removeCollectionItem(collectionId: string, itemId: string): boolean {
+    return (
+      this.db
+        .delete(s.collectionItems)
+        .where(
+          and(
+            eq(s.collectionItems.collectionId, collectionId),
+            eq(s.collectionItems.itemId, itemId),
+          ),
+        )
+        .run().changes > 0
+    );
+  }
+
+  collectionItemIds(collectionId: string): string[] {
+    return this.db
+      .select({ itemId: s.collectionItems.itemId })
+      .from(s.collectionItems)
+      .where(eq(s.collectionItems.collectionId, collectionId))
+      .orderBy(desc(s.collectionItems.addedAt))
+      .all()
+      .map((r) => r.itemId);
+  }
+
+  collectionsForItem(itemId: string): string[] {
+    return this.db
+      .select({ collectionId: s.collectionItems.collectionId })
+      .from(s.collectionItems)
+      .where(eq(s.collectionItems.itemId, itemId))
+      .all()
+      .map((r) => r.collectionId);
+  }
+
+  itemIdsByCategory(category: string): string[] {
+    return this.db
+      .select({ id: s.items.id })
+      .from(s.items)
+      .where(eq(s.items.category, category))
+      .all()
+      .map((r) => r.id);
+  }
+
+  itemIdsByEntityKind(kind: string): string[] {
+    return this.db
+      .selectDistinct({ itemId: s.entities.itemId })
+      .from(s.entities)
+      .where(eq(s.entities.kind, kind))
+      .all()
+      .map((r) => r.itemId);
+  }
+
+  /** Every entity of one kind across the library, newest item first. */
+  listEntitiesByKind(kind: string, limit = 500) {
+    return this.db
+      .select({ entity: s.entities, item: s.items, chatId: s.chats.id })
+      .from(s.entities)
+      .innerJoin(s.items, eq(s.items.id, s.entities.itemId))
+      .innerJoin(s.chats, eq(s.chats.itemId, s.items.id))
+      .where(eq(s.entities.kind, kind))
+      .orderBy(desc(s.items.createdAt))
+      .limit(limit)
+      .all();
+  }
+
   // ---- FTS ----
 
   upsertFts(
