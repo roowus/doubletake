@@ -306,7 +306,12 @@ export class OpenAICompatibleAdapter implements BrainAdapter {
     signal: AbortSignal,
     model?: string,
   ): Promise<Completion> {
-    const body: Record<string, unknown> = { model: model ?? this.cfg.model, messages };
+    // `stream: false` is the spec default, but some gateways (9Router) stream unless told not to.
+    const body: Record<string, unknown> = {
+      model: model ?? this.cfg.model,
+      messages,
+      stream: false,
+    };
     if (specs.length) {
       body.tools = specs.map((s) => ({
         type: 'function',

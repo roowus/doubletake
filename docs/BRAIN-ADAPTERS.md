@@ -192,7 +192,8 @@ We run the tool loop ourselves:
   `TAVILY_API_KEY`; `off` or a missing key removes the tool), `web_fetch` (readable text via
   `extract/http.ts` + `readable.ts`, 200 KB cap, SSRF guard), `read_file`, `list_dir`,
   `write_sandbox_file` (relative paths resolve inside the notes folder). The same `fs-policy`
-  checks back the MCP tools above, so both adapters refuse the same paths. A tool is only
+  checks back the MCP tools above, so both adapters refuse the same paths; a leading `~` is
+  expanded to the server's home before the check (models write tilde paths). A tool is only
   *declared* to the model when the policy allows it; calls to anything else are answered
   `Refused: …`, as are calls past the search/fetch budget. Search results and fetched pages are
   wrapped with `renderUntrusted` (`kind: page_text`) before they go back to the model.
@@ -208,6 +209,11 @@ We run the tool loop ourselves:
   exchanges (system prompt and the original brief always stay). No summarisation call yet.
 - Cost: `usage.prompt_tokens`/`completion_tokens` × the price table; `capabilities().costReporting`
   is true only when the configured model is priced, otherwise the run shows no cost.
+- Wire: every request carries `stream: false` explicitly — some gateways (9Router) stream SSE
+  unless told not to, and the adapter parses one JSON body. Verified live 2026-09-04 against
+  9Router's OpenAI endpoint with `cc/claude-haiku-4-5-20251001`: healthcheck, a quick run with
+  `web_fetch` + `read_file` tool calls (`toolu_…` ids, `finish_reason: tool_calls`) and a
+  resumed follow-up, ~6 s end to end.
 - Vision: `OPENAI_VISION=on` enables `describeImages()` (data-URL image parts, batches of six,
   JSON-array reply, same prompt contract as the SDK adapter); `classify()` is a tool-less turn;
   `healthcheck()` asks for `{"ok":true}`.

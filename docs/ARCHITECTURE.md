@@ -256,7 +256,7 @@ Detailed in [SECURITY.md](SECURITY.md) and [THREAT-MODEL.md](THREAT-MODEL.md).
   instructions inside are data. Tool policy is enforced in code, not prose.
 - File reads: roots default to `~`, deny list default `~/.ssh`, `~/.aws`, `~/.config`,
   `~/.gnupg`, `~/Library/Keychains`, `~/.doubletake`, `**/.env*`, `**/*.pem`, `**/*.key`,
-  `**/node_modules`; symlinks resolved before the check; 2 MB per read. Writes only under
+  `**/node_modules`; `~` expanded and symlinks resolved before the check; 2 MB per read. Writes only under
   `~/Doubletake`. No shell.
 - Brain network access only through `web_search` and `web_fetch` (SSRF guard: no private
   ranges, size caps, no credentials).

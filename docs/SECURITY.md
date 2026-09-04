@@ -15,7 +15,7 @@ enforced in code.
 - Reads allowed under `DOUBLETAKE_READ_ROOTS` (default `~`) minus `DOUBLETAKE_READ_DENY`
   (default `~/.ssh`, `~/.aws`, `~/.config`, `~/.gnupg`, `~/Library/Keychains`,
   `~/.doubletake`, `**/.env*`, `**/*.pem`, `**/*.key`, `**/node_modules`). Paths are resolved
-  with symlinks followed **before** the check; 2 MB per read; directory listings capped.
+  with `~` expanded and symlinks followed **before** the check; 2 MB per read; directory listings capped.
 - Writes only under `DOUBLETAKE_NOTES_DIR` (default `~/Doubletake`); no overwrite of files
   Doubletake did not create in this run unless the run is an export.
 - No shell, process spawn, or environment access is exposed to any brain.
