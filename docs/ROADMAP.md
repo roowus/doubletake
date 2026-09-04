@@ -40,9 +40,11 @@ click handlers and the Settings toggle; Capacitor 8 project in `apps/mobile` wit
 replay, FCM registration and notification deep links in `apps/web/src/native.ts`.
 Verified on a Galaxy S25 FE (2026-09-03): pairing (code and QR URL), share sheet for URL and
 text shares, failure toast + retry, unpaired share → pair → replay, no-FCM refusal in Settings
-(details in [android-share.md](channels/android-share.md)). Not yet verified: FCM delivery
-(needs a Firebase project) and shares from the real Instagram/Reddit/Chrome apps. Offline queue
-for the share sheet stays a v2 item.
+(details in [android-share.md](channels/android-share.md)). Firebase project provisioned from
+the CLI ([DEPLOYMENT.md](DEPLOYMENT.md)), server boots `push: webpush+fcm`, APK carries
+`google-services.json`. Not yet verified: an FCM notification arriving on the phone, pairing
+over the tailnet, and shares from the real Instagram/Reddit/Chrome apps. Offline queue for the
+share sheet stays a v2 item.
 
 - Capacitor project builds a debug APK; QR pairing stores server URL + device token.
 - `ShareReceiverActivity` receives `text/plain` from Instagram, Reddit, Chrome, YouTube; shows
