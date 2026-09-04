@@ -46,7 +46,7 @@ extractor whose `match` returns true wins; `web` is registered last as the fallb
 | tiktok | `tiktok.com/@user/video|photo/<id>`, `/v/<id>`, `/embed/v2/<id>`, `vm.`/`vt.` short links | `https://www.tiktok.com/@<user>/video/<id>` | official oEmbed (title = caption, author) | short links are resolved by one HEAD-like fetch first |
 | youtube | `youtube.com/watch?v=`, `/shorts/<id>`, `/embed/`, `/live/`, `/v/`, `youtu.be/<id>`, music/mobile hosts | `https://www.youtube.com/watch?v=<id>` or `https://www.youtube.com/shorts/<id>` | oEmbed (title, channel); `short: true` flag stored | Shorts keep the `/shorts/` form so the UI can label them and the worker can skip caption download for very short clips |
 | x | `x.com|twitter.com/<user>/status/<id>`, also `fxtwitter`/`vxtwitter`/`fixupx` mirrors | `https://x.com/<user>/status/<id>` | `publish.twitter.com/oembed` (tweet text, author) | quote tweets and threads are M3 (syndication JSON) |
-| reddit | `reddit.com/r/<sub>/comments/<id>`, `/comments/<id>`, `/s/<id>` share links, `redd.it/<id>` | `https://www.reddit.com/r/<sub>/comments/<id>/` | public `.json` view: title, self text, capped comment tree | already covers `focus=comments` without the worker |
+| reddit | `reddit.com/r/<sub>/comments/<id>`, `/comments/<id>`, `/r/<sub>/s/<id>` app share links, `redd.it/<id>` | `https://www.reddit.com/r/<sub>/comments/<id>/` (share links are followed through their 301 at extract time; the resolved URL and platform are written back to the item) | public `.json` view: title, self text, capped comment tree; when Reddit answers 403 ("blocked by network security", seen from a home network for every UA and for `api.`/`old.` too) the thread's Atom feed `<permalink>.rss?limit=200` is used instead: title, author, self text, outbound link, flat comments without scores (a warning says so) | already covers `focus=comments` without the worker |
 | aichat | `gemini.google.com/share/…`, `chatgpt.com/share/…`, `claude.ai/share/…` | as given, tracking stripped | readable page text | no login; treated as a transcript of the shared chat |
 | web | anything else `http(s)` | tracking params stripped | readable text + Open Graph description | fallback |
 
@@ -112,7 +112,7 @@ recorded on the `frame_description` extraction.
 ### Comments
 - Instagram (own media): `GET /<media_id>/comments?fields=id,text,username,timestamp,like_count,replies{id,text,username,timestamp,like_count}`.
 - Instagram (someone else's media, via mention): `GET /<IG_ID>?fields=mentioned_media.media_id(<id>){caption,permalink,media_url,media_type,comments{…}}` and for a focused thread `mentioned_comment.comment_id(<id>){text,username,timestamp,like_count,replies{…}}`. **Unverified** whether `replies` is expanded on `mentioned_comment` for non-owned media; fallback is to fetch the parent via `mentioned_comment.comment_id(<parent_id>)`.
-- Reddit: from the `.json` listing, top-level sorted by score; a focused thread is walked fully.
+- Reddit: from the `.json` listing, top-level sorted by score; a focused thread is walked fully. Atom fallback (when `.json` is 403): flat, feed order, no scores.
 - YouTube: `yt-dlp --write-comments` with `max_comments` from budget.
 
 Focus rules: `focus=thread:<id>` ⇒ the thread is one `thread` extraction marked primary and

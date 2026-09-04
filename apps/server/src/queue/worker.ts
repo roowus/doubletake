@@ -309,6 +309,16 @@ export class QueueWorker extends EventEmitter {
         this.repo.updateItem(item.id, { title: extraction.title });
         item = { ...item, title: extraction.title };
       }
+      // Extractors may only learn the real URL at fetch time (Reddit app share links 301 to
+      // the thread); keep the resolved one so dedupe and export use it.
+      if (extraction.canonicalUrl && extraction.canonicalUrl !== url) {
+        this.repo.updateItem(item.id, { canonicalUrl: extraction.canonicalUrl });
+        item = { ...item, canonicalUrl: extraction.canonicalUrl };
+      }
+      if (extraction.platform !== item.platform) {
+        this.repo.updateItem(item.id, { platform: extraction.platform });
+        item = { ...item, platform: extraction.platform };
+      }
     }
     if (item.text?.trim()) {
       blocks.push({ source: 'owner', kind: 'shared_text', content: item.text });
