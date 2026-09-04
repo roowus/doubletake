@@ -95,6 +95,7 @@ packages/shared   zod schemas + types (Item, Run, Message, events, API DTOs, unt
 packages/brain-sdk BrainAdapter interface, ToolPolicy, contract test harness
 workers/media     Python 3.12 (uv): download, transcribe, OCR, frames, comments
 docs/             this file, adr/, guides
+design-system/    doubletake/MASTER.md: PWA experience principles, tokens, component rules
 scripts/          doctor.sh, dev.sh, install-service.sh, check-links.py
 ```
 
@@ -225,30 +226,50 @@ every configured adapter and Settings shows them ([guide](BRAIN-ADAPTERS.md#sele
 ## 9. Clients
 
 One PWA (`apps/web`, Vite + React, served by the server at `/` from `apps/web/dist`, or by
-the Vite dev server with `/api` proxied). Chat list with unread badges, tag filter and FTS
-search (the tag chips come from `GET /api/tags`, manual tags marked ✎; the same field has an
-**Ask library** button that turns the text into a `library` question and opens its chat, listed
-with a 💬 icon), a **collections** row
-(auto collections per category and entity kind, manual lists ☰, saved searches 🔍; selecting one
-filters the list via `?collection=<id>`; auto collections can be hidden, others deleted or
-**shared** as a read-only page whose link is copied to the clipboard and shown under the row,
-🔗 marking shared ones ([ADR 0025](adr/0025-shareable-collection-pages.md)); a
-"+ collection" form creates a manual list or a saved search with a live match count) and links
-to the **entity views** `/entities/<kind>` (places with a Maps link, recipes with ingredients,
-products with price, tools with install line, tips, media, people, events; each card links back
-to the chat it came from) and to the **map** `/map` (Leaflet over OpenStreetMap tiles fetched
-by the browser; one circle marker per located place, popup linking to its chat, a list of
-unlocated places with the Maps search link and a **Locate N more** backfill button,
-[ADR 0022](adr/0022-map-view-place-geocoding.md)); chat view with answer,
-entity cards, claims table, a collapsible **Sources** panel showing every extraction the brain
+the Vite dev server with `/api` proxied). Its visual language is defined in
+[`design-system/doubletake/MASTER.md`](../design-system/doubletake/MASTER.md): experience
+principles per moment (**Capture** = share sheet / compose, **Return** = the answer chat,
+**Browse** = list, collections, entities, map), colour tokens (dark default, light via
+`prefers-color-scheme`, contrast checked), typography (system stack, 16 px / 1.5), a 4/8 px
+spacing rhythm, 44 px touch targets, component rules and anti-patterns. Implementation
+conventions that follow from it: all styling lives in `src/styles.css` as CSS custom
+properties and small utility classes (`.page`, `.card`, `.stack`, `.row`, `.chips`, `.field`,
+`.banner`, `.list-row`, `.kv-row`), no inline `style=` in components; icons are an inline SVG
+set (`components/Icon.tsx`, `platformIcon()` for platform marks), never emoji or arrow glyphs;
+every icon-only control has an `aria-label`; form inputs have visible labels and inline help;
+errors render as `.banner.error` with `role="alert"` and keep the user's input; chips never
+wrap mid-word and use `aria-pressed` / `aria-current` for state; motion respects
+`prefers-reduced-motion`.
+
+Screens: chat list with unread badges, tag filter and FTS search (the tag chips come from
+`GET /api/tags`, manual tags marked with a pencil icon; the same field has an **Ask library**
+button that turns the text into a `library` question and opens its chat), a **collections**
+row (auto collections per category and entity kind, manual lists with a list icon, saved
+searches with a search icon; selecting one filters the list via `?collection=<id>`; auto
+collections can be hidden, others deleted or **shared** as a read-only page whose link is
+copied to the clipboard and shown under the row, a link icon marking shared ones
+([ADR 0025](adr/0025-shareable-collection-pages.md)); a **Collection** chip opens a labelled
+form that creates a manual list or a saved search with a live match count) and links to the
+**entity views** `/entities/<kind>` (kind chips, a filter field, one card per entity with the
+name, icon links to the web page and to Maps, attributes as a definition list and a footer
+linking back to the chat it came from; places, recipes, products, tools, tips, media, people,
+events) and to the **map** `/map` (Leaflet over OpenStreetMap tiles fetched by the browser;
+one circle marker per located place, popup linking to its chat, a collapsible list of
+unlocated places with a Maps search link and a **Locate N more** backfill button,
+[ADR 0022](adr/0022-map-view-place-geocoding.md)). The chat view is answer-first: a compact
+header (back, title, status, source host, mode, cost, category), then the messages with entity
+cards and the claims table inside the answer, active runs with their live timeline over the
+`/api/events` WebSocket, and below them one collapsed **Tags, collections and sources** panel
+holding the editable tag chips (remove icon, inline field to add a manual tag; every edit
+re-indexes FTS and re-exports the Markdown note), the **Add to collection** picker for manual
+lists (creates one inline) and the **Sources** disclosure showing every extraction the brain
 saw (transcript, on-screen text, frame descriptions, caption, comments, thread, page text)
-flattened to readable text by `extract/flatten.ts`, editable tag chips (× removes, an inline
-field adds a manual tag; every edit re-indexes FTS and re-exports the Markdown note), an
-**Add to collection** picker for manual lists (creates one inline), live run
-timeline over the `/api/events` WebSocket, cost line, follow-up composer, **Research this**
-(Quick/Standard/Deep re-run); compose (URL or text + note + mode); `/share` receives Web Share Target requests;
-settings (status, spend vs cap, **Notifications** enable/disable + send test, QR pairing,
-devices, sign out; **Instagram** connect/disconnect/status; brains/network arrive with their milestones). The service worker
+flattened to readable text by `extract/flatten.ts`. The follow-up composer is a sticky bar
+with an icon Send button and a **Research this** menu (Quick/Standard/Deep re-run, with time
+hints). Compose (URL or text + note + mode chips); `/share` receives Web Share Target requests;
+settings as titled sections (server status and spend vs cap, **Notifications** enable/disable
++ send test + quiet hours, **Instagram** connect/disconnect/status, QR pairing, devices,
+import/export, sign out). The service worker
 is a custom `src/sw.ts` (vite-plugin-pwa `injectManifest`): Workbox precache for the shell,
 never the API, plus `push` (shows the notification) and `notificationclick` (focuses an open
 window and navigates to `/chat/<id>`, else opens one) handlers. First run asks for the owner password; other devices redeem a pairing

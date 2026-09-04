@@ -10,6 +10,8 @@ import {
   type Status,
   setToken,
 } from '../api';
+import { Icon } from '../components/Icon';
+import { seen } from '../format';
 import {
   apiBase,
   disableNativePush,
@@ -141,77 +143,120 @@ export function Settings() {
   };
 
   return (
-    <div className="page stack">
-      <div className="row">
-        <button type="button" className="ghost" onClick={() => navigate('/')}>
-          ←
+    <div className="page narrow settings stack loose">
+      <div className="page-head">
+        <button
+          type="button"
+          className="ghost icon"
+          onClick={() => navigate('/')}
+          aria-label="Back"
+        >
+          <Icon name="arrow-left" />
         </button>
-        <h3 style={{ margin: 0 }}>Settings</h3>
+        <h2>Settings</h2>
       </div>
-      {err && <div className="msg error small">{err}</div>}
+      {err && (
+        <div className="banner error" role="alert">
+          <Icon name="alert" />
+          <span>{err}</span>
+        </div>
+      )}
 
-      <div className="card stack">
-        <b>Server</b>
+      <section className="card">
+        <h3>
+          <Icon name="server" />
+          Server
+        </h3>
         {status ? (
-          <div className="small stack" style={{ gap: 4 }}>
-            {native && <div>Server: {apiBase()}</div>}
-            <div>Brain: {status.brain}</div>
-            {status.brains.map((b) => (
-              <div key={b.id} className="row" style={{ gap: 6, alignItems: 'baseline' }}>
-                <span title={b.ok ? 'healthy' : 'unhealthy'}>{b.ok ? '✓' : '✗'}</span>
-                <span>{b.id}</span>
-                {b.default && <span className="muted">default</span>}
-                {b.modes.map((m) => (
-                  <span key={m} className="muted">
-                    {m}
-                  </span>
-                ))}
-                {b.detail && <span className="muted">— {b.detail}</span>}
+          <>
+            <div className="list">
+              {status.brains.map((b) => (
+                <div className="list-row" key={b.id}>
+                  <Icon
+                    name={b.ok ? 'check' : 'x'}
+                    className={b.ok ? 'ok' : 'err'}
+                    label={b.ok ? 'healthy' : 'unhealthy'}
+                  />
+                  <div className="body">
+                    <span className="primary">
+                      {b.id}
+                      {b.default && <span className="muted small"> · default</span>}
+                    </span>
+                    <span className="secondary truncate">
+                      {[...b.modes, b.detail].filter(Boolean).join(' · ') || 'no modes assigned'}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="stack tight">
+              {native && (
+                <div className="kv-row">
+                  <span>Server</span>
+                  <span className="mono">{apiBase()}</span>
+                </div>
+              )}
+              <div className="kv-row">
+                <span>Spent today</span>
+                <span className="mono">
+                  ${status.spentTodayUsd.toFixed(3)} / ${status.dailyCapUsd.toFixed(2)} cap
+                </span>
               </div>
-            ))}
-            <div className="row">
+              <div className="kv-row">
+                <span>Notes exported to</span>
+                <span className="mono">{status.notesDir}</span>
+              </div>
+            </div>
+            <div className="actions">
               <button
                 type="button"
                 className="ghost"
                 disabled={checking}
                 onClick={() => load('refresh')}
               >
+                <Icon name="refresh" />
                 {checking ? 'Checking…' : 'Re-check brains'}
               </button>
             </div>
-            <div>
-              Spent today: ${status.spentTodayUsd.toFixed(3)} / cap ${status.dailyCapUsd.toFixed(2)}
-            </div>
-            <div>Notes exported to: {status.notesDir}</div>
-            <div className="muted">
+            <p className="help">
               Brain, cap and paths are configured on the server (environment / .env). See
               docs/DEPLOYMENT.md.
-            </div>
-          </div>
+            </p>
+          </>
         ) : (
-          <div className="muted small">Loading…</div>
+          <div className="muted small" aria-busy="true">
+            Loading…
+          </div>
         )}
-      </div>
+      </section>
 
-      <div className="card stack">
-        <b>Notifications</b>
-        <div className="small muted">
+      <section className="card">
+        <h3>
+          <Icon name="bell" />
+          Notifications
+        </h3>
+        <p className="help">
           Get a push when an answer is ready. Requires HTTPS (Tailscale serve) and, on Android, the
           installed app or PWA. The notification carries the title only, never the answer.
-        </div>
+        </p>
         {push === 'unsupported' ? (
-          <div className="small muted">
+          <p className="small muted">
             {ios
               ? 'The iOS app has no push yet (no APNs in v1). Set up ntfy or Telegram in .env to be notified on this phone.'
               : 'This browser does not support Web Push.'}
-          </div>
+          </p>
         ) : (
-          <div className="row">
-            <button type="button" disabled={push === 'busy'} onClick={togglePush}>
+          <div className="actions">
+            <button
+              type="button"
+              className={push === 'on' ? 'ghost' : 'primary'}
+              disabled={push === 'busy'}
+              onClick={togglePush}
+            >
               {push === 'on'
                 ? 'Disable on this device'
                 : push === 'busy'
-                  ? '…'
+                  ? 'Working…'
                   : 'Enable on this device'}
             </button>
             {push === 'on' && (
@@ -236,38 +281,49 @@ export function Settings() {
             )}
           </div>
         )}
-        {pushMsg && <div className="small muted">{pushMsg}</div>}
+        {pushMsg && (
+          <p className="msg-inline" role="status">
+            {pushMsg}
+          </p>
+        )}
         {status && status.push.kinds.length > 0 && (
-          <div className="small muted">Server push: {status.push.kinds.join(', ')}</div>
+          <div className="kv-row">
+            <span>Server push</span>
+            <span>{status.push.kinds.join(', ')}</span>
+          </div>
         )}
         {status && status.push.channels.length > 0 && (
-          <div className="row">
-            <span className="small muted">
-              Owner channels: {status.push.channels.join(', ')} (set in <code>.env</code>)
-            </span>
-            <button
-              type="button"
-              className="ghost"
-              onClick={() =>
-                api
-                  .pushChannelsTest()
-                  .then((r) =>
-                    setPushMsg(
-                      r.failed === 0
-                        ? `Sent to ${r.sent} channel${r.sent === 1 ? '' : 's'}.`
-                        : `${r.failed} channel(s) failed — see the server log.`,
-                    ),
-                  )
-                  .catch((e) => setPushMsg(String(e.message ?? e)))
-              }
-            >
-              Send test to channels
-            </button>
-          </div>
+          <>
+            <div className="kv-row">
+              <span>Owner channels</span>
+              <span>{status.push.channels.join(', ')}</span>
+            </div>
+            <div className="actions">
+              <button
+                type="button"
+                className="ghost"
+                onClick={() =>
+                  api
+                    .pushChannelsTest()
+                    .then((r) =>
+                      setPushMsg(
+                        r.failed === 0
+                          ? `Sent to ${r.sent} channel${r.sent === 1 ? '' : 's'}.`
+                          : `${r.failed} channel(s) failed — see the server log.`,
+                      ),
+                    )
+                    .catch((e) => setPushMsg(String(e.message ?? e)))
+                }
+              >
+                Send test to channels
+              </button>
+            </div>
+          </>
         )}
         {status && quiet && (
           <div className="stack quiet-hours">
-            <label className="row">
+            <div className="divider" />
+            <label className="check">
               <input
                 type="checkbox"
                 checked={quiet.enabled}
@@ -275,43 +331,45 @@ export function Settings() {
               />
               <span>
                 <b>Quiet hours</b>
-                <span className="small muted">
+                <span className="help">
                   {' '}
-                  — hold notifications and send one digest when the window ends
+                  Hold notifications and send one digest when the window ends.
                 </span>
               </span>
             </label>
-            <div className="row">
-              <label className="small muted">
-                From{' '}
+            <div className="times">
+              <label className="field">
+                <span className="label">From</span>
                 <input
                   type="time"
                   value={quiet.start}
                   onChange={(e) => setQuiet({ ...quiet, start: e.target.value })}
                 />
               </label>
-              <label className="small muted">
-                to{' '}
+              <label className="field">
+                <span className="label">To</span>
                 <input
                   type="time"
                   value={quiet.end}
                   onChange={(e) => setQuiet({ ...quiet, end: e.target.value })}
                 />
               </label>
-              <label className="small muted">
-                zone{' '}
-                <input
-                  className="tz"
-                  value={quiet.timeZone}
-                  onChange={(e) => setQuiet({ ...quiet, timeZone: e.target.value })}
-                  list="tz-list"
-                />
-                <datalist id="tz-list">
-                  {[Intl.DateTimeFormat().resolvedOptions().timeZone, 'UTC'].map((z) => (
-                    <option key={z} value={z} />
-                  ))}
-                </datalist>
-              </label>
+            </div>
+            <label className="field">
+              <span className="label">Time zone</span>
+              <input
+                className="tz"
+                value={quiet.timeZone}
+                onChange={(e) => setQuiet({ ...quiet, timeZone: e.target.value })}
+                list="tz-list"
+              />
+              <datalist id="tz-list">
+                {[Intl.DateTimeFormat().resolvedOptions().timeZone, 'UTC'].map((z) => (
+                  <option key={z} value={z} />
+                ))}
+              </datalist>
+            </label>
+            <div className="actions">
               <button
                 type="button"
                 onClick={() =>
@@ -325,15 +383,9 @@ export function Settings() {
                     .catch((e) => setQuietMsg(String(e.message ?? e)))
                 }
               >
-                Save
+                Save quiet hours
               </button>
-            </div>
-            {status.push.pending > 0 && (
-              <div className="row">
-                <span className="small muted">
-                  {status.push.pending} notification{status.push.pending === 1 ? '' : 's'} waiting
-                  for the digest.
-                </span>
+              {status.push.pending > 0 && (
                 <button
                   type="button"
                   className="ghost"
@@ -347,56 +399,68 @@ export function Settings() {
                       .catch((e) => setQuietMsg(String(e.message ?? e)))
                   }
                 >
-                  Send now
+                  Send digest now ({status.push.pending})
                 </button>
-              </div>
+              )}
+            </div>
+            {quietMsg && (
+              <p className="msg-inline" role="status">
+                {quietMsg}
+              </p>
             )}
-            {quietMsg && <div className="small muted">{quietMsg}</div>}
           </div>
         )}
-      </div>
+      </section>
 
-      <div className="card stack">
-        <b>Instagram</b>
-        <div className="small muted">
+      <section className="card">
+        <h3>
+          <Icon name="instagram" />
+          Instagram
+        </h3>
+        <p className="help">
           DM a reel to your shadow account, or @mention it in a comment, and the answer arrives
           here. Setup: docs/channels/instagram-setup.md.
-        </div>
-        {ig === null && <div className="small muted">Loading…</div>}
+        </p>
+        {ig === null && (
+          <div className="small muted" aria-busy="true">
+            Loading…
+          </div>
+        )}
         {ig === 'off' && (
-          <div className="small muted">
+          <p className="small muted">
             Not configured on the server (set IG_APP_ID, IG_APP_SECRET and IG_WEBHOOK_VERIFY_TOKEN,
             then restart).
-          </div>
+          </p>
         )}
         {ig && ig !== 'off' && (
           <>
-            {ig.connected ? (
-              <div className="small">
-                Connected as <b>@{ig.username ?? ig.igUserId}</b>
-                {ig.expiresAt && (
-                  <span className="muted">
-                    {' '}
-                    · token expires {new Date(ig.expiresAt).toLocaleDateString()}
-                  </span>
-                )}
-                {ig.refreshedAt && (
-                  <span className="muted">
-                    {' '}
-                    · refreshed {new Date(ig.refreshedAt).toLocaleDateString()}
-                  </span>
-                )}
+            <div className="stack tight">
+              <div className="kv-row">
+                <span>Account</span>
+                <span>{ig.connected ? `@${ig.username ?? ig.igUserId}` : 'Not connected'}</span>
               </div>
-            ) : (
-              <div className="small muted">Not connected.</div>
-            )}
-            <div className="small muted">
-              Mention polling {ig.mentionPolling ? 'on' : 'off'}
-              {ig.webhookPublicHost
-                ? ` · webhook host ${ig.webhookPublicHost}`
-                : ' · no public webhook host set'}
+              {ig.connected && ig.expiresAt && (
+                <div className="kv-row">
+                  <span>Token expires</span>
+                  <span>{new Date(ig.expiresAt).toLocaleDateString()}</span>
+                </div>
+              )}
+              {ig.connected && ig.refreshedAt && (
+                <div className="kv-row">
+                  <span>Last refreshed</span>
+                  <span>{new Date(ig.refreshedAt).toLocaleDateString()}</span>
+                </div>
+              )}
+              <div className="kv-row">
+                <span>Mention polling</span>
+                <span>{ig.mentionPolling ? 'on' : 'off'}</span>
+              </div>
+              <div className="kv-row">
+                <span>Webhook host</span>
+                <span>{ig.webhookPublicHost ?? 'not set'}</span>
+              </div>
             </div>
-            <div className="row">
+            <div className="actions">
               {ig.connected ? (
                 <>
                   <button
@@ -432,7 +496,7 @@ export function Settings() {
                   </button>
                   <button
                     type="button"
-                    className="ghost"
+                    className="ghost danger"
                     onClick={() => {
                       if (!confirm('Disconnect the Instagram account?')) return;
                       api
@@ -450,6 +514,7 @@ export function Settings() {
               ) : (
                 <button
                   type="button"
+                  className="primary"
                   onClick={() =>
                     api
                       .igConnect()
@@ -464,141 +529,183 @@ export function Settings() {
               )}
             </div>
             {ig.recentEvents.length > 0 && (
-              <div className="small muted">
+              <p className="small muted">
                 Recent events:{' '}
                 {ig.recentEvents
                   .slice(0, 5)
                   .map((e) => `${e.kind}${e.error ? ' (error)' : ''}`)
                   .join(', ')}
-              </div>
+              </p>
             )}
           </>
         )}
-        {igMsg && <div className="small muted">{igMsg}</div>}
-      </div>
+        {igMsg && (
+          <p className="msg-inline" role="status">
+            {igMsg}
+          </p>
+        )}
+      </section>
 
-      <div className="card stack">
-        <b>Pair a device</b>
-        <div className="small muted">
+      <section className="card">
+        <h3>
+          <Icon name="smartphone" />
+          Pair a device
+        </h3>
+        <p className="help">
           Open Doubletake on the other device, choose “Pairing code”, and scan or type this code.
           Codes expire after 10 minutes and work once.
-        </div>
+        </p>
         {pair ? (
-          <div className="stack" style={{ alignItems: 'center' }}>
-            <QRCodeSVG
-              value={`${pair.url}/?code=${pair.code}`}
-              size={196}
-              bgColor="#ffffff"
-              fgColor="#0f1115"
-              includeMargin
-            />
-            <div style={{ fontSize: 28, letterSpacing: 6, fontFamily: 'ui-monospace, monospace' }}>
+          <div className="stack">
+            <div className="qr">
+              <QRCodeSVG
+                value={`${pair.url}/?code=${pair.code}`}
+                size={196}
+                bgColor="#ffffff"
+                fgColor="#14171f"
+                includeMargin
+              />
+            </div>
+            <div className="pair-code">
+              <span className="sr-only">Pairing code </span>
               {pair.code}
             </div>
-            <div className="small muted">{pair.url}</div>
+            <div className="small muted mono truncate">{pair.url}</div>
           </div>
         ) : (
-          <button
-            type="button"
-            onClick={() =>
-              api
-                .pairStart()
-                .then(setPair)
-                .catch((e) => setErr(String(e.message ?? e)))
-            }
-          >
-            Show pairing code
-          </button>
-        )}
-      </div>
-
-      <div className="card stack">
-        <b>Devices</b>
-        {devices.map((d) => (
-          <div className="row small" key={d.id}>
-            <span style={{ flex: 1 }}>
-              {d.name} <span className="muted">({d.platform})</span>
-            </span>
-            <span className="muted">
-              {d.lastSeenAt ? `seen ${new Date(d.lastSeenAt).toLocaleString()}` : ''}
-            </span>
+          <div className="actions">
             <button
               type="button"
-              className="ghost"
+              className="primary"
               onClick={() =>
-                api.revokeDevice(d.id).then(() => {
-                  load();
-                })
+                api
+                  .pairStart()
+                  .then(setPair)
+                  .catch((e) => setErr(String(e.message ?? e)))
               }
             >
-              Revoke
+              Show pairing code
             </button>
           </div>
-        ))}
-        <p className="muted small">
+        )}
+      </section>
+
+      <section className="card">
+        <h3>
+          <Icon name="monitor" />
+          Devices
+        </h3>
+        {devices.length === 0 ? (
+          <p className="small muted">No paired devices yet.</p>
+        ) : (
+          <div className="list">
+            {devices.map((d) => (
+              <div className="list-row" key={d.id}>
+                <Icon
+                  name={d.platform === 'android' || d.platform === 'ios' ? 'smartphone' : 'monitor'}
+                />
+                <div className="body">
+                  <span className="primary truncate">{d.name}</span>
+                  <span className="secondary truncate">
+                    {d.platform}
+                    {d.lastSeenAt ? ` · ${seen(d.lastSeenAt)}` : ''}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  className="ghost small danger"
+                  onClick={() =>
+                    api.revokeDevice(d.id).then(() => {
+                      load();
+                    })
+                  }
+                >
+                  Revoke
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        <p className="help">
           Other agents (Claude Code, Claude Desktop, …) connect the same way: redeem a pairing code
           for a token, then point their MCP client at <code>{window.location.origin}/mcp</code> with{' '}
           <code>Authorization: Bearer &lt;token&gt;</code>. They appear here and can be revoked.
         </p>
-      </div>
+      </section>
 
-      <div className="card stack">
-        <b>Import and export</b>
-        <p className="muted small">
+      <section className="card">
+        <h3>
+          <Icon name="download" />
+          Import and export
+        </h3>
+        <p className="help">
           Move the library to or from other tools. Export the Karakeep file to import it into
           Karakeep (Settings → Import), or the Memos file to post with a script. Importing a
           Karakeep export adds its bookmarks as items with their tags and lists; nothing is
           researched unless you ask.
         </p>
-        <div className="row small" style={{ flexWrap: 'wrap', gap: 8 }}>
+        <div className="actions">
           <button type="button" className="ghost" onClick={() => download('karakeep')}>
-            Download Karakeep export
+            <Icon name="download" />
+            Karakeep export
           </button>
           <button type="button" className="ghost" onClick={() => download('memos')}>
-            Download Memos export
+            <Icon name="download" />
+            Memos export
           </button>
         </div>
-        <div className="row small" style={{ flexWrap: 'wrap', gap: 8 }}>
-          <label className="row small" style={{ gap: 6 }}>
-            After import
-            <select
-              value={importResearch}
-              onChange={(e) => setImportResearch(e.target.value as '' | 'quick' | 'standard')}
-            >
-              <option value="">do nothing (free)</option>
-              <option value="quick">research each, quick</option>
-              <option value="standard">research each, standard</option>
-            </select>
-          </label>
-          <label className="row small" style={{ gap: 6 }}>
-            Import Karakeep file
-            <input
-              type="file"
-              accept="application/json,.json"
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                e.target.value = '';
-                void importFile(f);
-              }}
-            />
-          </label>
-        </div>
-        {importMsg && <p className="muted small">{importMsg}</p>}
-      </div>
+        <div className="divider" />
+        <label className="field">
+          <span className="label">After import</span>
+          <select
+            value={importResearch}
+            onChange={(e) => setImportResearch(e.target.value as '' | 'quick' | 'standard')}
+          >
+            <option value="">Do nothing (free)</option>
+            <option value="quick">Research each item, quick</option>
+            <option value="standard">Research each item, standard</option>
+          </select>
+        </label>
+        <label className="field">
+          <span className="label">Import Karakeep file</span>
+          <input
+            className="file"
+            type="file"
+            accept="application/json,.json"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              e.target.value = '';
+              void importFile(f);
+            }}
+          />
+        </label>
+        {importMsg && (
+          <p className="msg-inline" role="status">
+            {importMsg}
+          </p>
+        )}
+      </section>
 
-      <div className="card stack">
-        <b>This device</b>
-        <button
-          type="button"
-          onClick={() => {
-            setToken(null);
-            navigate('/', true);
-            location.reload();
-          }}
-        >
-          Sign out
-        </button>
-      </div>
+      <section className="card">
+        <h3>
+          <Icon name="key" />
+          This device
+        </h3>
+        <div className="actions">
+          <button
+            type="button"
+            className="ghost danger"
+            onClick={() => {
+              setToken(null);
+              navigate('/', true);
+              location.reload();
+            }}
+          >
+            <Icon name="log-out" />
+            Sign out
+          </button>
+        </div>
+      </section>
     </div>
   );
 }

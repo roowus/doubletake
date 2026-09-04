@@ -33,31 +33,27 @@ export function EntityCards({ entities }: { entities: Entity[] }) {
 export function Claims({ claims }: { claims: Answer['claims'] }) {
   if (claims.length === 0) return null;
   return (
-    <div className="stack">
+    <div className="stack tight">
       <div className="small muted">Claims</div>
-      {claims.map((c) => (
-        <div className="row" key={c.claim} style={{ alignItems: 'flex-start' }}>
-          <span className={`verdict ${c.verdict}`}>{c.verdict}</span>
-          <div style={{ flex: 1 }}>
-            {c.claim}
-            {c.sources.length > 0 && (
-              <div className="small">
-                {c.sources.map((s, i) => (
-                  <a
-                    key={s}
-                    href={s}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{ marginRight: 8 }}
-                  >
-                    [{i + 1}]
-                  </a>
-                ))}
-              </div>
-            )}
+      <div className="claims">
+        {claims.map((c) => (
+          <div className="claim" key={c.claim}>
+            <span className={`verdict ${c.verdict}`}>{c.verdict}</span>
+            <div>
+              {c.claim}
+              {c.sources.length > 0 && (
+                <div className="refs small">
+                  {c.sources.map((s, i) => (
+                    <a key={s} href={s} target="_blank" rel="noopener noreferrer">
+                      [{i + 1}]
+                    </a>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
-        </div>
-      ))}
+        ))}
+      </div>
     </div>
   );
 }
@@ -65,9 +61,9 @@ export function Claims({ claims }: { claims: Answer['claims'] }) {
 export function Recommendations({ items }: { items: string[] }) {
   if (items.length === 0) return null;
   return (
-    <div className="stack">
+    <div className="stack tight">
       <div className="small muted">Recommendations</div>
-      <ul style={{ margin: 0 }}>
+      <ul className="md">
         {items.map((r) => (
           <li key={r}>{r}</li>
         ))}
