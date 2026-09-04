@@ -84,6 +84,16 @@ export interface Config {
     prices: Record<string, { inputPerM: number; outputPerM: number }>;
     vision: boolean;
   };
+  /** `headless-cli` brain: which CLI harness to spawn (docs/BRAIN-ADAPTERS.md). */
+  headless: {
+    /** Preset id (`claude-code`, `codex`, `gemini-cli`, `opencode`, `hermes`). */
+    preset: string;
+    /** Override the preset's executable (path or name on PATH). */
+    command: string | null;
+    /** Override the preset's argument template (JSON array with {prompt} etc.). */
+    args: string[] | null;
+    timeoutMs: number | null;
+  };
   /** Web search backend for loop-based brains; `off` removes the web_search tool. */
   search: {
     provider: 'searxng' | 'brave' | 'tavily' | 'off';
@@ -137,6 +147,14 @@ export function loadConfig(): Config {
       prices: parsePrices(env('OPENAI_PRICES')),
       vision: (env('OPENAI_VISION', 'off') ?? 'off') === 'on',
     },
+    headless: {
+      preset: env('DOUBLETAKE_HEADLESS_PRESET', 'claude-code') ?? 'claude-code',
+      command: env('DOUBLETAKE_HEADLESS_CMD') ?? null,
+      args: parseArgs(env('DOUBLETAKE_HEADLESS_ARGS')),
+      timeoutMs: env('DOUBLETAKE_HEADLESS_TIMEOUT_MS')
+        ? Number(env('DOUBLETAKE_HEADLESS_TIMEOUT_MS'))
+        : null,
+    },
     search: {
       provider: searchProvider(env('SEARCH_PROVIDER', 'searxng')),
       searxngUrl: env('SEARXNG_URL', 'http://127.0.0.1:8888') ?? '',
@@ -151,6 +169,17 @@ function searchProvider(v: string | undefined): Config['search']['provider'] {
 }
 
 /** `OPENAI_PRICES='{"gpt-4o-mini":{"inputPerM":0.15,"outputPerM":0.6}}'`; malformed → no prices. */
+/** JSON array of strings; anything else ⇒ null (preset args are used). */
+function parseArgs(raw: string | undefined): string[] | null {
+  if (!raw) return null;
+  try {
+    const v = JSON.parse(raw) as unknown;
+    return Array.isArray(v) && v.every((x) => typeof x === 'string') ? (v as string[]) : null;
+  } catch {
+    return null;
+  }
+}
+
 function parsePrices(raw: string | undefined): Config['openai']['prices'] {
   if (!raw) return {};
   try {

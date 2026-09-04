@@ -57,6 +57,7 @@ export function tempEnv(prefix = 'dt-test-') {
       prices: {},
       vision: false,
     },
+    headless: { preset: 'claude-code', command: null, args: null, timeoutMs: null },
     search: { provider: 'off', searxngUrl: '', braveKey: null, tavilyKey: null },
   };
   fs.mkdirSync(cfg.dataDir, { recursive: true });

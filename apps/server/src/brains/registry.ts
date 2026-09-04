@@ -2,6 +2,7 @@ import path from 'node:path';
 import type { BrainAdapter } from '@doubletake/brain-sdk';
 import type { Config } from '../config/index.js';
 import { ClaudeAgentSdkAdapter } from './claude-agent-sdk.js';
+import { HEADLESS_PRESETS, HeadlessCliAdapter } from './headless-cli.js';
 import { OpenAICompatibleAdapter } from './openai-compatible.js';
 import { createSearchProvider } from './tools/search.js';
 import { fetchPage } from './tools/web-fetch.js';
@@ -18,6 +19,24 @@ export const BRAIN_FACTORIES: Record<string, BrainFactory> = {
       cwd: path.join(cfg.dataDir, 'agent-cwd'),
       ...(cfg.brainModel ? { model: cfg.brainModel } : {}),
     }),
+  'headless-cli': (cfg) => {
+    const base = HEADLESS_PRESETS[cfg.headless.preset];
+    if (!base) {
+      throw new Error(
+        `Unknown headless preset "${cfg.headless.preset}". Known: ${Object.keys(HEADLESS_PRESETS).join(', ')}`,
+      );
+    }
+    return new HeadlessCliAdapter({
+      preset: {
+        ...base,
+        ...(cfg.headless.command ? { command: cfg.headless.command } : {}),
+        ...(cfg.headless.args ? { args: cfg.headless.args } : {}),
+      },
+      runsDir: path.join(cfg.dataDir, 'runs'),
+      ...(cfg.brainModel ? { model: cfg.brainModel } : {}),
+      ...(cfg.headless.timeoutMs ? { timeoutMs: cfg.headless.timeoutMs } : {}),
+    });
+  },
   'openai-compatible': (cfg) =>
     new OpenAICompatibleAdapter(
       {

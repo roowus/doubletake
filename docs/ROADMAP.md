@@ -94,7 +94,8 @@ and a Reddit video.
 
 ## M5 — More brains
 
-- `headless-cli` adapter with presets for `claude -p`, Codex, Gemini CLI, OpenCode, Hermes.
+- ✅ `headless-cli` adapter with presets for `claude -p`, Codex, Gemini CLI, OpenCode, Hermes
+  (unit-tested with a fake `spawn`; preset flags other than `claude-code` unverified live).
 - ✅ `openai-compatible` adapter with our tool loop (web_search via SearXNG/Brave/Tavily,
   web_fetch, read_file, list_dir, write_sandbox_file) and self-managed conversation storage
   (`apps/server/src/brains/{openai-compatible.ts,tools/}`; unit-tested against a fake endpoint,
