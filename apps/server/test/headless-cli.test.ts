@@ -154,6 +154,28 @@ describe('headless-cli adapter', () => {
     expect(res.sessionId).toBe('sess-abc123');
   });
 
+  it('resumes in the directory the session was created in (gemini/opencode scope sessions to cwd)', async () => {
+    const calls: Spawned[] = [];
+    const a = make({ stdout: claudeOk }, calls);
+    await a.run(sampleBrief(), sampleOptions(), { emit: () => {} });
+    await a.followUp(
+      { chatId: 'c1', sessionId: 'sess-abc123', history: [], brief: sampleBrief() },
+      'why?',
+      sampleOptions(),
+      { emit: () => {} },
+    );
+    expect(calls).toHaveLength(2);
+    expect((calls[1] as Spawned).cwd).toBe((calls[0] as Spawned).cwd);
+    // an unknown session id still gets a fresh directory
+    await a.followUp(
+      { chatId: 'c2', sessionId: 'sess-unknown', history: [], brief: sampleBrief() },
+      'why?',
+      sampleOptions(),
+      { emit: () => {} },
+    );
+    expect((calls[2] as Spawned).cwd).not.toBe((calls[0] as Spawned).cwd);
+  });
+
   it('hermes preset: answer on stdout, session id from stderr, resumed on follow-up', async () => {
     const hermes = HEADLESS_PRESETS.hermes as HeadlessPreset;
     const calls: Spawned[] = [];
@@ -182,7 +204,14 @@ describe('headless-cli adapter', () => {
 
   it('without resumeArgs replays the transcript instead and reports resume=false', async () => {
     const calls: Spawned[] = [];
-    const a = make({ stdout: 'Because.' }, calls, HEADLESS_PRESETS['gemini-cli']);
+    const plain: HeadlessPreset = {
+      id: 'plain-cli',
+      command: 'some-cli',
+      args: ['{prompt}'],
+      promptMode: 'arg',
+      outputParser: 'plain',
+    };
+    const a = make({ stdout: 'Because.' }, calls, plain);
     expect(a.capabilities().resume).toBe(false);
     expect(a.capabilities().costReporting).toBe(false);
     const res = await a.followUp(
@@ -200,10 +229,10 @@ describe('headless-cli adapter', () => {
       { emit: () => {} },
     );
     const c = calls[0] as Spawned;
-    expect(c.command).toBe('gemini');
+    expect(c.command).toBe('some-cli');
     expect(c.args).not.toContain('--resume');
-    expect(c.args[1]).toContain('Conversation so far');
-    expect(c.args[1]).toContain('Web search: not available');
+    expect(c.args[0]).toContain('Conversation so far');
+    expect(c.args[0]).toContain('Web search: not available');
     expect(res.text).toBe('Because.');
     expect(res.sessionId).toBeUndefined();
   });
@@ -225,8 +254,120 @@ describe('headless-cli adapter', () => {
     expect(c.stdin).toContain('Research mode: quick');
     expect(c.args).toContain(c.cwd); // {sandboxDir} substituted
     expect(res.text).toBe('Final answer.');
-    expect(res.sessionId).toBeUndefined(); // codex preset has no resumeArgs
+    expect(res.sessionId).toBe('thr_1'); // codex resumes with `exec … resume <thread_id> -`
     expect(res.usage).toEqual({ inputTokens: 5, outputTokens: 3 });
+  });
+
+  it('codex follow-up appends `resume <id> -` after the exec options and feeds stdin', async () => {
+    const calls: Spawned[] = [];
+    const lines = [
+      { type: 'thread.started', thread_id: 'thr_1' },
+      { type: 'item.completed', item: { type: 'agent_message', text: 'Because.' } },
+    ]
+      .map((l) => JSON.stringify(l))
+      .join('\n');
+    const a = make({ stdout: lines }, calls, HEADLESS_PRESETS.codex);
+    const res = await a.followUp(
+      { chatId: 'c1', sessionId: 'thr_1', history: [], brief: sampleBrief() },
+      'why?',
+      sampleOptions(),
+      { emit: () => {} },
+    );
+    const c = calls[0] as Spawned;
+    expect(c.args.slice(0, 2)).toEqual(['exec', '--json']);
+    expect(c.args.slice(-3)).toEqual(['resume', 'thr_1', '-']);
+    expect(c.stdin).toContain('why?');
+    expect(res.text).toBe('Because.');
+    expect(res.sessionId).toBe('thr_1');
+  });
+
+  it('opencode preset: `run --format json` events, session id from sessionID, tokens', async () => {
+    const calls: Spawned[] = [];
+    const lines = [
+      { type: 'step_start', sessionID: 'ses_1', part: { type: 'step-start' } },
+      { type: 'text', sessionID: 'ses_1', part: { type: 'text', text: 'PONG' } },
+      {
+        type: 'step_finish',
+        sessionID: 'ses_1',
+        part: { type: 'step-finish', reason: 'stop', tokens: { input: 918, output: 4 } },
+      },
+    ]
+      .map((l) => JSON.stringify(l))
+      .join('\n');
+    const a = make({ stdout: lines }, calls, HEADLESS_PRESETS.opencode);
+    const res = await a.run(sampleBrief(), sampleOptions(), { emit: () => {} });
+    const c = calls[0] as Spawned;
+    expect(c.args.slice(0, 4)).toEqual(['run', '--pure', '--format', 'json']);
+    expect(res.text).toBe('PONG');
+    expect(res.sessionId).toBe('ses_1');
+    expect(res.usage).toEqual({ inputTokens: 918, outputTokens: 4 });
+    const follow = await a.followUp(
+      { chatId: 'c1', sessionId: 'ses_1', history: [], brief: sampleBrief() },
+      'again?',
+      sampleOptions(),
+      { emit: () => {} },
+    );
+    expect((calls[1] as Spawned).args.slice(-2)).toEqual(['-s', 'ses_1']);
+    expect(follow.sessionId).toBe('ses_1');
+  });
+
+  it('opencode error events are reported as errors', () => {
+    const line = JSON.stringify({
+      type: 'error',
+      sessionID: 'ses_2',
+      error: { name: 'UnknownError', data: { message: 'Unexpected server error.' } },
+    });
+    const p = parseOutput('jsonl', line);
+    expect(p.isError).toBe(true);
+    expect(p.text).toBe('Unexpected server error.');
+  });
+
+  it('gemini-json parser: response, session_id, summed token stats, error object', () => {
+    const ok = parseOutput(
+      'gemini-json',
+      JSON.stringify({
+        session_id: 'ca13f531',
+        response: 'PONG',
+        stats: {
+          models: {
+            'gemini-3.5-flash': { tokens: { input: 8496, candidates: 161, thoughts: 159 } },
+            'gemini-3.5-pro': { tokens: { input: 4, candidates: 1 } },
+          },
+        },
+      }),
+    );
+    expect(ok).toEqual({
+      text: 'PONG',
+      sessionId: 'ca13f531',
+      usage: { inputTokens: 8500, outputTokens: 162 },
+    });
+    const bad = parseOutput(
+      'gemini-json',
+      JSON.stringify({ session_id: 'x', error: { type: 'Error', message: 'No auth', code: 41 } }),
+    );
+    expect(bad.isError).toBe(true);
+    expect(bad.text).toBe('No auth');
+    expect(parseOutput('gemini-json', 'not json').text).toBe('not json');
+  });
+
+  it('gemini-cli preset passes -o json --skip-trust and resumes by session id', async () => {
+    const calls: Spawned[] = [];
+    const out = JSON.stringify({ session_id: 'g-1', response: 'Answer.' });
+    const a = make({ stdout: out }, calls, HEADLESS_PRESETS['gemini-cli']);
+    const res = await a.run(sampleBrief(), sampleOptions(), { emit: () => {} });
+    const c = calls[0] as Spawned;
+    expect(c.command).toBe('gemini');
+    expect(c.args).toContain('--skip-trust');
+    expect(c.args.slice(2, 4)).toEqual(['-o', 'json']);
+    expect(res.text).toBe('Answer.');
+    expect(res.sessionId).toBe('g-1');
+    await a.followUp(
+      { chatId: 'c1', sessionId: 'g-1', history: [], brief: sampleBrief() },
+      'more?',
+      sampleOptions(),
+      { emit: () => {} },
+    );
+    expect((calls[1] as Spawned).args.slice(-2)).toEqual(['--resume', 'g-1']);
   });
 
   it('reports a non-zero exit with stderr as an error', async () => {

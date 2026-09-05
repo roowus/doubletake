@@ -92,11 +92,11 @@ and a Reddit video.
   [guide](channels/instagram-setup.md#6-live-verification-checklist-m4-acceptance)). Settings
   card for connect/status/poll/refresh/disconnect shipped.
 
-## M5 — More brains — done 2026-09-04 (`openai-compatible`, `claude-code` and `hermes` verified live; codex/gemini/opencode presets still unverified)
+## M5 — More brains — done 2026-09-04 (all six adapters/presets verified live)
 
 - ✅ `headless-cli` adapter with presets for `claude -p`, Codex, Gemini CLI, OpenCode, Hermes
-  (unit-tested with a fake `spawn`; `claude-code` and `hermes` run live with resume; codex,
-  gemini-cli and opencode flags are unverified).
+  (unit-tested with a fake `spawn`; all five run live with resume through the local router,
+  2026-09-04: codex-cli 0.153.4, Gemini CLI 0.58.0, OpenCode 1.18.29, Hermes 0.21.0).
 - ✅ `openai-compatible` adapter with our tool loop (web_search via SearXNG/Brave/Tavily,
   web_fetch, read_file, list_dir, write_sandbox_file) and self-managed conversation storage
   (`apps/server/src/brains/{openai-compatible.ts,tools/}`; unit-tested against a fake endpoint

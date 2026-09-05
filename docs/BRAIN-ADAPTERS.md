@@ -142,7 +142,7 @@ Runs any CLI harness as a child process, one process per run or follow-up
   "resumeArgs": ["--resume", "{sessionId}"],   // omit ⇒ capabilities.resume = false
   "modelArgs": ["--model", "{model}"],          // appended only when a model is configured
   "promptMode": "arg",                          // arg | stdin
-  "outputParser": "claude-json",                // claude-json | jsonl | plain
+  "outputParser": "claude-json",                // claude-json | gemini-json | jsonl | plain
   "sessionIdPattern": "session_id:\\s*(\\S+)"    // optional; for `plain` parsers whose harness
 }                                               // prints a session id (stderr checked, then stdout)
 ```
@@ -152,9 +152,9 @@ Presets shipped (`HEADLESS_PRESETS`):
 | Preset | Command | Prompt | Parser | Resume |
 |---|---|---|---|---|
 | `claude-code` | `claude -p … --output-format json --max-turns N` | arg | `claude-json` (`result`, `session_id`, `total_cost_usd`, `usage`, `is_error`) | `--resume <id>` |
-| `codex` | `codex exec --json --skip-git-repo-check -C <sandbox>` | stdin | `jsonl` (`item.completed`/`agent_message`, `turn.completed.usage`) | no |
-| `gemini-cli` | `gemini -p …` | arg | `plain` | no |
-| `opencode` | `opencode run …` | arg | `plain` | no |
+| `codex` | `codex exec --json --skip-git-repo-check -C <sandbox>` | stdin | `jsonl` (`thread.started.thread_id`, `item.completed`/`agent_message`, `turn.completed.usage`) | `… resume <id> -` |
+| `gemini-cli` | `gemini -p … -o json --skip-trust` | arg | `gemini-json` (`response`, `session_id`, `stats.models.*.tokens`, `error`) | `--resume <id>` |
+| `opencode` | `opencode run --pure --format json …` | arg | `jsonl` (`text`/`part.text`, `sessionID`, `step_finish`/`part.tokens`, `error`) | `-s <id>` |
 | `hermes` | `hermes chat -Q --oneshot --source tool --max-turns N -q …` | arg | `plain` + `sessionIdPattern` (`session_id: …` on stderr) | `--resume <id>` |
 
 `DOUBLETAKE_HEADLESS_CMD` and `DOUBLETAKE_HEADLESS_ARGS` (JSON array) override a preset's
@@ -174,7 +174,13 @@ Behaviour:
   (default 25 min) and the run's abort signal both SIGTERM then SIGKILL the child.
 - Follow-ups resume with `resumeArgs` when the preset has them and the chat has a session id;
   otherwise the transcript is replayed with a zero-tool preamble. Session ids are stored only
-  for presets that can resume.
+  for presets that can resume. A resumed run reuses the directory its session was created in
+  (`<dataDir>/runs/sessions/<sessionId>` records it): Gemini CLI and OpenCode scope sessions to
+  the cwd, and resuming from a fresh directory fails with "No previous sessions found for this
+  project" (gemini, exit 42) or hangs (opencode). When the recorded directory is gone the
+  follow-up gets a fresh one and the transcript is not replayed.
+- Structured output is preferred over `plain` wherever the harness has it: `plain` cannot tell
+  an error message from an answer, and OpenCode's default text format hangs while stdin is open.
 - `stopReason` is `done` when the harness exits 0 with text, `error` for non-zero exit (last
   stderr lines in the message), `is_error`/`error` events, timeouts or empty output, `aborted`
   on cancel. `max_turns` and `budget` cannot be distinguished from the outside and are reported
@@ -187,8 +193,33 @@ Behaviour:
 answer, `total_cost_usd`, `session_id`, and a `--resume` follow-up, ~9 s). `hermes` was verified
 live 2026-09-04 against Hermes Agent v0.21.0: `-Q --oneshot` prints only the answer on stdout and
 `session_id: <id>` on stderr, `--resume <id>` continues that session, `--source tool` keeps the
-runs out of the owner's own session list. `codex`, `gemini-cli` and `opencode` flags were taken
-from each CLI's documentation and are **unverified** against the installed tools.
+runs out of the owner's own session list.
+
+`codex`, `gemini-cli` and `opencode` were verified live 2026-09-04 through the same
+OpenAI-compatible router, each with a run and a resumed follow-up, using the adapter itself and
+an isolated config directory:
+
+- **Codex CLI 0.153.4**: `codex exec --json --skip-git-repo-check -C <sandbox> -m <model>`, prompt
+  on stdin; `thread.started` carries the `thread_id` that `exec … resume <thread_id> -` continues
+  (`-` = prompt on stdin again). A third-party provider is a `-c` override or `config.toml`
+  entry: `model_provider=router`, `model_providers.router.base_url=…/v1`,
+  `model_providers.router.env_key=<ENV VAR holding the key>`,
+  `model_providers.router.wire_api="responses"` (`"chat"` is no longer supported). An unknown
+  model prints a "Model metadata … not found" `item.completed` error item but still answers; the
+  parser only fails a run on top-level `error`/`turn.failed` events.
+- **Gemini CLI 0.58.0**: `gemini -p <prompt> -m <model> -o json --skip-trust`; `-o json` prints
+  `{session_id, response, stats}` on stdout, and `--skip-trust` is needed because a fresh run
+  directory is untrusted (exit 55 otherwise). Auth is `GEMINI_API_KEY` plus
+  `~/.gemini/settings.json` containing `{"security":{"auth":{"selectedType":"gemini-api-key"}}}`
+  (exit 41 "Invalid auth method selected" without it); `GOOGLE_GEMINI_BASE_URL` points it at a
+  Gemini-API-compatible base URL. Errors arrive as `{session_id, error:{type,message,code}}` on
+  stderr with a non-zero exit. `--resume <session_id>` works only from the same directory.
+- **OpenCode 1.18.29**: `opencode run --pure --format json -m <provider/model> [-s <sessionID>]
+  <prompt>`; events are `step_start`, `text` (`part.text`), `step_finish` (`part.tokens`) and
+  `error` (`error.data.message`). A provider lives in `OPENCODE_CONFIG` (or `opencode.json`):
+  `{"provider":{"router":{"npm":"@ai-sdk/openai-compatible","options":{"baseURL":"…/v1",
+  "apiKey":"{env:ROUTER_KEY}"},"models":{"<model>":{}}}}}` and the model is then `router/<model>`.
+  `-s <sessionID>` resumes from the same directory only.
 
 ### openai-compatible
 

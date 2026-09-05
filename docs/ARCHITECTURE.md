@@ -172,8 +172,9 @@ tools the policy allows and refuses everything else), and by a sandboxed working
 preamble for external CLI harnesses; the default adapter can be overridden per mode and per run.
 Shipped: `claude-agent-sdk`, `openai-compatible` (self-managed JSON sessions under
 `<dataDir>/sessions/`), `headless-cli` (any CLI harness as a child process in a per-run sandbox
-cwd, presets for Claude Code, Codex, Gemini CLI, OpenCode, Hermes; tool policy as a text preamble
-only). `DOUBLETAKE_BRAIN_<MODE>=adapter[@model]` binds a mode to another adapter: research runs
+cwd under `<dataDir>/runs/`, reused on resume because Gemini CLI and OpenCode scope sessions to
+the cwd; presets for Claude Code, Codex, Gemini CLI, OpenCode, Hermes, all verified live; tool
+policy as a text preamble only). `DOUBLETAKE_BRAIN_<MODE>=adapter[@model]` binds a mode to another adapter: research runs
 are rebound after classification, follow-ups stay on the adapter that owns the chat's session,
 classification always uses the default adapter. `GET /api/status` carries cached healthchecks for
 every configured adapter and Settings shows them ([guide](BRAIN-ADAPTERS.md#selection)).
