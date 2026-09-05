@@ -160,6 +160,14 @@ removed, app paired against `https://<host>.ts.net`):
   page's Open Graph caption plus web research, and the FCM notification arrives. Instagram
   regains focus afterwards; the WebView never starts.
 
+### Second device (Pixel 4 XL, Android 13, 2026-09-04)
+Off the tailnet, over `adb reverse tcp:7391` with the app pointed at `http://localhost:7391`
+(this is what needed the cleartext allowance above). Pairing by code, Settings → Notifications
+→ Enable, then **Send test** and a real compose run both posted FCM notifications on the
+device (`dumpsys notification`: channel `doubletake`, tags `test` and `chat-<id>`, a
+`contentIntent` into `MainActivity`). FCM is therefore not tied to the tailnet path: the
+phone only needs the Google push socket; the server URL can be anything the app can reach.
+
 ## Build
 Capacitor 8 (`@capacitor/*` 8.x), Android Gradle Plugin 8.13, Gradle 8.14 wrapper, compileSdk /
 targetSdk 36, minSdk 24, Java 21, Kotlin 2.2. Android Studio's bundled JBR is a JDK 21 and is
