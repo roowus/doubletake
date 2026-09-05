@@ -5,7 +5,10 @@
  * as a child process per run. The harness's own tools do the work, so tool policy here is the
  * weaker "preamble + sandbox cwd" model documented in ADR 0005: the brief carries the policy as
  * text, the process runs in a fresh directory under `<dataDir>/runs/`, and Doubletake's own
- * file/web tools are not involved. Resume works only when the preset defines `resumeArgs`.
+ * file/web tools are not involved. Resume works only when the preset defines `resumeArgs`, and
+ * a resumed run reuses the directory its session was created in: gemini and opencode scope
+ * sessions to the cwd ("project"), so a follow-up from a fresh directory would not find them
+ * (`<runsDir>/sessions/<sessionId>` records the directory).
  */
 
 import { type ChildProcess, spawn as nodeSpawn } from 'node:child_process';
@@ -24,7 +27,7 @@ import { parseAnswerBlock } from '@doubletake/shared';
 import { renderBrief, renderFollowUp, SYSTEM_FRAMING } from './prompts.js';
 
 export type PromptMode = 'arg' | 'stdin';
-export type OutputParser = 'claude-json' | 'jsonl' | 'plain';
+export type OutputParser = 'claude-json' | 'gemini-json' | 'jsonl' | 'plain';
 
 export interface HeadlessPreset {
   id: string;
@@ -57,29 +60,43 @@ export const HEADLESS_PRESETS: Record<string, HeadlessPreset> = {
     promptMode: 'arg',
     outputParser: 'claude-json',
   },
+  // Verified against codex-cli 0.153.4 (2026-09-04): `exec --json` prints JSON-lines with
+  // `thread.started.thread_id` (the session id) and `item.completed`/`agent_message`; the prompt
+  // is read from stdin. `exec … resume <id> -` continues that thread, `-` = prompt on stdin, and
+  // the `exec` options stay valid before the subcommand.
   codex: {
     id: 'codex',
     command: 'codex',
     args: ['exec', '--json', '--skip-git-repo-check', '-C', '{sandboxDir}'],
+    resumeArgs: ['resume', '{sessionId}', '-'],
     modelArgs: ['--model', '{model}'],
     promptMode: 'stdin',
     outputParser: 'jsonl',
   },
+  // Verified against Gemini CLI 0.58.0 (2026-09-04): `-o json` prints one object with
+  // `session_id` and `response` (errors: `{ session_id, error: { message, code } }` on stderr,
+  // non-zero exit); `--resume <session_id>` continues it; `--skip-trust` is required headless,
+  // otherwise the CLI refuses an untrusted directory (exit 55).
   'gemini-cli': {
     id: 'gemini-cli',
     command: 'gemini',
-    args: ['-p', '{prompt}'],
+    args: ['-p', '{prompt}', '-o', 'json', '--skip-trust'],
+    resumeArgs: ['--resume', '{sessionId}'],
     modelArgs: ['--model', '{model}'],
     promptMode: 'arg',
-    outputParser: 'plain',
+    outputParser: 'gemini-json',
   },
+  // Verified against opencode 1.18.29 (2026-09-04): `run --format json` prints one event per
+  // line (`text` parts carry the answer, `step_finish.part.tokens` the usage, `error` events a
+  // failure); `-s <sessionID>` continues a session. `--pure` skips external plugins.
   opencode: {
     id: 'opencode',
     command: 'opencode',
-    args: ['run', '{prompt}'],
+    args: ['run', '--pure', '--format', 'json', '{prompt}'],
+    resumeArgs: ['-s', '{sessionId}'],
     modelArgs: ['--model', '{model}'],
     promptMode: 'arg',
-    outputParser: 'plain',
+    outputParser: 'jsonl',
   },
   // Verified against Hermes Agent v0.21.0 (2026-09-04): `-Q --oneshot` prints only the answer
   // on stdout and `session_id: <id>` on stderr; `--resume <id>` continues that session.
@@ -187,7 +204,9 @@ export class HeadlessCliAdapter implements BrainAdapter {
   ): Promise<RunResult> {
     if (opts.signal.aborted) return { text: '', stopReason: 'aborted', error: 'aborted' };
     const preset = this.cfg.preset;
-    const sandboxDir = path.join(this.cfg.runsDir, `${Date.now().toString(36)}-${rand()}`);
+    const sandboxDir =
+      (sessionId ? this.sessionDir(sessionId) : undefined) ??
+      path.join(this.cfg.runsDir, `${Date.now().toString(36)}-${rand()}`);
     fs.mkdirSync(sandboxDir, { recursive: true });
     const vars: Record<string, string> = {
       prompt,
@@ -261,6 +280,7 @@ export class HeadlessCliAdapter implements BrainAdapter {
     const { text, structured } = parseAnswerBlock(parsed.text);
     // A session id is only useful when the preset can resume it.
     const keepSession = this.capabilities().resume ? (parsed.sessionId ?? sessionId) : undefined;
+    if (keepSession && ID_RE.test(keepSession)) this.rememberSessionDir(keepSession, sandboxDir);
     return {
       text,
       stopReason: 'done',
@@ -270,6 +290,29 @@ export class HeadlessCliAdapter implements BrainAdapter {
       ...(parsed.costUsd !== undefined ? { costUsd: parsed.costUsd } : {}),
       ...(parsed.usage ? { usage: parsed.usage } : {}),
     };
+  }
+
+  /** Directory a session was created in, when recorded and still present. */
+  private sessionDir(sessionId: string): string | undefined {
+    if (!ID_RE.test(sessionId)) return undefined;
+    try {
+      const dir = fs
+        .readFileSync(path.join(this.cfg.runsDir, 'sessions', sessionId), 'utf8')
+        .trim();
+      return dir && fs.existsSync(dir) ? dir : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  private rememberSessionDir(sessionId: string, dir: string): void {
+    try {
+      const sessions = path.join(this.cfg.runsDir, 'sessions');
+      fs.mkdirSync(sessions, { recursive: true });
+      fs.writeFileSync(path.join(sessions, sessionId), dir);
+    } catch {
+      // best effort; a follow-up then runs in a fresh directory
+    }
   }
 }
 
@@ -392,6 +435,8 @@ export function parseOutput(parser: OutputParser, stdout: string): ParsedOutput 
   switch (parser) {
     case 'claude-json':
       return parseClaudeJson(stdout);
+    case 'gemini-json':
+      return parseGeminiJson(stdout);
     case 'jsonl':
       return parseJsonl(stdout);
     default:
@@ -414,9 +459,36 @@ function parseClaudeJson(stdout: string): ParsedOutput {
   return out;
 }
 
+/** `gemini -p … -o json`: one object with `session_id`, `response` and `stats.models.*.tokens`. */
+function parseGeminiJson(stdout: string): ParsedOutput {
+  const obj = lastJsonObject(stdout);
+  if (!obj) return { text: stdout.trim() };
+  const out: ParsedOutput = { text: str(obj.response) };
+  if (typeof obj.session_id === 'string') out.sessionId = obj.session_id;
+  if (obj.error && typeof obj.error === 'object') {
+    out.isError = true;
+    out.text = str((obj.error as Record<string, unknown>).message) || out.text;
+  }
+  const models = (obj.stats as Record<string, unknown> | undefined)?.models as
+    | Record<string, Record<string, unknown>>
+    | undefined;
+  if (models) {
+    let input = 0;
+    let output = 0;
+    for (const m of Object.values(models)) {
+      const t = m.tokens as Record<string, unknown> | undefined;
+      if (typeof t?.input === 'number') input += t.input;
+      if (typeof t?.candidates === 'number') output += t.candidates;
+    }
+    out.usage = { inputTokens: input, outputTokens: output };
+  }
+  return out;
+}
+
 /**
- * JSON-lines event streams (Codex `exec --json`, and any harness printing one object per line).
- * The text is the last event that carries assistant text; falls back to plain stdout.
+ * JSON-lines event streams (Codex `exec --json`, OpenCode `run --format json`, and any harness
+ * printing one object per line). The text is the last event that carries assistant text; falls
+ * back to plain stdout.
  */
 function parseJsonl(stdout: string): ParsedOutput {
   const out: ParsedOutput = { text: '' };
@@ -446,7 +518,22 @@ function parseJsonl(stdout: string): ParsedOutput {
     } else if (type === 'error' || type === 'turn.failed') {
       out.isError = true;
       const e = ev.error as Record<string, unknown> | string | undefined;
-      texts.push(typeof e === 'string' ? e : str(e?.message ?? ev.message));
+      const data = (typeof e === 'object' ? e?.data : undefined) as
+        | Record<string, unknown>
+        | undefined;
+      texts.push(typeof e === 'string' ? e : str(e?.message ?? data?.message ?? ev.message));
+    }
+    // OpenCode: `{ type: "text", sessionID, part: { text } }` and `step_finish.part.tokens`.
+    const part = ev.part as Record<string, unknown> | undefined;
+    if (typeof ev.sessionID === 'string') out.sessionId = ev.sessionID;
+    if (type === 'text' && typeof part?.text === 'string') texts.push(part.text);
+    const tokens = part?.tokens as Record<string, unknown> | undefined;
+    if (
+      type === 'step_finish' &&
+      typeof tokens?.input === 'number' &&
+      typeof tokens?.output === 'number'
+    ) {
+      out.usage = { inputTokens: tokens.input, outputTokens: tokens.output };
     }
     const usage = (ev.usage ?? item?.usage) as Record<string, unknown> | undefined;
     if (
