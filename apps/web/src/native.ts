@@ -233,6 +233,34 @@ export async function enableNativePush(timeoutMs = 30_000): Promise<void> {
   }
 }
 
+/**
+ * Re-post this device's FCM token after (re)pairing. Registration otherwise happens only from
+ * the Settings toggle, so a device that was revoked and paired again (or an Android < 13
+ * install, where notification permission is implicit) would silently receive nothing. Runs only
+ * when permission is already granted; never prompts. Failures are logged, not surfaced.
+ */
+export async function resumeNativePush(): Promise<boolean> {
+  if (!isNative() || !getToken()) return false;
+  try {
+    const perm = await PushNotifications.checkPermissions();
+    if (perm.receive !== 'granted') return false;
+    installNativeListeners();
+    await PushNotifications.createChannel({
+      id: CHANNEL_ID,
+      name: 'Doubletake',
+      description: 'Research answers are ready',
+      importance: 4,
+      visibility: 1,
+    });
+    // The `registration` listener posts the token to the server (`onFcmToken`).
+    await PushNotifications.register();
+    return true;
+  } catch (e) {
+    console.warn('FCM re-registration skipped', e);
+    return false;
+  }
+}
+
 export async function disableNativePush(): Promise<void> {
   const prev = localStorage.getItem(KEY_FCM_TOKEN);
   if (prev) await api.pushUnsubscribe(prev).catch(() => {});
