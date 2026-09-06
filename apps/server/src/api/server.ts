@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import path from 'node:path';
 import type { BrainAdapter } from '@doubletake/brain-sdk';
 import type { Mode, RunEvent } from '@doubletake/shared';
 import { IngestRequest } from '@doubletake/shared';
@@ -57,6 +58,16 @@ export interface ServerDeps {
   /** Place geocoder (ADR 0022); when absent `POST /api/entities/geocode` answers 409. */
   geocoder?: Geocoder;
 }
+
+/** Media asset kinds the chat page may show as a picture. */
+const STILL_KINDS = new Set(['thumbnail', 'image', 'frame']);
+const IMAGE_TYPES: Record<string, string> = {
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.png': 'image/png',
+  '.webp': 'image/webp',
+  '.gif': 'image/gif',
+};
 
 const PUBLIC_PATHS = new Set([
   '/api/health',
@@ -483,6 +494,28 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
     const { chat, item } = loadChat(req, reply, repo) ?? {};
     if (!chat || !item) return;
     return toChatDetail(repo, chat, item);
+  });
+
+  /**
+   * One still image of the share (thumbnail / image / sampled frame) for the chat's source card.
+   * Same device-token gate as the rest of the API; the asset must belong to this chat's item and
+   * resolve to a file inside `<dataDir>/media/`, so a stale row can never read elsewhere.
+   */
+  app.get('/api/chats/:id/media/:mediaId', async (req, reply) => {
+    const { chat, item } = loadChat(req, reply, repo) ?? {};
+    if (!chat || !item) return;
+    const { mediaId } = z.object({ mediaId: z.string() }).parse(req.params);
+    const asset = repo.getMediaAsset(mediaId);
+    if (!asset || asset.itemId !== item.id || !STILL_KINDS.has(asset.kind))
+      return reply.code(404).send({ error: 'not found' });
+    const mediaRoot = path.resolve(cfg.dataDir, 'media') + path.sep;
+    const abs = path.resolve(cfg.dataDir, asset.path);
+    if (!abs.startsWith(mediaRoot) || !fs.existsSync(abs))
+      return reply.code(404).send({ error: 'not found' });
+    reply.header('cache-control', 'private, max-age=86400');
+    return reply
+      .type(IMAGE_TYPES[path.extname(abs).toLowerCase()] ?? 'application/octet-stream')
+      .send(fs.createReadStream(abs));
   });
 
   app.post('/api/chats/:id/read', async (req, reply) => {

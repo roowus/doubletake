@@ -114,7 +114,8 @@ after that it is kept as a follow-up question only.
 Echoes (`is_echo`), messages without `mid` and other plain text without an attachment are
 recorded as `other` and ignored; redeliveries of the same `mid` count as duplicates.
 
-When the run finishes:
+As soon as the share is accepted (before any research runs, so the owner sees "got it" at
+once; the answer itself arrives by push):
 `POST /<IG_ID>/messages` with
 `{ "recipient": { "id": "OWNER_IGSID" }, "sender_action": "react", "payload": { "message_id": "<mid>", "reaction": "love" } }`.
 
@@ -159,7 +160,7 @@ yet; call them with `curl` and a device token.
    `ig_events` gains a row (`GET /api/chats` shows no item because test payloads have no
    attachment).
 3. DM a public reel to the shadow account with a note: item `instagram | ig_dm`, media from the
-   CDN URL, answer pushed, `love` reaction appears on the DM.
+   CDN URL, `love` reaction appears on the DM within a second or two, answer pushed later.
 4. Comment `@<shadow> is this true?` under a public post: item with `focus=comments`; reply
    inside a thread: `focus=thread:<parent_id>`. If nothing arrives within 3 minutes the
    polling fallback should have picked it up (`ig_events.id = poll:<media_id>`); if it did

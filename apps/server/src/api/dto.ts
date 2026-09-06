@@ -5,6 +5,7 @@ import type {
   EntityGeo,
   EntityHit,
   MessageDto,
+  PreviewDto,
   RunDto,
 } from '@doubletake/shared';
 import type { ChatRow, ItemRow, MessageRow, Repo, RunRow } from '../db/repo.js';
@@ -72,6 +73,9 @@ export function toChatDetail(repo: Repo, chat: ChatRow, item: ItemRow): ChatDeta
       modeEffective: (item.modeEffective as ChatDetail['item']['modeEffective']) ?? null,
       questionType: (item.questionType as ChatDetail['item']['questionType']) ?? null,
       canonicalUrl: item.canonicalUrl,
+      sourceUrl: item.sourceUrl,
+      title: item.title,
+      preview: pickPreview(repo.listMediaAssets(item.id)),
     },
     messages: repo.listMessages(chat.id).map(toMessageDto),
     runs: repo.listRuns(chat.id).map(toRunDto),
@@ -84,6 +88,26 @@ export function toChatDetail(repo: Repo, chat: ChatRow, item: ItemRow): ChatDeta
     })),
     extractions: latestExtractions(repo.listExtractions(item.id)),
   };
+}
+
+/** Kinds that can be shown as a still image, best first. */
+const PREVIEW_KINDS = ['thumbnail', 'image', 'frame'] as const;
+
+/**
+ * The one still image for the share card: a thumbnail if the worker saved one, else the first
+ * image, else the earliest sampled frame. Video and audio assets are never previews.
+ */
+export function pickPreview(assets: ReturnType<Repo['listMediaAssets']>): PreviewDto | null {
+  for (const kind of PREVIEW_KINDS) {
+    const rows = assets
+      .filter((a) => a.kind === kind)
+      .sort(
+        (a, b) => (a.frameTsS ?? 0) - (b.frameTsS ?? 0) || a.createdAt.localeCompare(b.createdAt),
+      );
+    const a = rows[0];
+    if (a) return { mediaId: a.id, kind, width: a.width ?? null, height: a.height ?? null };
+  }
+  return null;
 }
 
 /** Re-runs store a fresh set of extractions; show only the newest per kind+tool. */

@@ -321,6 +321,10 @@ export class Repo {
     return this.db.select().from(s.mediaAssets).where(eq(s.mediaAssets.itemId, itemId)).all();
   }
 
+  getMediaAsset(id: string) {
+    return this.db.select().from(s.mediaAssets).where(eq(s.mediaAssets.id, id)).get();
+  }
+
   deleteMediaAssets(itemId: string) {
     this.db.delete(s.mediaAssets).where(eq(s.mediaAssets.itemId, itemId)).run();
   }

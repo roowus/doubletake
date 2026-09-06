@@ -257,6 +257,15 @@ export const TagDto = z.object({
 });
 export type TagDto = z.infer<typeof TagDto>;
 
+/** Pointer to a still image under `GET /api/chats/:id/media/:mediaId` (device token required). */
+export const PreviewDto = z.object({
+  mediaId: z.string(),
+  kind: z.enum(['thumbnail', 'image', 'frame']),
+  width: z.number().int().nullable(),
+  height: z.number().int().nullable(),
+});
+export type PreviewDto = z.infer<typeof PreviewDto>;
+
 export const ChatDetail = z.object({
   chat: ChatSummary,
   item: z.object({
@@ -266,6 +275,11 @@ export const ChatDetail = z.object({
     modeEffective: Mode.nullable(),
     questionType: QuestionType.nullable(),
     canonicalUrl: z.string().nullable(),
+    /** What the owner shared, as received (before canonicalisation). Null for typed text. */
+    sourceUrl: z.string().nullable(),
+    title: z.string().nullable(),
+    /** One still image for the share card, when the media worker saved a thumbnail or frame. */
+    preview: PreviewDto.nullable(),
   }),
   messages: z.array(MessageDto),
   runs: z.array(RunDto),

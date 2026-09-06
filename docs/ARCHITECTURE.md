@@ -127,7 +127,9 @@ Full column-level detail in [DATA-MODEL.md](DATA-MODEL.md).
    channel, focus, modeHint?, ig? }`. Dedupe on `canonical_url + focus` within 24 h: a re-share
    starts a new run on the existing chat instead of a new item. Create `item`, `chat`,
    `run(queued)`; reply `202` immediately. Only the IG channel sends an immediate
-   acknowledgement (a DM reaction); the share sheet already shows its own toast.
+   acknowledgement: a `love` reaction on the DM the moment the share is accepted, so the owner
+   knows it was picked up before any research has run (nothing public for mentions); the share
+   sheet already shows its own toast.
 2. **Pick a mode.** Keyword rules on the note first (`quick`, `tl;dr`, `is this true`,
    `deep dive`, `compare`, `research`), else one cheap classifier call through the configured
    brain returning `{ mode, question_type, needs_comments }`; default Standard
@@ -153,8 +155,9 @@ Full column-level detail in [DATA-MODEL.md](DATA-MODEL.md).
    Entities are always extracted, even in `save_for_later`, so a run with no question still
    files the thing it saw into the right collection ([ADR 0014](adr/0014-structured-extraction-and-categories.md)).
 5. **Finish.** Store the message, bump `unread_count`, export
-   `~/Doubletake/<yyyy>/<yyyy-mm-dd> <slug>.md` with frontmatter, send Web Push + FCM, react
-   `love` on the originating IG DM (nothing public for mentions), write `cost_ledger`.
+   `~/Doubletake/<yyyy>/<yyyy-mm-dd> <slug>.md` with frontmatter, send Web Push + FCM (the
+   IG DM was already hearted on receipt; the finished answer travels by push only), write
+   `cost_ledger`.
 6. **Follow-up.** Default = cheap turn: same adapter, resume the session when the adapter can,
    `maxTurns` 1–3, no extraction. Escalate to a full run (Standard or Deep) when the owner taps
    **Research this** or the model returns `escalate: { mode, reason }`; the session is resumed
@@ -212,7 +215,8 @@ every configured adapter and Settings shows them ([guide](BRAIN-ADAPTERS.md#sele
   deliveries, stores caption/comments/thread from the Graph API as `instagram-graph`
   extractions (merged into the brief as untrusted blocks), hands the CDN URL to the media stage
   via `mediaHints`, polls `/tags` every 2 min as a mention fallback, refreshes the token every
-  30 days and reacts `love` to the originating DM via `onOutcome`. The bot never posts publicly.
+  30 days and reacts `love` to the originating DM as soon as the share is accepted (the
+  `onOutcome` worker hook stays wired but sends nothing). The bot never posts publicly.
   Enabled only when `IG_APP_ID` + `IG_APP_SECRET` are set; boot log prints `instagram: …`.
 - **AI-chat share links** (Gemini, ChatGPT, Claude): treated as web pages with a dedicated
   readable-text extractor; no login.
@@ -260,7 +264,13 @@ events) and to the **map** `/map` (Leaflet over OpenStreetMap tiles fetched by t
 one circle marker per located place, popup linking to its chat, a collapsible list of
 unlocated places with a Maps search link and a **Locate N more** backfill button,
 [ADR 0022](adr/0022-map-view-place-geocoding.md)). The chat view is answer-first: a compact
-header (back, title, status, source host, mode, cost, category), then the messages with entity
+header (back, title, status, source host, mode, cost, category), then a **share card** on the
+owner's side of the thread showing what was shared (platform icon, host, title, the canonical
+link and one still image when the media worker saved a thumbnail, image or sampled frame;
+`item.preview` on `GET /api/chats/:id` names the asset and
+`GET /api/chats/:id/media/:mediaId` serves it behind the same device-token gate, fetched by the
+page with a bearer header into a blob URL so the token never appears in an `src`; typed text
+has no card), the owner's note as their first message, then the messages with entity
 cards and the claims table inside the answer (answer text is GitHub-flavoured Markdown via
 `react-markdown` + `remark-gfm`, so tables, task lists and strikethrough render; raw HTML never
 does; a fenced \`\`\`svg block is the one drawable exception, inlined only after DOMPurify's SVG

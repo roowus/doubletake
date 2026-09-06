@@ -320,7 +320,7 @@ describe('DM share', () => {
     ],
   });
 
-  it('creates an ig_dm item with the note, CDN hint, and reacts with love when answered', async () => {
+  it('creates an ig_dm item with the note, CDN hint, and hearts the DM on receipt', async () => {
     const res = await postWebhook(
       dm('mid-1', 'is this legit?', [
         {
@@ -347,7 +347,9 @@ describe('DM share', () => {
     const ev = env.repo.igEventsForItem(item.id);
     expect(ev.map((e) => e.id)).toEqual(['mid-1']);
     expect(ev[0]?.senderId).toBe('USER9');
-    await waitFor(() => graph.reactions.length > 0, 8000);
+    // The heart is the "got it" acknowledgement, sent before any run has finished.
+    const chat = env.repo.getChatByItem(item.id);
+    expect(env.repo.listRuns(chat?.id ?? '').every((r) => r.status !== 'done')).toBe(true);
     expect(graph.reactions).toEqual([{ recipientId: 'USER9', messageId: 'mid-1' }]);
   });
 

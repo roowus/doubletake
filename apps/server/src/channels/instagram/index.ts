@@ -3,7 +3,7 @@
  *
  * Two ways in: a DM share (reel/post shared to the shadow account, optional text = note) and a
  * comment @mention (top-level ⇒ focus=comments, reply ⇒ focus=thread:<parent>). The bot never
- * posts publicly; completion is signalled by the normal push plus a `love` reaction on the DM.
+ * posts publicly; receipt is acknowledged with a `love` reaction on the DM, the answer by push.
  */
 
 import crypto from 'node:crypto';
@@ -442,6 +442,9 @@ export class InstagramChannel {
     };
     const out = ingest(req, { repo: this.deps.repo, adapterFor: this.deps.adapterFor });
     this.deps.repo.markIgEvent(mid, { itemId: out.item.id });
+    // Acknowledge at once: the heart tells the owner "got it, working on it"; the answer itself
+    // arrives by push. Fire-and-forget so a slow Graph call never delays the webhook 200.
+    if (m.sender?.id) this.acknowledge(m.sender.id, mid);
     // Meta puts the reel *permalink* (an HTML page) in payload.url for ig_reel shares; only a
     // real media URL is worth handing to the worker as a download shortcut.
     if (cdn && !isInstagramPage(cdn)) this.hintCdn(out.item.id, cdn, share?.payload?.reel_video_id);
@@ -601,22 +604,22 @@ export class InstagramChannel {
     }
   }
 
-  // ---- completion ----
+  // ---- acknowledgement / completion ----
 
-  /** `love` on the originating DM when the run finished; mentions get nothing public. */
-  async onOutcome(item: ItemRow, outcome: 'answered' | 'failed' | 'capped'): Promise<void> {
-    if (item.channel !== 'ig_dm' || outcome !== 'answered') return;
+  /** `love` on the DM as soon as its share was accepted. Mentions get nothing public. */
+  private acknowledge(senderId: string, messageId: string): void {
     const t = this.token();
     if (!t) return;
-    for (const ev of this.deps.repo.igEventsForItem(item.id)) {
-      if (ev.kind !== 'dm_share' || !ev.senderId) continue;
-      try {
-        await this.deps.graph.react(t.token, t.igUserId, ev.senderId, ev.id);
-      } catch (e) {
-        this.deps.log.warn(`instagram: reaction failed: ${(e as Error).message}`);
-      }
-    }
+    this.deps.graph
+      .react(t.token, t.igUserId, senderId, messageId)
+      .catch((e) => this.deps.log.warn(`instagram: reaction failed: ${(e as Error).message}`));
   }
+
+  /**
+   * Worker hook when a run ends. The DM was already hearted on receipt and the answer travels by
+   * push, so nothing is sent here; kept so the channel can react to failures later.
+   */
+  async onOutcome(_item: ItemRow, _outcome: 'answered' | 'failed' | 'capped'): Promise<void> {}
 
   /** Settings → "Send test DM to myself": proves messaging works end to end. */
   async sendTestDm(recipientId: string, text: string): Promise<void> {
