@@ -362,6 +362,85 @@ describe('DM share', () => {
     expect(r).toMatchObject({ handled: [], duplicates: 1 });
   });
 
+  it('does not hint the worker with an instagram.com permalink as cdn_url', async () => {
+    // Meta puts the reel permalink in payload.url for ig_reel shares; that is an HTML page.
+    const body = dm('mid-perma', undefined, [
+      {
+        type: 'ig_reel',
+        payload: {
+          url: 'https://www.instagram.com/reel/Dc9QRlouUiE/',
+          title: 'Be fast',
+          reel_video_id: '17955',
+        },
+      },
+    ]);
+    const r = await ig.handleWebhook(body as never);
+    expect(r.handled).toHaveLength(1);
+    const item = env.repo.getItem(r.handled[0]?.itemId ?? '');
+    expect(item?.sourceUrl).toContain('Dc9QRlouUiE');
+    expect(item?.note).toBe('Be fast');
+    expect(ig.mediaHints(item as never)).toEqual({});
+  });
+
+  it("text typed right after a share becomes that share's note (replacing the title placeholder)", async () => {
+    const share = {
+      object: 'instagram',
+      entry: [
+        {
+          id: 'IG1',
+          messaging: [
+            {
+              sender: { id: 'USER7' },
+              recipient: { id: 'IG1' },
+              message: {
+                mid: 'late-1',
+                attachments: [
+                  {
+                    type: 'ig_reel',
+                    payload: {
+                      url: 'https://www.instagram.com/reel/LATE7777/',
+                      title: 'Reel title',
+                      reel_video_id: '17966',
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      ],
+    };
+    const text = (mid: string, t: string, sender = 'USER7') => ({
+      object: 'instagram',
+      entry: [{ id: 'IG1', messaging: [{ sender: { id: sender }, message: { mid, text: t } }] }],
+    });
+    const r1 = await ig.handleWebhook(share as never);
+    const itemId = r1.handled[0]?.itemId ?? '';
+    expect(env.repo.getItem(itemId)?.note).toBe('Reel title');
+
+    now += 400;
+    const r2 = await ig.handleWebhook(
+      text('late-2', 'find the hidden 4-letter usernames') as never,
+    );
+    expect(r2.handled).toEqual([{ id: 'late-2', kind: 'dm_note', itemId, error: null }]);
+    expect(env.repo.getItem(itemId)?.note).toBe('find the hidden 4-letter usernames');
+    expect(env.repo.igEventsForItem(itemId).map((e) => e.id)).toEqual(['late-1', 'late-2']);
+
+    // A second message within the window is appended, and a different sender is unaffected.
+    now += 1000;
+    const r3 = await ig.handleWebhook(text('late-3', 'and why') as never);
+    expect(r3.handled[0]?.kind).toBe('dm_note');
+    expect(env.repo.getItem(itemId)?.note).toBe('find the hidden 4-letter usernames\n\nand why');
+    const r4 = await ig.handleWebhook(text('late-4', 'hello', 'USER8') as never);
+    expect(r4).toMatchObject({ handled: [], ignored: 1 });
+
+    // Outside the window it is an ordinary ignored DM again.
+    now += 3 * 60_000;
+    const r5 = await ig.handleWebhook(text('late-5', 'too late') as never);
+    expect(r5).toMatchObject({ handled: [], ignored: 1 });
+    expect(env.repo.getItem(itemId)?.note).toBe('find the hidden 4-letter usernames\n\nand why');
+  });
+
   it('ignores echoes and plain text DMs', async () => {
     const r = await ig.handleWebhook({
       object: 'instagram',

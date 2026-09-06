@@ -81,6 +81,11 @@ def download_direct(url: str, out_dir: Path, progress: Callable[[int, str], None
     try:
         with urllib.request.urlopen(req, timeout=60) as res:  # noqa: S310 - https + host check above
             ctype = (res.headers.get("content-type") or "").split(";")[0].strip().lower()
+            if not (ctype.startswith("image/") or ctype.startswith("video/")):
+                # Meta's `ig_reel` attachment puts the reel *permalink* in payload.url; that is
+                # an HTML page, not media. Saying so lets the caller fall back to yt-dlp instead
+                # of feeding a web page to ffprobe.
+                raise WorkerError("download_failed", f"cdn_url is {ctype or 'unknown'}, not media")
             ext = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}.get(ctype, "mp4")
             kind = "image" if ctype.startswith("image/") else "video"
             dest = out_dir / f"{'image' if kind == 'image' else SOURCE_STEM}.{ext}"

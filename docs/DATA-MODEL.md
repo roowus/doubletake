@@ -112,7 +112,7 @@ goes out; they survive restarts. Migration `0005_pending_notifications.sql`.
 `ig_accounts`: `ig_user_id` pk, `username`, `access_token_enc` (SecretBox ciphertext, ADR 0018),
 `expires_at`, `refreshed_at`, `created_at`, `updated_at`. One row at most.
 `ig_events`: `id` pk (Meta message id, comment id, media id, or `poll:<media_id>` for the
-polling fallback), `kind` (`dm_share` · `mention` · `comment` · `other`), `raw` JSON,
+polling fallback), `kind` (`dm_share` · `dm_note` · `mention` · `comment` · `other`), `raw` JSON,
 `item_id` nullable (set null on item delete), `sender_id` (IGSID of the DM sender, used for the
 completion reaction), `received_at`, `processed_at`, `error`. Migration `0003_instagram.sql`.
 

@@ -110,7 +110,7 @@ Order of preference per platform:
 
 | platform | 1st | 2nd | 3rd |
 |---|---|---|---|
-| instagram | signed CDN URL from the DM webhook (`hints.cdn_url`; TTL undocumented, fetch immediately) | `yt-dlp` (pinned ≥ 2026.08.19) anonymous | `yt-dlp --cookies-from-browser <browser>` if `DOUBLETAKE_YTDLP_COOKIES_FROM_BROWSER` is set |
+| instagram | signed CDN URL from the DM webhook (`hints.cdn_url`; TTL undocumented, fetch immediately; `ig_reel` shares carry the HTML permalink instead, which is not hinted, and the direct downloader raises `download_failed` on any non image/video content type so yt-dlp takes over) | `yt-dlp` (pinned ≥ 2026.08.19) anonymous | `yt-dlp --cookies-from-browser <browser>` if `DOUBLETAKE_YTDLP_COOKIES_FROM_BROWSER` is set |
 | tiktok | `yt-dlp` anonymous (resolves `vm.`/`vt.` short links first) | `yt-dlp --cookies-from-browser` opt-in | |
 | youtube (videos and Shorts) | `yt-dlp` with `--write-subs --write-auto-subs` (skip transcription if captions exist) | | |
 | x | `yt-dlp` for native video; images via the syndication CDN URLs in the tweet metadata | | |

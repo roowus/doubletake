@@ -27,6 +27,17 @@ export const IG_WEBHOOK_FIELDS = ['messages', 'mentions', 'comments'];
 const REFRESH_AFTER_MS = 30 * 24 * 3600_000;
 const REFRESH_TICK_MS = 6 * 3600_000;
 const POLL_TICK_MS = 2 * 60_000;
+function isInstagramPage(url: string): boolean {
+  try {
+    const h = new URL(url).hostname;
+    return h === 'instagram.com' || h.endsWith('.instagram.com');
+  } catch {
+    return false;
+  }
+}
+
+/** A text-only DM this soon after a share from the same sender is that share's note. */
+export const LATE_NOTE_WINDOW_MS = 2 * 60_000;
 
 export interface IgLogger {
   info(msg: string): void;
@@ -309,14 +320,25 @@ export class InstagramChannel {
         );
         const urlInText = m.message?.text ? firstUrlIn(m.message.text) : undefined;
         if (!share && !urlInText) {
-          // Plain DM without a share: record and ignore (the bot does not chat in DMs).
-          this.deps.repo.recordIgEvent({
-            id: mid,
-            kind: 'other',
-            raw: m,
-            senderId: m.sender?.id ?? null,
-          });
-          res.ignored++;
+          // Plain DM without a share. Instagram sends "share a reel, then type a message" as two
+          // webhook events a few hundred ms apart, so text right after a share from the same
+          // sender is that share's note. Anything else is recorded and ignored (the bot does not
+          // chat in DMs).
+          const attached = this.attachLateNote(m);
+          if (
+            this.deps.repo.recordIgEvent({
+              id: mid,
+              kind: attached ? 'dm_note' : 'other',
+              raw: m,
+              senderId: m.sender?.id ?? null,
+            }) &&
+            attached
+          ) {
+            this.deps.repo.markIgEvent(mid, { itemId: attached });
+            res.handled.push({ id: mid, kind: 'dm_note', itemId: attached, error: null });
+          } else {
+            res.ignored++;
+          }
           continue;
         }
         if (
@@ -418,8 +440,57 @@ export class InstagramChannel {
     };
     const out = ingest(req, { repo: this.deps.repo, adapterFor: this.deps.adapterFor });
     this.deps.repo.markIgEvent(mid, { itemId: out.item.id });
-    if (cdn) this.hintCdn(out.item.id, cdn, share?.payload?.reel_video_id);
+    // Meta puts the reel *permalink* (an HTML page) in payload.url for ig_reel shares; only a
+    // real media URL is worth handing to the worker as a download shortcut.
+    if (cdn && !isInstagramPage(cdn)) this.hintCdn(out.item.id, cdn, share?.payload?.reel_video_id);
+    if (m.sender?.id) {
+      this.recentShares.set(m.sender.id, {
+        itemId: out.item.id,
+        chatId: out.chat.id,
+        runId: out.run.id,
+        at: (this.deps.now ?? Date.now)(),
+        titleNote: !note && !!share?.payload?.title,
+      });
+    }
     return out;
+  }
+
+  /** Last DM share per sender, so the text typed right after it can become the note. */
+  private recentShares = new Map<
+    string,
+    { itemId: string; chatId: string; runId: string; at: number; titleNote: boolean }
+  >();
+
+  /**
+   * Text-only DM from a sender whose share arrived less than LATE_NOTE_WINDOW_MS ago: it is the
+   * note for that share. While the run is still queued the note goes onto the item (the brain
+   * sees it as the question); otherwise it is appended to the chat as a question so it is kept.
+   * Returns the item id it was attached to, or null.
+   */
+  private attachLateNote(m: Messaging): string | null {
+    const sender = m.sender?.id;
+    const text = m.message?.text?.trim();
+    if (!sender || !text) return null;
+    const recent = this.recentShares.get(sender);
+    if (!recent) return null;
+    const now = (this.deps.now ?? Date.now)();
+    if (now - recent.at > LATE_NOTE_WINDOW_MS) {
+      this.recentShares.delete(sender);
+      return null;
+    }
+    const { repo } = this.deps;
+    const item = repo.getItem(recent.itemId);
+    if (!item) return null;
+    const run = repo.getRun(recent.runId);
+    // A note copied from the reel's title is a placeholder; the sender's own words replace it.
+    const base = recent.titleNote ? null : item.note;
+    const note = [base, text].filter(Boolean).join('\n\n');
+    repo.updateItem(item.id, { note });
+    if (run?.status !== 'queued') {
+      repo.addMessage({ chatId: recent.chatId, role: 'user', kind: 'question', content: text });
+    }
+    this.recentShares.set(sender, { ...recent, titleNote: false });
+    return item.id;
   }
 
   /** Per-item CDN shortcut for the media worker, kept in memory (signed urls expire anyway). */

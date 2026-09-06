@@ -292,7 +292,7 @@ export const igEvents = sqliteTable(
   'ig_events',
   {
     id: text('id').primaryKey(),
-    kind: text('kind').notNull(), // dm_share | mention | comment | other
+    kind: text('kind').notNull(), // dm_share | dm_note | mention | comment | other
     raw: text('raw').notNull(), // JSON
     itemId: text('item_id').references(() => items.id, { onDelete: 'set null' }),
     /** IGSID of the DM sender, needed to react to the message when the run finishes. */
