@@ -61,6 +61,11 @@ API host: `https://graph.instagram.com/v25.0`.
 2. In the Meta dashboard → Instagram → Webhooks, set the callback URL and the verify token
    from `IG_WEBHOOK_VERIFY_TOKEN`. Subscribe to fields `messages`, `mentions`, `comments`.
 3. Switch the app to **Live** mode (webhooks do not fire in Development mode for this API).
+   Meta refuses Live (and the login dialog says "Invalid platform app") until App settings →
+   Basic has a valid **Privacy Policy URL**; point it at
+   `https://github.com/roowus/doubletake/blob/main/docs/PRIVACY.md` (or your fork's copy) and
+   set the **User data deletion** field to the same URL (it has a deletion section). Pick an
+   app category (e.g. "Productivity") while you are there; Meta requires one too.
 4. Doubletake verifies `X-Hub-Signature-256` with `IG_APP_SECRET` on every delivery, answers
    `200` immediately, and processes asynchronously. Every event id is stored in `ig_events`
    for deduplication (Meta retries).
