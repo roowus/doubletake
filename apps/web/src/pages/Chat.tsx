@@ -98,6 +98,9 @@ export function Chat({ id }: { id: string }) {
           <Icon name="alert" />
           <span>{err}</span>
         </div>
+        <button type="button" className="primary" onClick={() => load()}>
+          Retry
+        </button>
       </div>
     );
   if (!detail)

@@ -30,11 +30,45 @@ export interface ImportSummary {
 }
 
 export class ApiError extends Error {
+  /** `status` is 0 when no HTTP response arrived at all (network down, VPN not up yet). */
   constructor(
     public status: number,
     message: string,
+    cause?: unknown,
   ) {
-    super(message);
+    super(message, cause === undefined ? undefined : { cause });
+  }
+}
+
+/** Message shown when the server could not be reached at all (no HTTP response). */
+export const OFFLINE_MESSAGE =
+  'Could not reach the server. Check the connection (VPN on?) and try again.';
+
+/** Backoff between GET retries; the phone's VPN is often still coming up when a tap opens the app. */
+const RETRY_DELAYS_MS = [400, 1200];
+
+/**
+ * `fetch` that turns a network failure into a readable `ApiError(0, …)`. Idempotent GETs are
+ * retried a couple of times first: on Android a notification tap launches the app before the
+ * Tailscale tunnel is back, and the first request dies with a bare `TypeError: Failed to fetch`.
+ */
+export async function fetchWithRetry(
+  input: string,
+  init: RequestInit,
+  fetchImpl: typeof fetch = fetch,
+  delays: number[] = RETRY_DELAYS_MS,
+): Promise<Response> {
+  const retriable = (init.method ?? 'GET').toUpperCase() === 'GET';
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await fetchImpl(input, init);
+    } catch (e) {
+      const delay = delays[attempt];
+      if (!retriable || delay === undefined) {
+        throw new ApiError(0, OFFLINE_MESSAGE, e);
+      }
+      await new Promise((r) => setTimeout(r, delay));
+    }
   }
 }
 
@@ -43,7 +77,7 @@ async function call<T>(method: string, url: string, body?: unknown, auth = true)
   if (body !== undefined) headers['content-type'] = 'application/json';
   const token = getToken();
   if (auth && token) headers.authorization = `Bearer ${token}`;
-  const res = await fetch(apiBase() + url, {
+  const res = await fetchWithRetry(apiBase() + url, {
     method,
     headers,
     ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
