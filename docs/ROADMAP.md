@@ -103,7 +103,8 @@ and a Reddit video.
   and run live against 9Router's OpenAI endpoint with tool calls + follow-up).
 - ✅ Per-mode adapter override (`DOUBLETAKE_BRAIN_QUICK/STANDARD/DEEP=adapter[@model]`, runs
   rebound after classification, follow-ups pinned to the session's adapter) and per-adapter
-  healthchecks in `GET /api/status` + Settings → Server.
+  healthchecks in `GET /api/status` + Settings → Server. Per-run override from the **Research
+  this** menu (Brain selector → `adapter`/`model` pin) shipped 2026-09-06.
 
 ## M6 — Search, tags, collections
 

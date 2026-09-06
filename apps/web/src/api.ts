@@ -114,6 +114,8 @@ export interface Status {
   spentTodayUsd: number;
   dailyCapUsd: number;
   brain: string;
+  /** Ids of every configured adapter, always present (unlike `brains`, which `health=skip` empties). */
+  brainIds?: string[];
   /** One entry per configured adapter; empty when `health=skip`. */
   brains: BrainHealth[];
   notesDir: string;
@@ -244,10 +246,13 @@ export const api = {
   markRead: (id: string) => call<void>('POST', `/api/chats/${id}/read`),
   sendMessage: (id: string, content: string) =>
     call<{ runId: string }>('POST', `/api/chats/${id}/messages`, { content }),
-  research: (id: string, mode?: Mode, note?: string) =>
+  /** `adapter` pins the re-run to one configured brain (optionally with a model) instead of the mode's binding. */
+  research: (id: string, mode?: Mode, note?: string, adapter?: string, model?: string) =>
     call<{ runId: string }>('POST', `/api/chats/${id}/research`, {
       ...(mode ? { mode } : {}),
       ...(note ? { note } : {}),
+      ...(adapter ? { adapter } : {}),
+      ...(adapter && model ? { model } : {}),
     }),
   runEvents: (chatId: string, runId: string) =>
     call<{ events: RunEvent[] }>('GET', `/api/chats/${chatId}/runs/${runId}/events`),

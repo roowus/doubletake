@@ -104,6 +104,8 @@ export const runs = sqliteTable(
     mode: text('mode').notNull(),
     adapter: text('adapter').notNull(),
     model: text('model'),
+    /** Chosen by the user for this run; the worker never rebinds it after classification. */
+    pinned: integer('pinned', { mode: 'boolean' }).notNull().default(false),
     status: text('status').notNull().default('queued'),
     userMessage: text('user_message'),
     startedAt: text('started_at'),

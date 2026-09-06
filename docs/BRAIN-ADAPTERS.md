@@ -292,7 +292,15 @@ How a run picks its adapter:
   the item's effective mode still applies when it targets that same adapter.
 - **Classification** (mode picker) always uses the default adapter.
 - **Vision** (`describeImages`) uses the mode's adapter when it implements it, else the default.
-- Per-run override from the UI (re-run menu) is a roadmap item.
+- **Per-run override** from the UI: when more than one adapter is configured, the chat's
+  **Research this** menu grows a **Brain** selector. Picking one sends
+  `POST /api/chats/:id/research { mode?, adapter, model? }`; the run is stored with
+  `pinned = true` and the worker keeps that adapter and model through classification instead of
+  rebinding to the mode's default (400 for an unknown adapter or a model without an adapter). A
+  pinned adapter that has since disappeared from the config falls back to the default with an
+  `adapter` status event carrying `reason: "pinned adapter missing"`. The answer footer shows
+  `adapter@model` for pinned runs. `GET /api/status` always lists `brainIds` so the menu can
+  render without waiting for healthchecks.
 
 `GET /api/status` returns `brains[]`: one `{ id, ok, detail, default, modes, checkedAt }` per
 adapter from `healthcheck()`, cached for five minutes (the Claude SDK check costs a model call)

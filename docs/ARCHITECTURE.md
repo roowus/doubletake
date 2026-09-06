@@ -178,8 +178,9 @@ Shipped: `claude-agent-sdk`, `openai-compatible` (self-managed JSON sessions und
 cwd under `<dataDir>/runs/`, reused on resume because Gemini CLI and OpenCode scope sessions to
 the cwd; presets for Claude Code, Codex, Gemini CLI, OpenCode, Hermes, all verified live; tool
 policy as a text preamble only). `DOUBLETAKE_BRAIN_<MODE>=adapter[@model]` binds a mode to another adapter: research runs
-are rebound after classification, follow-ups stay on the adapter that owns the chat's session,
-classification always uses the default adapter. `GET /api/status` carries cached healthchecks for
+are rebound after classification (unless the user pinned an adapter from the **Research this**
+menu, see [BRAIN-ADAPTERS.md](BRAIN-ADAPTERS.md)), follow-ups stay on the adapter that owns the
+chat's session, classification always uses the default adapter. `GET /api/status` carries cached healthchecks for
 every configured adapter and Settings shows them ([guide](BRAIN-ADAPTERS.md#selection)).
 
 ## 8. Channels
@@ -283,7 +284,7 @@ lists (creates one inline) and the **Sources** disclosure showing every extracti
 saw (transcript, on-screen text, frame descriptions, caption, comments, thread, page text)
 flattened to readable text by `extract/flatten.ts`. The follow-up composer is a sticky bar
 with an icon Send button and a **Research this** menu (Quick/Standard/Deep re-run, with time
-hints). Compose (URL or text + note + mode chips); `/share` receives Web Share Target requests;
+hints, plus a **Brain** selector when several adapters are configured that pins the run). Compose (URL or text + note + mode chips); `/share` receives Web Share Target requests;
 settings as titled sections (server status and spend vs cap, **Notifications** enable/disable
 + send test + quiet hours, **Instagram** connect/disconnect/status, QR pairing, devices,
 import/export, sign out). The service worker
@@ -317,7 +318,7 @@ connection recipe in [DEPLOYMENT.md](DEPLOYMENT.md#connect-an-agent-mcp)).
 | `GET entities?kind=&limit=` | every entity of one kind across items, newest item first, each with `chatId`, `itemTitle`, `platform`, `createdAt` for the entity views; located places also carry `geo { lat, lon, label, source: brain \| geocoder }` |
 | `POST entities/geocode?retry=` | locate every `place` entity not yet in the `place_geo` cache through the configured geocoder (`retry=misses` forgets cached misses first); returns `{ places, located, unknown, retried }`; 409 when `GEOCODER=off` |
 | `POST chats/:id/messages` | follow-up turn (cheap path) |
-| `POST chats/:id/research { mode?, note? }` | full re-run, session resumed |
+| `POST chats/:id/research { mode?, note?, adapter?, model? }` | full re-run, session resumed; `adapter` pins the run to one configured brain (`pinned` on the run DTO; 400 if unknown) |
 | `GET chats/:id/runs/:runId/events`, `POST runs/:id/cancel` | backfill run events; abort |
 | `GET events` (WebSocket, `?token=`) | `run_event` and `chat_updated` frames for live views |
 | `POST push/subscribe { kind: webpush\|fcm, endpoint, keys? }`, `POST push/unsubscribe { endpoint }`, `GET push/subscriptions`, `POST push/test` | register this device's push endpoint (webpush needs `keys`; 409 when the kind is not configured on the server); list/remove; send a test notification to this device only |

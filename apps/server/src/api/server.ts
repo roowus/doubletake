@@ -543,7 +543,11 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
     return reply.code(202).send({ runId: run.id });
   });
 
-  /** "Research this": full re-run, optionally with a different mode; resumes the session. */
+  /**
+   * "Research this": full re-run, optionally with a different mode; resumes the session.
+   * `adapter` (one of the configured brains, optionally with `model`) pins the run to that
+   * adapter so the worker does not rebind it to the mode's default after classification.
+   */
   app.post('/api/chats/:id/research', async (req, reply) => {
     const { chat, item } = loadChat(req, reply, repo) ?? {};
     if (!chat || !item) return;
@@ -551,8 +555,14 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
       .object({
         mode: z.enum(['quick', 'standard', 'deep']).optional(),
         note: z.string().max(4000).optional(),
+        adapter: z.string().min(1).max(80).optional(),
+        model: z.string().min(1).max(200).optional(),
       })
       .parse(req.body ?? {});
+    if (body.adapter && !worker.brains.all().some((b) => b.id === body.adapter))
+      return reply.code(400).send({ error: `unknown adapter "${body.adapter}"` });
+    if (body.model && !body.adapter)
+      return reply.code(400).send({ error: 'model needs an adapter' });
     if (body.note?.trim()) {
       repo.addMessage({ chatId: chat.id, role: 'user', kind: 'question', content: body.note });
       repo.updateItem(item.id, { note: [item.note, body.note].filter(Boolean).join('\n\n') });
@@ -565,8 +575,9 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
       chatId: chat.id,
       kind: 'research',
       mode,
-      adapter: bound.adapter.id,
-      model: bound.model,
+      adapter: body.adapter ?? bound.adapter.id,
+      model: body.adapter ? (body.model ?? null) : bound.model,
+      pinned: Boolean(body.adapter),
     });
     worker.kick();
     return reply.code(202).send({ runId: run.id });
@@ -599,6 +610,7 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
       spentTodayUsd: repo.spentToday(),
       dailyCapUsd: cfg.dailyCapUsd,
       brain: deps.brain.id,
+      brainIds: worker.brains.all().map((b) => b.id),
       brains: health === 'skip' ? [] : await worker.brains.healthchecks(health === 'refresh'),
       notesDir: cfg.notesDir,
       push: {

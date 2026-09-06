@@ -261,7 +261,46 @@ describe('API', () => {
     expect(re.statusCode).toBe(202);
     await waitFor(() => env.repo.getRun(re.json().runId)?.status === 'done');
     expect(env.repo.getRun(re.json().runId)?.mode).toBe('deep');
+    expect(env.repo.getRun(re.json().runId)?.pinned).toBe(false);
     expect(env.repo.getItem(detail.chat.itemId)?.modeEffective).toBe('deep');
+
+    // Pinning: unknown adapters and a model without an adapter are rejected; a known one sticks.
+    const badPin = await app.inject({
+      method: 'POST',
+      url: `/api/chats/${chatId}/research`,
+      headers: auth(),
+      payload: { adapter: 'ghost' },
+    });
+    expect(badPin.statusCode).toBe(400);
+    const badModel = await app.inject({
+      method: 'POST',
+      url: `/api/chats/${chatId}/research`,
+      headers: auth(),
+      payload: { model: 'x' },
+    });
+    expect(badModel.statusCode).toBe(400);
+    const pinned = await app.inject({
+      method: 'POST',
+      url: `/api/chats/${chatId}/research`,
+      headers: auth(),
+      payload: { mode: 'quick', adapter: 'fake', model: 'tiny' },
+    });
+    expect(pinned.statusCode).toBe(202);
+    await waitFor(() => env.repo.getRun(pinned.json().runId)?.status === 'done');
+    expect(env.repo.getRun(pinned.json().runId)).toMatchObject({
+      adapter: 'fake',
+      model: 'tiny',
+      pinned: true,
+    });
+    const pinnedDetail = (
+      await app.inject({ method: 'GET', url: `/api/chats/${chatId}`, headers: auth() })
+    ).json();
+    expect(pinnedDetail.runs.at(-1)).toMatchObject({
+      adapter: 'fake',
+      model: 'tiny',
+      pinned: true,
+    });
+    expect(env.repo.getItem(detail.chat.itemId)?.modeEffective).toBe('quick');
 
     // search
     const hit = (
@@ -440,8 +479,9 @@ describe('API', () => {
     const status = (
       await app.inject({ method: 'GET', url: '/api/status', headers: auth() })
     ).json();
-    expect(status.spentTodayUsd).toBeCloseTo(0.06);
+    expect(status.spentTodayUsd).toBeCloseTo(0.08); // ingest + follow-up + deep re-run + pinned re-run
     expect(status.brain).toBe('fake');
+    expect(status.brainIds).toEqual(['fake']);
     expect(status.brains).toHaveLength(1);
     expect(status.brains[0]).toMatchObject({ id: 'fake', ok: true, default: true, modes: [] });
     expect(typeof status.brains[0].checkedAt).toBe('string');

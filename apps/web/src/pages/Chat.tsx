@@ -19,8 +19,20 @@ export function Chat({ id }: { id: string }) {
   const [draft, setDraft] = useState('');
   const [err, setErr] = useState<string | null>(null);
   const [menu, setMenu] = useState(false);
+  /** Ids of the configured brains; the Research menu offers a per-adapter pin when there are several. */
+  const [brains, setBrains] = useState<string[]>([]);
+  const [pin, setPin] = useState<string | null>(null);
   const bottom = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  // The adapter list only matters once the menu opens; healthchecks are skipped (cheap call).
+  useEffect(() => {
+    if (!menu || brains.length) return;
+    api
+      .status('skip')
+      .then((s) => setBrains(s.brainIds ?? []))
+      .catch(() => {});
+  }, [menu, brains.length]);
 
   // Close the research menu on Escape or a click outside it.
   useEffect(() => {
@@ -134,7 +146,7 @@ export function Chat({ id }: { id: string }) {
   async function research(mode?: Mode) {
     setMenu(false);
     try {
-      await api.research(id, mode);
+      await api.research(id, mode, undefined, pin ?? undefined);
       load();
     } catch (ex) {
       setErr(ex instanceof ApiError ? ex.message : String(ex));
@@ -217,7 +229,9 @@ export function Chat({ id }: { id: string }) {
               )}
               {run && (
                 <div className="foot">
-                  {run.mode} · {run.costUsd != null ? `$${run.costUsd.toFixed(3)}` : 'cost n/a'}
+                  {run.mode}
+                  {run.pinned && ` · ${run.adapter}${run.model ? `@${run.model}` : ''}`} ·{' '}
+                  {run.costUsd != null ? `$${run.costUsd.toFixed(3)}` : 'cost n/a'}
                 </div>
               )}
             </article>
@@ -321,6 +335,25 @@ export function Chat({ id }: { id: string }) {
                 <button type="button" role="menuitem" onClick={() => research('deep')}>
                   Deep <span className="help muted small">~20 min</span>
                 </button>
+                {brains.length > 1 && (
+                  <>
+                    <div className="head">Brain</div>
+                    <label className="popover-row">
+                      <select
+                        aria-label="Brain for this run"
+                        value={pin ?? ''}
+                        onChange={(e) => setPin(e.target.value || null)}
+                      >
+                        <option value="">Mode default</option>
+                        {brains.map((b) => (
+                          <option key={b} value={b}>
+                            {b}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </>
+                )}
               </div>
             )}
           </div>
