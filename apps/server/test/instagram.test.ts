@@ -184,6 +184,15 @@ describe('helpers', () => {
       ),
     ).toBe(true);
   });
+  it('hostAllowed with a port guards only that port (Tailscale Funnel shares the hostname)', () => {
+    const cfg = { ...env.cfg, ig: { ...env.cfg.ig, webhookPublicHost: 'mac.ts.net:8443' } };
+    expect(hostAllowed(cfg, 'mac.ts.net:8443', '/webhooks/instagram')).toBe(true);
+    expect(hostAllowed(cfg, 'MAC.ts.net:8443', '/api/chats')).toBe(false);
+    expect(hostAllowed(cfg, 'mac.ts.net:8443', '/')).toBe(false);
+    // the PWA on the default port is untouched
+    expect(hostAllowed(cfg, 'mac.ts.net', '/')).toBe(true);
+    expect(hostAllowed(cfg, 'mac.ts.net', '/api/chats')).toBe(true);
+  });
 });
 
 describe('webhook verification', () => {

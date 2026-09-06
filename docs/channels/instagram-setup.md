@@ -15,7 +15,7 @@ confirmed against the live API. M4 removes the markers as they are checked. Impl
 |---|---|
 | `IG_APP_ID`, `IG_APP_SECRET` | Meta app credentials; both set ⇒ the channel is enabled (boot log `instagram: connected` / `not connected`) |
 | `IG_WEBHOOK_VERIFY_TOKEN` | random string you also paste into the Meta webhook dialog |
-| `DOUBLETAKE_WEBHOOK_PUBLIC_HOST` | hostname of the tunnel; requests with that `Host` are refused (`404`) on every path except `/webhooks/instagram` |
+| `DOUBLETAKE_WEBHOOK_PUBLIC_HOST` | hostname of the tunnel; requests with that `Host` are refused (`404`) on every path except `/webhooks/instagram`. With Tailscale Funnel the public name equals the tailnet name, so use `host:8443` and only that port is guarded (the PWA on 443 keeps working) |
 | `IG_MENTION_POLLING` | `on` (default) polls `/tags` every 2 minutes; `off` relies on the webhook alone |
 | `IG_GRAPH_BASE` | default `https://graph.instagram.com/v25.0` |
 | `DOUBLETAKE_PUBLIC_URL` | must be set: the OAuth redirect is `<public url>/api/ig/callback`, so add exactly that URL under **Valid OAuth redirect URIs** in the Meta dashboard |

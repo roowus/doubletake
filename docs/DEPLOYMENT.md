@@ -206,7 +206,8 @@ Pick one:
   including `tailscale serve` for the PWA, onto the public internet (observed 2026-09-05; the
   host guard below still 404s everything else, but do not rely on it alone).
   `tailscale funnel --bg --https=8443 --set-path=/webhooks/instagram http://127.0.0.1:7391/webhooks/instagram`,
-  set `DOUBLETAKE_WEBHOOK_PUBLIC_HOST=<machine>.<tailnet>.ts.net` and give Meta the callback
+  set `DOUBLETAKE_WEBHOOK_PUBLIC_HOST=<machine>.<tailnet>.ts.net:8443` (with the port, so the
+  host guard leaves the PWA on 443 alone) and give Meta the callback
   `https://<machine>.<tailnet>.ts.net:8443/webhooks/instagram`. `tailscale funnel --https=443 off`
   also drops the tailnet-only serve config; re-add it with `tailscale serve --bg http://127.0.0.1:7391`.
 

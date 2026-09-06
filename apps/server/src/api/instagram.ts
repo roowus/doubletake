@@ -18,12 +18,16 @@ export const IG_WEBHOOK_PATH = '/webhooks/instagram';
 /**
  * Only the webhook is meant to be reachable through the public tunnel hostname. When
  * `DOUBLETAKE_WEBHOOK_PUBLIC_HOST` is set, every other path on that host is a 404 so a leaked
- * hostname exposes nothing but a signature-checked endpoint.
+ * hostname exposes nothing but a signature-checked endpoint. The value may carry a port
+ * (`host:8443`); then only requests whose `Host` names that exact port are guarded.
  */
 export function hostAllowed(cfg: Config, hostHeader: string | undefined, url: string): boolean {
   const pub = cfg.ig.webhookPublicHost;
   if (!pub) return true;
-  const host = (hostHeader ?? '').split(':')[0]?.toLowerCase() ?? '';
+  const raw = (hostHeader ?? '').toLowerCase();
+  // `host:port` in the setting guards only that port. Tailscale Funnel reuses the tailnet
+  // hostname, so the PWA on :443 must stay reachable while :8443 is public.
+  const host = pub.includes(':') ? raw : (raw.split(':')[0] ?? '');
   if (host !== pub) return true;
   const path = url.split('?')[0] ?? url;
   if (path === IG_WEBHOOK_PATH) return true;
