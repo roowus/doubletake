@@ -3,7 +3,7 @@ import type { BrainAdapter, ResearchBrief, RunOptions, ToolPolicy } from '@doubl
 import type { Answer, Mode, QuestionType, RunEvent, UntrustedBlock } from '@doubletake/shared';
 import { FOLLOWUP_BUDGET, MODE_BUDGETS, pickModeByKeywords } from '@doubletake/shared';
 import { LIBRARY_TEMPLATE, OUTPUT_TEMPLATES, SYSTEM_FRAMING } from '../brains/prompts.js';
-import { BrainSet } from '../brains/registry.js';
+import { BrainSet, type ModeBinding } from '../brains/registry.js';
 import type { Config } from '../config/index.js';
 import type { ItemRow, Repo, RunRow } from '../db/repo.js';
 import { exportItemMarkdown } from '../export/markdown.js';
@@ -271,6 +271,39 @@ export class QueueWorker extends EventEmitter {
     };
   }
 
+  /**
+   * Adapter and model a research run executes on. Unpinned runs follow the effective mode's
+   * binding (and record the change as an `adapter` status event); a run the user pinned to an
+   * adapter from the Research menu keeps exactly what was stored on it.
+   */
+  private bindResearch(
+    run: RunRow,
+    mode: Mode,
+    emit: (t: RunEvent['type'], p: Record<string, unknown>) => void,
+  ): { bound: ModeBinding; current: RunRow } {
+    if (run.pinned) {
+      const adapter = this.brains.get(run.adapter);
+      if (adapter.id !== run.adapter) {
+        // The pinned adapter is no longer configured: fall back and say so in the timeline.
+        this.repo.updateRun(run.id, { adapter: adapter.id, model: null });
+        emit('status', { phase: 'adapter', adapter: adapter.id, reason: 'pinned adapter missing' });
+        return {
+          bound: { adapter, model: null },
+          current: { ...run, adapter: adapter.id, model: null },
+        };
+      }
+      return { bound: { adapter, model: run.model }, current: run };
+    }
+    const bound = this.brains.forMode(mode);
+    const model = bound.model ?? this.cfg.brainModel;
+    if (bound.adapter.id !== run.adapter || model !== run.model) {
+      this.repo.updateRun(run.id, { adapter: bound.adapter.id, model });
+      emit('status', { phase: 'adapter', adapter: bound.adapter.id, ...(model ? { model } : {}) });
+      return { bound, current: { ...run, adapter: bound.adapter.id, model } };
+    }
+    return { bound, current: run };
+  }
+
   private runOptions(
     mode: Mode,
     kind: 'research' | 'followup',
@@ -344,14 +377,7 @@ export class QueueWorker extends EventEmitter {
 
     const mode: Mode = forced ?? pickModeByKeywords(question) ?? 'quick';
     const questionType: QuestionType = 'other';
-    const bound = this.brains.forMode(mode);
-    const model = bound.model ?? this.cfg.brainModel;
-    let current = run;
-    if (bound.adapter.id !== run.adapter || model !== run.model) {
-      current = { ...run, adapter: bound.adapter.id, model };
-      this.repo.updateRun(run.id, { adapter: current.adapter, model });
-      emit('status', { phase: 'adapter', adapter: current.adapter, ...(model ? { model } : {}) });
-    }
+    const { bound, current } = this.bindResearch(run, mode, emit);
     this.repo.updateRun(run.id, { mode, status: 'researching' });
     this.repo.updateItem(item.id, { modeEffective: mode, questionType, status: 'researching' });
     emit('status', { phase: 'mode', mode, questionType, source: forced ? 'forced' : 'library' });
@@ -374,7 +400,9 @@ export class QueueWorker extends EventEmitter {
     // 1. Extract. Forced modes decide extraction depth; auto starts standard and is refined below.
     const forced = item.modeRequested !== 'auto' ? (item.modeRequested as Mode) : null;
     // Provisional adapter for the extraction stage; the effective mode below may rebind it.
-    let bound = this.brains.forMode(forced ?? (run.mode as Mode));
+    let bound = run.pinned
+      ? { adapter: this.brains.get(run.adapter), model: run.model }
+      : this.brains.forMode(forced ?? (run.mode as Mode));
     let extraction: ExtractResult | null = null;
     const url = item.canonicalUrl ?? item.sourceUrl;
     const blocks: UntrustedBlock[] = [];
@@ -476,14 +504,9 @@ export class QueueWorker extends EventEmitter {
     );
     const mode = cls.mode;
     const questionType = cls.question_type;
-    bound = this.brains.forMode(mode);
-    const model = bound.model ?? this.cfg.brainModel;
-    let current = run;
-    if (bound.adapter.id !== run.adapter || model !== run.model) {
-      current = { ...run, adapter: bound.adapter.id, model };
-      this.repo.updateRun(run.id, { adapter: current.adapter, model });
-      emit('status', { phase: 'adapter', adapter: current.adapter, ...(model ? { model } : {}) });
-    }
+    const rebound = this.bindResearch(run, mode, emit);
+    bound = rebound.bound;
+    const current = rebound.current;
     this.repo.updateRun(run.id, { mode, status: 'researching' });
     this.repo.updateItem(item.id, { modeEffective: mode, questionType, status: 'researching' });
     emit('status', { phase: 'mode', mode, questionType, source: cls.source });

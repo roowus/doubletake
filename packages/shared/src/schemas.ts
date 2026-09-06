@@ -199,6 +199,8 @@ export const RunDto = z.object({
   mode: Mode,
   adapter: z.string(),
   model: z.string().nullable(),
+  /** The user chose this adapter for the run; the worker will not rebind it to the mode's default. */
+  pinned: z.boolean(),
   status: RunStatus,
   costUsd: z.number().nullable(),
   startedAt: z.string().nullable(),

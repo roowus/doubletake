@@ -1201,6 +1201,15 @@ a.chip:hover {
   margin-left: auto;
   font-weight: 400;
 }
+.popover .popover-row {
+  display: flex;
+  padding: 4px 6px 6px;
+}
+.popover .popover-row select {
+  width: 100%;
+  min-height: 36px;
+  font-size: var(--text-sm);
+}
 
 /* ---- Sources ------------------------------------------------------------- */
 .sources-text {

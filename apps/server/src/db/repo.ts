@@ -187,6 +187,7 @@ export class Repo {
     mode: Mode;
     adapter: string;
     model?: string | null;
+    pinned?: boolean;
     userMessage?: string | null;
   }) {
     const row: typeof s.runs.$inferInsert = {
@@ -197,6 +198,7 @@ export class Repo {
       mode: r.mode,
       adapter: r.adapter,
       model: r.model ?? null,
+      pinned: r.pinned ?? false,
       status: 'queued',
       userMessage: r.userMessage ?? null,
       createdAt: nowIso(),

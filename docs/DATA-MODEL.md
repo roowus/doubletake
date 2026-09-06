@@ -55,7 +55,7 @@ Content shapes:
 
 ### runs / run_events
 `runs`: `id`, `item_id`, `chat_id`, `kind` (`research` · `followup` · `escalation`), `mode`,
-`adapter`, `model`, `status` (`queued` · `extracting` · `researching` · `done` · `failed` ·
+`adapter`, `model`, `pinned` (user chose the adapter; never rebound), `status` (`queued` · `extracting` · `researching` · `done` · `failed` ·
 `capped` · `aborted`), `started_at`, `finished_at`, `cost_usd`, `tokens_in`, `tokens_out`,
 `stop_reason`, `error`.
 `run_events`: `run_id`, `seq`, `type` (`status` · `tool_call` · `tool_result` · `text` ·

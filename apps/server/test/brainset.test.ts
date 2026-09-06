@@ -94,4 +94,39 @@ describe('BrainSet', () => {
     expect(call?.opts?.model).toBe('big-model');
     expect(main.calls.filter((c) => c.kind === 'followUp')).toHaveLength(0);
   });
+
+  it('a pinned research run keeps its adapter and model despite the mode binding', async () => {
+    main.classifyReply = '{"mode":"deep","question_type":"compare","needs_comments":false}';
+    const out = ingest(
+      { text: 'Compare Foo and Bar', channel: 'compose', focus: 'whole', modeHint: 'auto' },
+      { repo: env.repo, adapterFor: (m) => brains.forMode(m) },
+    );
+    // Simulate the Research menu pinning the default adapter with an explicit model.
+    const before = deep.calls.filter((c) => c.kind === 'run').length;
+    const phases: Record<string, unknown>[] = [];
+    const run = env.repo.createRun({
+      itemId: out.item.id,
+      chatId: out.chat.id,
+      kind: 'research',
+      mode: 'standard', // "standard" is not a forced mode, so the classifier still decides
+      adapter: 'fake',
+      model: 'pinned-model',
+      pinned: true,
+    });
+    worker.on('run_event', (e) => {
+      if (e.runId === run.id && e.type === 'status' && e.payload.phase === 'adapter')
+        phases.push(e.payload);
+    });
+    worker.kick();
+    await waitFor(() => env.repo.getRun(run.id)?.status === 'done');
+    await waitFor(() => env.repo.getRun(out.run.id)?.status === 'done');
+    const after = env.repo.getRun(run.id);
+    expect(after?.mode).toBe('deep'); // classification still picks the mode…
+    expect(after?.adapter).toBe('fake'); // …but the adapter stays where the user put it
+    expect(after?.model).toBe('pinned-model');
+    expect(phases).toEqual([]);
+    expect(deep.calls.filter((c) => c.kind === 'run').length - before).toBe(1); // only the auto run
+    const mine = main.calls.filter((c) => c.kind === 'run').at(-1);
+    expect(mine?.opts?.model).toBe('pinned-model');
+  });
 });

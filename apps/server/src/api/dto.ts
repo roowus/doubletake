@@ -55,6 +55,7 @@ export function toRunDto(r: RunRow): RunDto {
     mode: r.mode as RunDto['mode'],
     adapter: r.adapter,
     model: r.model,
+    pinned: r.pinned,
     status: r.status as RunDto['status'],
     costUsd: r.costUsd,
     startedAt: r.startedAt,
