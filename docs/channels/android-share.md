@@ -125,6 +125,13 @@ notification also goes to the owner channels (ntfy, Telegram) when configured
   re-registers, and the `registration` listener re-posts the token. It never prompts; a device
   that never enabled notifications stays silent until Settings → Enable. Found on the Pixel 4 XL
   (2026-09-05): revoke → re-pair → share produced an answer with no notification.
+- **"Failed to fetch" right after a notification tap.** Tapping an FCM notification launches
+  the app before the Tailscale tunnel on the phone is back up, so the first `fetch` to the
+  tailnet URL dies with a bare `TypeError: Failed to fetch` (seen on the Pixel 4 XL,
+  2026-09-06; the same tap a moment later works). `api.ts` now retries idempotent GETs twice
+  (0.4 s, 1.2 s) and turns a network failure into a readable "Could not reach the server"
+  message (`ApiError` with status 0); the chat page shows a **Retry** button under it. POSTs
+  are never retried so an ingest cannot be sent twice. Web-only change: no APK rebuild.
 - **Pairing input.** The code field accepts the QR URL or `{url, code}` JSON and splits it into
   server URL + code only when both are present, so typing a URL by hand is not split mid-way.
 - **Plain-http server URLs (device testing over `adb reverse`).** The bundle is served from
