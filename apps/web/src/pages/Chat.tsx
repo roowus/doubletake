@@ -5,6 +5,7 @@ import { Claims, EntityCards, Recommendations } from '../components/AnswerCards'
 import { Icon } from '../components/Icon';
 import { Markdown } from '../components/Markdown';
 import { RunTimeline } from '../components/RunTimeline';
+import { ShareCard } from '../components/ShareCard';
 import { Sources, TagEditor } from '../components/Sources';
 import { useLive } from '../live';
 import { navigate } from '../router';
@@ -172,7 +173,6 @@ export function Chat({ id }: { id: string }) {
           {totalCost > 0 && <span className="mono">${totalCost.toFixed(3)}</span>}
           {chat.category && <span className="tag">{chat.category}</span>}
         </div>
-        {item.note && <p className="small">Your note: {item.note}</p>}
       </header>
 
       {err && (
@@ -191,6 +191,7 @@ export function Chat({ id }: { id: string }) {
       )}
 
       <div className="messages">
+        <ShareCard chat={chat} item={item} />
         {messages.map((m) => {
           if (m.role === 'system')
             return (

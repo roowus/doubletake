@@ -30,6 +30,10 @@ a 24/7 laptop service.
 - **Completion signal through a hook**: the worker calls `onOutcome(item, outcome)`; the channel
   reacts `love` to the originating DM (`ig_events.sender_id` + message id) when the item came
   via `ig_dm` and the run answered. Nothing is ever posted for mentions.
+  *Amended 2026-09-06:* the heart now goes out on **receipt**, from the webhook handler, as
+  soon as the share is accepted, because the owner wanted to know "got it" at once and the
+  finished answer already arrives by push. `onOutcome` stays wired for a later failure signal
+  but sends nothing today.
 - **Webhook authentication**: a per-route `application/json` parser keeps the raw body so
   `X-Hub-Signature-256` is checked over the exact bytes (constant-time compare). The GET
   handshake compares `hub.verify_token` with `IG_WEBHOOK_VERIFY_TOKEN`. Deliveries are

@@ -161,6 +161,74 @@ describe('API', () => {
       { kind: 'tool', name: 'Widget', attributes: { price: '$9' }, confidence: 0.9 },
     ]);
     expect(detail.runs[0]).toMatchObject({ status: 'done', mode: 'quick', costUsd: 0.02 });
+    // Typed text: nothing to preview and no source link.
+    expect(detail.item).toMatchObject({ sourceUrl: null, preview: null });
+
+    // A saved frame becomes the share card's preview and is served token-gated from the media dir.
+    const itemId = detail.chat.itemId as string;
+    const frameDir = path.join(env.cfg.dataDir, 'media', itemId, 'frames');
+    fs.mkdirSync(frameDir, { recursive: true });
+    const png = Buffer.from('89504e470d0a1a0a', 'hex');
+    fs.writeFileSync(path.join(frameDir, '000010.png'), png);
+    const frame = (ts: number, name: string) =>
+      env.repo.addMediaAsset({
+        itemId,
+        kind: 'frame',
+        path: path.join('media', itemId, 'frames', name),
+        sha256: 'x',
+        bytes: png.length,
+        frameTsS: ts,
+        source: 'ffmpeg',
+      });
+    frame(4.5, '000045.png');
+    frame(1.0, '000010.png');
+    env.repo.addMediaAsset({
+      itemId,
+      kind: 'video',
+      path: path.join('media', itemId, 'source.mp4'),
+      sha256: 'y',
+      bytes: 1,
+      source: 'ytdlp',
+    });
+    const withPreview = (
+      await app.inject({ method: 'GET', url: `/api/chats/${chatId}`, headers: auth() })
+    ).json();
+    expect(withPreview.item.preview).toMatchObject({ kind: 'frame' });
+    const mediaId = withPreview.item.preview.mediaId as string;
+    expect(env.repo.getMediaAsset(mediaId)?.frameTsS).toBe(1); // earliest frame wins
+    const img = await app.inject({
+      method: 'GET',
+      url: `/api/chats/${chatId}/media/${mediaId}`,
+      headers: auth(),
+    });
+    expect(img.statusCode).toBe(200);
+    expect(img.headers['content-type']).toBe('image/png');
+    expect(img.rawPayload.equals(png)).toBe(true);
+    // No token → 401; the video row is never served; a missing file is 404.
+    expect(
+      (await app.inject({ method: 'GET', url: `/api/chats/${chatId}/media/${mediaId}` }))
+        .statusCode,
+    ).toBe(401);
+    const video = env.repo.listMediaAssets(itemId).find((a) => a.kind === 'video');
+    expect(
+      (
+        await app.inject({
+          method: 'GET',
+          url: `/api/chats/${chatId}/media/${video?.id}`,
+          headers: auth(),
+        })
+      ).statusCode,
+    ).toBe(404);
+    const other = env.repo.listMediaAssets(itemId).find((a) => a.frameTsS === 4.5);
+    expect(
+      (
+        await app.inject({
+          method: 'GET',
+          url: `/api/chats/${chatId}/media/${other?.id}`,
+          headers: auth(),
+        })
+      ).statusCode,
+    ).toBe(404);
 
     const evs = (
       await app.inject({
