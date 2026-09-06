@@ -131,7 +131,9 @@ notification also goes to the owner channels (ntfy, Telegram) when configured
   2026-09-06; the same tap a moment later works). `api.ts` now retries idempotent GETs twice
   (0.4 s, 1.2 s) and turns a network failure into a readable "Could not reach the server"
   message (`ApiError` with status 0); the chat page shows a **Retry** button under it. POSTs
-  are never retried so an ingest cannot be sent twice. Web-only change: no APK rebuild.
+  are never retried so an ingest cannot be sent twice. The WebView loads the bundle from the APK
+  (`webDir`), so the app needs a rebuild + `adb install -r` to pick up web changes; only the
+  installed PWA gets them live from the server.
 - **Pairing input.** The code field accepts the QR URL or `{url, code}` JSON and splits it into
   server URL + code only when both are present, so typing a URL by hand is not split mid-way.
 - **Plain-http server URLs (device testing over `adb reverse`).** The bundle is served from
