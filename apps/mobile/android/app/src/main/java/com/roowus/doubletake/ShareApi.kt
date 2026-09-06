@@ -47,7 +47,13 @@ object ShareApi {
             header("X-Doubletake-Mode", "modeHint")
             header("X-Doubletake-Channel", "channel")
             header("X-Doubletake-Client-Id", "clientId")
-            val input = open() ?: return Outcome.Rejected(0, "file is no longer readable")
+            // A content-URI grant can expire or be missing (SecurityException), the file can be gone
+            // (FileNotFoundException): report it instead of crashing the sheet.
+            val input = try {
+                open()
+            } catch (e: Exception) {
+                return Outcome.Rejected(0, "Could not read the shared file (${e.javaClass.simpleName})")
+            } ?: return Outcome.Rejected(0, "Could not read the shared file")
             input.use { src -> conn.outputStream.use { dst -> src.copyTo(dst, 1 shl 16) } }
             val code = conn.responseCode
             if (code in 200..299) return Outcome.Sent

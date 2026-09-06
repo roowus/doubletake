@@ -78,8 +78,8 @@ and a Reddit video.
   `POST /api/ingest/upload` streams the file into `media/<item_id>/`, the worker runs the same
   pipeline on it (`hints.local_path`, pushed to a remote worker with `PUT /files`), the Android
   sheet uploads `EXTRA_STREAM` and queues a private copy when offline, the chat shows the photo
-  or a frame as the share card. Covered by server, remote-client and worker tests; live device
-  verification pending.
+  or a frame as the share card. Covered by server, remote-client and worker tests; verified live
+  on the API 36 emulator from Google Photos (2026-09-06).
 
 ## M4 — Instagram channel
 
