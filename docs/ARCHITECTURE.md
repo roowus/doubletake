@@ -261,7 +261,11 @@ one circle marker per located place, popup linking to its chat, a collapsible li
 unlocated places with a Maps search link and a **Locate N more** backfill button,
 [ADR 0022](adr/0022-map-view-place-geocoding.md)). The chat view is answer-first: a compact
 header (back, title, status, source host, mode, cost, category), then the messages with entity
-cards and the claims table inside the answer, active runs with their live timeline over the
+cards and the claims table inside the answer (answer text is GitHub-flavoured Markdown via
+`react-markdown` + `remark-gfm`, so tables, task lists and strikethrough render; raw HTML never
+does; a fenced \`\`\`svg block is the one drawable exception, inlined only after DOMPurify's SVG
+profile has stripped scripts, links, styles, images, `<use>`/`foreignObject` and any external
+`url()` reference, otherwise it stays a code block — `components/Markdown.tsx`), active runs with their live timeline over the
 `/api/events` WebSocket, and below them one collapsed **Tags, collections and sources** panel
 holding the editable tag chips (remove icon, inline field to add a manual tag; every edit
 re-indexes FTS and re-exports the Markdown note), the **Add to collection** picker for manual
@@ -333,6 +337,10 @@ Detailed in [SECURITY.md](SECURITY.md) and [THREAT-MODEL.md](THREAT-MODEL.md).
   `~/Doubletake`. No shell.
 - Brain network access only through `web_search` and `web_fetch` (SSRF guard: no private
   ranges, size caps, no credentials).
+- Brain output is rendered as Markdown with raw HTML disabled. The only markup that reaches the
+  DOM is a fenced `svg` block after DOMPurify (SVG profile, no scripts / links / styles / images /
+  external references), so an injected answer can draw shapes but cannot run code, navigate or
+  fetch from a third party.
 - The MCP endpoint exposes the library only: no file, shell or network tools, no settings or
   deletion. Scraped text leaves it inside the same `<untrusted>` wrapper the brain gets, and
   the calling agent is a paired device that Settings → Devices can revoke

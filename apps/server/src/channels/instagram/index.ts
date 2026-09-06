@@ -53,6 +53,8 @@ export interface IgChannelDeps {
   /** Which adapter a new run is recorded with (`worker.brains.forMode`). */
   adapterFor: AdapterPick;
   log: IgLogger;
+  /** Called when a DM changed a chat outside a run, so open pages refresh (worker `chat_updated`). */
+  onChatUpdated?: (chatId: string) => void;
   /** Overridable for tests. */
   now?: () => number;
 }
@@ -447,7 +449,6 @@ export class InstagramChannel {
       this.recentShares.set(m.sender.id, {
         itemId: out.item.id,
         chatId: out.chat.id,
-        runId: out.run.id,
         at: (this.deps.now ?? Date.now)(),
         titleNote: !note && !!share?.payload?.title,
       });
@@ -458,14 +459,15 @@ export class InstagramChannel {
   /** Last DM share per sender, so the text typed right after it can become the note. */
   private recentShares = new Map<
     string,
-    { itemId: string; chatId: string; runId: string; at: number; titleNote: boolean }
+    { itemId: string; chatId: string; at: number; titleNote: boolean }
   >();
 
   /**
    * Text-only DM from a sender whose share arrived less than LATE_NOTE_WINDOW_MS ago: it is the
-   * note for that share. While the run is still queued the note goes onto the item (the brain
-   * sees it as the question); otherwise it is appended to the chat as a question so it is kept.
-   * Returns the item id it was attached to, or null.
+   * note for that share. It goes onto the item (a still-queued run sees it as the question) and
+   * always shows in the chat as the owner's message, so they can see it was fed in: a placeholder
+   * question copied from the reel title is rewritten, anything else appends a new one. Returns
+   * the item id it was attached to, or null.
    */
   private attachLateNote(m: Messaging): string | null {
     const sender = m.sender?.id;
@@ -481,14 +483,18 @@ export class InstagramChannel {
     const { repo } = this.deps;
     const item = repo.getItem(recent.itemId);
     if (!item) return null;
-    const run = repo.getRun(recent.runId);
     // A note copied from the reel's title is a placeholder; the sender's own words replace it.
     const base = recent.titleNote ? null : item.note;
     const note = [base, text].filter(Boolean).join('\n\n');
     repo.updateItem(item.id, { note });
-    if (run?.status !== 'queued') {
-      repo.addMessage({ chatId: recent.chatId, role: 'user', kind: 'question', content: text });
-    }
+    const placeholder = recent.titleNote
+      ? repo
+          .listMessages(recent.chatId)
+          .find((x) => x.role === 'user' && x.kind === 'question' && x.content === item.note)
+      : undefined;
+    if (placeholder) repo.updateMessageContent(placeholder.id, text);
+    else repo.addMessage({ chatId: recent.chatId, role: 'user', kind: 'question', content: text });
+    this.deps.onChatUpdated?.(recent.chatId);
     this.recentShares.set(sender, { ...recent, titleNote: false });
     return item.id;
   }

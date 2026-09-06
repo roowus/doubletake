@@ -87,6 +87,7 @@ const log = {
   error: (m: string) => logs.push(m),
 };
 let now = Date.parse('2026-09-03T12:00:00Z');
+const updated: string[] = [];
 const ig = new InstagramChannel({
   cfg: env.cfg,
   repo: env.repo,
@@ -94,6 +95,7 @@ const ig = new InstagramChannel({
   box,
   adapterFor: (m) => worker.brains.forMode(m),
   log,
+  onChatUpdated: (chatId) => updated.push(chatId),
   now: () => now,
 });
 worker.onOutcome = (item, outcome) => ig.onOutcome(item, outcome);
@@ -425,12 +427,22 @@ describe('DM share', () => {
     expect(r2.handled).toEqual([{ id: 'late-2', kind: 'dm_note', itemId, error: null }]);
     expect(env.repo.getItem(itemId)?.note).toBe('find the hidden 4-letter usernames');
     expect(env.repo.igEventsForItem(itemId).map((e) => e.id)).toEqual(['late-1', 'late-2']);
+    // The owner sees their words in the chat: the title placeholder question was rewritten.
+    const chatId = env.repo.getChatByItem(itemId)?.id ?? '';
+    const questions = () =>
+      env.repo
+        .listMessages(chatId)
+        .filter((x) => x.role === 'user')
+        .map((x) => x.content);
+    expect(questions()).toEqual(['find the hidden 4-letter usernames']);
+    expect(updated).toEqual([chatId]);
 
     // A second message within the window is appended, and a different sender is unaffected.
     now += 1000;
     const r3 = await ig.handleWebhook(text('late-3', 'and why') as never);
     expect(r3.handled[0]?.kind).toBe('dm_note');
     expect(env.repo.getItem(itemId)?.note).toBe('find the hidden 4-letter usernames\n\nand why');
+    expect(questions()).toEqual(['find the hidden 4-letter usernames', 'and why']);
     const r4 = await ig.handleWebhook(text('late-4', 'hello', 'USER8') as never);
     expect(r4).toMatchObject({ handled: [], ignored: 1 });
 
