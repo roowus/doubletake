@@ -120,7 +120,10 @@ backups and the UI are unchanged; the worker keeps its own copy under `--data-di
 may clear at any time. The worker reads `DOUBLETAKE_VISION` and `DOUBLETAKE_WHISPER_BACKEND`
 from its own environment when remote (the server only sets them for a spawned child), so put
 them next to the token. `DOUBLETAKE_VISION=local` then runs on the worker machine (that is where
-a GPU helps); `cloud` vision is still done by the server through the brain.
+a GPU helps); `cloud` vision is still done by the server through the brain. Verified live on
+2026-09-06 with the server on a Mac and the worker on a Fedora machine over Tailscale; a
+`systemd --user` unit with `EnvironmentFile=%h/.config/doubletake/worker.env` holding the
+token is a good way to keep it running (`loginctl enable-linger <user>` so it survives logout).
 
 If both machines mount one filesystem at the same absolute path (a NAS share, a synced
 folder), start the worker with `--shared-paths` and set `DOUBLETAKE_WORKER_SHARED_PATHS=on` on
