@@ -175,6 +175,16 @@ device (`dumpsys notification`: channel `doubletake`, tags `test` and `chat-<id>
 `contentIntent` into `MainActivity`). FCM is therefore not tied to the tailnet path: the
 phone only needs the Google push socket; the server URL can be anything the app can reach.
 
+### Emulator run (Medium Phone AVD, API 36.1 with Google Play, 2026-09-06)
+Same `adb reverse` setup, driven entirely from the Mac with `adb shell input`: fresh install,
+pair by code, `am force-stop`, then an `ACTION_SEND` intent at `ShareReceiverActivity` with a
+Wikipedia URL. The compact sheet appeared over the launcher, Quick + Send created the run, and
+when it finished a real FCM notification ("Pixel 4 — Answer ready. Tap to open the chat.")
+arrived with the app dead. Tapping it launched `MainActivity` straight into `/chat/<id>` with
+the answer rendered. This closes the last M2 caveat: tap-to-open is verified, not just
+delivery. A plain `http://10.0.2.2:7391` server URL fails with `Failed to fetch` because the
+network security config only allows cleartext to localhost — use `adb reverse`.
+
 ## Build
 Capacitor 8 (`@capacitor/*` 8.x), Android Gradle Plugin 8.13, Gradle 8.14 wrapper, compileSdk /
 targetSdk 36, minSdk 24, Java 21, Kotlin 2.2. Android Studio's bundled JBR is a JDK 21 and is
