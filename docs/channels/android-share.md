@@ -47,7 +47,17 @@
   fixed-length when the size is known, else chunked; note, mode, channel and client id in
   URI-encoded `X-Doubletake-*` headers; 8 s connect / 60 s read). The server answers with the
   same `202` shape as a URL share ([ADR 0029](../adr/0029-media-uploads.md)); the chat shows the
-  photo, or a frame of the video, as the share card.
+  photo, or a frame of the video, as the share card. Opening the content URI is wrapped: a missing
+  or expired grant (`SecurityException`, e.g. a URI handed over without
+  `FLAG_GRANT_READ_URI_PERMISSION`) shows "Could not read the shared file" and keeps the sheet
+  open instead of crashing the process. Verified on the API 36 emulator (2026-09-06): Google
+  Photos → Share → Doubletake with a menu photo and a note; `POST /api/ingest/upload` answered
+  `202`, the item landed as `platform: text`, `channel: android_share` with a `media_assets` row
+  `source: upload`, the remote worker received `PUT /files` + `/extract`, OCR read the prices,
+  the quick run answered, the chat showed the photo as the share card and the FCM notification
+  arrived. A MediaStore URI passed by hand via `am start --grant-read-uri-permission` is *not*
+  readable by the app (the shell cannot grant it), so drive a real sharing app when testing on
+  the emulator.
 - If unpaired (`Pairing.get()` finds no URL + token in Preferences): the share is saved as JSON
   under `doubletake.pendingShare`, a toast asks to pair, and `MainActivity` opens. After
   pairing the web app consumes the pending share once and opens `/share?…&channel=android_share`
