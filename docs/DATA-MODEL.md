@@ -30,8 +30,10 @@ Indexes: `(canonical_url, focus, created_at)` for the 24 h dedupe; unique `(clie
 ### media_assets
 `id`, `item_id` fk, `kind` (`video` · `image` · `audio` · `thumbnail` · `frame`), `path`
 (relative to data dir), `sha256`, `bytes`, `duration_s`, `width`, `height`, `frame_ts_s`
-(for frames), `source` (`cdn` · `ytdlp` · `direct` · `ffmpeg` for derived frames/audio),
-`created_at`. Rows are replaced wholesale when an item is re-extracted.
+(for frames), `source` (`cdn` · `ytdlp` · `direct` · `upload` for a file the owner shared
+from a device, ADR 0029 · `ffmpeg` for derived frames/audio), `created_at`. Rows are replaced
+wholesale when an item is re-extracted, except `upload` rows, which are the item's source and
+survive re-extraction.
 
 ### extractions
 `id`, `item_id` fk, `kind` (`caption` · `transcript` · `ocr` · `frame_description` ·
@@ -139,6 +141,7 @@ call re-exports the Markdown note so frontmatter stays in step.
   doubletake.db (+ -wal, -shm)
   keyfile                       # 32 random bytes, mode 0600; root secret for SecretBox (ADR 0018)
   media/<item_id>/source.mp4 | image.jpg | frames/000123.jpg | audio.wav
+                                # uploads land here first as source.<ext> / image.<ext> (ADR 0029)
   exports/<item_id>.md          # mirror of what was written to ~/Doubletake
   logs/server.log, worker.log
 ```

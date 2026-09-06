@@ -15,7 +15,8 @@ JSON-lines over stdio. Server → worker requests, worker → server responses a
 // request
 { "id": "01J…", "op": "extract", "item_id": "…", "url": "…", "platform": "instagram",
   "focus": "thread:178…", "mode": "standard",
-  "hints": { "cdn_url": "https://lookaside.fbsbx.com/…", "media_id": "…", "comment_id": "…" },
+  "hints": { "cdn_url": "https://lookaside.fbsbx.com/…", "media_id": "…", "comment_id": "…",
+             "local_path": "/Users/me/.doubletake/media/01J…/image.jpg" /* uploads only */ },
   "budget": { "frames": 12, "vision_frames": 6, "comments": 100, "transcribe_model": "standard" },
   "out_dir": "/Users/me/.doubletake/media/01J…" }
 
@@ -58,6 +59,7 @@ the worker can run on another machine ([ADR 0026](adr/0026-remote-media-worker.m
 | `GET /ping` | `{ ok: true, pong: true }` |
 | `POST /extract` | request body = the stdio request object above (`op` defaults to `extract`); response is `application/x-ndjson`, the progress lines followed by the one result line |
 | `GET /files?path=<absolute>` | bytes of one file under the worker's data dir; anything else is `400`/`404` |
+| `PUT /files?path=media/<item_id>/<file>` | body = an owner-uploaded photo/video (ADR 0029), stored under the worker's data dir (`.part` then rename, 500 MB cap → `413`); response `{ ok, path, bytes, sha256 }`; any other path shape is `400` |
 
 Every route needs `Authorization: Bearer $DOUBLETAKE_WORKER_TOKEN` (the worker refuses to bind
 a non-loopback address without a token). The worker replaces `out_dir` with
@@ -66,7 +68,9 @@ the result line. The server's `RemoteMediaClient` (selected by `DOUBLETAKE_WORKE
 fetches each asset and `vision_requests[].frame_path` through `/files` into its own
 `<dataDir>/media/<item_id>/` and rewrites the paths, so everything downstream (cloud vision,
 storage relative to the data dir, export) is unchanged. With `DOUBLETAKE_WORKER_SHARED_PATHS=on`
-nothing is copied. Errors map to the same codes (`unauthorized` non-retryable; a dropped
+nothing is copied. Uploads go the other way: when the request carries `hints.local_path` the
+client first `PUT`s that file to `/files?path=media/<item_id>/<name>` and the worker rewrites
+the hint to its own `<data dir>/media/<item_id>/<name>` (again, not with shared paths). Errors map to the same codes (`unauthorized` non-retryable; a dropped
 connection is `worker_crashed`, HTTP failures `worker_unavailable`, both retryable; the media
 wall clock still ends in `timeout`). One extraction at a time on the worker; a second request
 waits. The worker's stderr is its log; the server's `logs/worker.log` stays empty.
@@ -116,6 +120,8 @@ Order of preference per platform:
 | x | `yt-dlp` for native video; images via the syndication CDN URLs in the tweet metadata | | |
 | reddit | `<permalink>.json` for post + comments; `yt-dlp` for v.redd.it video | | |
 | web / aichat | HTTP fetch + `trafilatura` readable text (AI share pages: gemini.google.com/share, chatgpt.com/share, claude.ai/share are ordinary pages; extract turns by their DOM roles when recognisable) | | |
+
+| upload (a photo or video from a share sheet, ADR 0029) | none: `url` is empty and `hints.local_path` names the file the server already stored in `out_dir`; the worker validates the path (absolute, inside `out_dir`, exists), probes it and marks the asset `source: upload`, then frames, OCR, transcription and vision run as for a download | | |
 
 Size cap 500 MB, duration cap 60 min (Deep), 15 min (Quick/Standard, keep first 15 min).
 

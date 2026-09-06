@@ -144,6 +144,74 @@ function ingestLibraryQuestion(req: IngestRequest, deps: IngestDeps): IngestOutc
   return { item, chat, run, deduplicated: false };
 }
 
+/** What a share sheet hands us for a photo or video: the file is already on disk. */
+export interface UploadRequest {
+  /** MIME type as declared by the client (`image/*` or `video/*`). */
+  contentType: string;
+  /** Path of the saved file relative to the data dir (`media/<itemId>/<name>`). */
+  relPath: string;
+  bytes: number;
+  sha256: string;
+  width?: number | null;
+  height?: number | null;
+  note?: string;
+  channel: IngestRequest['channel'];
+  modeHint?: IngestRequest['modeHint'];
+  clientId?: string;
+}
+
+/**
+ * Create item + chat + queued run for an uploaded file (ADR 0029). The item has no url; it is a
+ * `text` platform item whose `media_assets` row (`source: upload`) tells the worker to run the
+ * media pipeline on the file instead of downloading anything. Called after the file has been
+ * written; the caller passes the id the file was saved under so paths and the row agree.
+ */
+export function ingestUpload(
+  req: UploadRequest,
+  deps: IngestDeps & { itemId: string },
+): IngestOutcome {
+  const { repo } = deps;
+  const kind = req.contentType.startsWith('video/') ? 'video' : 'image';
+  const forcedMode: Mode | null = resolveRequestedMode(req.modeHint ?? 'auto');
+  const normalised: IngestRequest = {
+    channel: req.channel,
+    focus: 'whole',
+    modeHint: req.modeHint ?? 'auto',
+    ...(req.note?.trim() ? { note: req.note } : {}),
+    ...(req.clientId ? { clientId: req.clientId } : {}),
+  };
+  const title = req.note?.trim()
+    ? titleFromText(req.note)
+    : kind === 'video'
+      ? 'Shared video'
+      : 'Shared photo';
+  const { item, chat } = repo.createItemWithChat(normalised, 'text', null, title, deps.itemId);
+  repo.addMediaAsset({
+    itemId: item.id,
+    kind,
+    path: req.relPath,
+    sha256: req.sha256,
+    bytes: req.bytes,
+    width: req.width ?? null,
+    height: req.height ?? null,
+    source: 'upload',
+  });
+  const mode = forcedMode ?? 'standard';
+  const bound = pickAdapter(deps)(mode);
+  const run = repo.createRun({
+    itemId: item.id,
+    chatId: chat.id,
+    kind: 'research',
+    mode,
+    adapter: bound.adapter.id,
+    model: bound.model,
+  });
+  if (req.note?.trim()) {
+    repo.addMessage({ chatId: chat.id, role: 'user', kind: 'question', content: req.note });
+  }
+  return { item, chat, run, deduplicated: false };
+}
+
 export function titleFromUrl(url: string, platform: Platform): string {
   try {
     const u = new URL(url);

@@ -1,8 +1,10 @@
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { pipeline } from 'node:stream/promises';
 import type { BrainAdapter } from '@doubletake/brain-sdk';
 import type { Mode, RunEvent } from '@doubletake/shared';
-import { IngestRequest } from '@doubletake/shared';
+import { Channel, IngestRequest, ModeRequested, newId } from '@doubletake/shared';
 import fastifyCors from '@fastify/cors';
 import fastifyStatic from '@fastify/static';
 import fastifyWebsocket from '@fastify/websocket';
@@ -13,7 +15,7 @@ import type { InstagramChannel } from '../channels/instagram/index.js';
 import type { Config } from '../config/index.js';
 import type { Repo } from '../db/repo.js';
 import { brainCoords, type Geocoder, geocodeQuery } from '../geo/index.js';
-import { IngestError, ingest } from '../ingest/index.js';
+import { IngestError, ingest, ingestUpload } from '../ingest/index.js';
 import {
   listCollections,
   resolveCollection,
@@ -69,6 +71,22 @@ const IMAGE_TYPES: Record<string, string> = {
   '.gif': 'image/gif',
 };
 
+/** Upload extensions by declared MIME type; anything else is refused (ADR 0029). */
+const UPLOAD_EXT: Record<string, string> = {
+  'image/jpeg': '.jpg',
+  'image/png': '.png',
+  'image/webp': '.webp',
+  'image/gif': '.gif',
+  'image/heic': '.heic',
+  'image/heif': '.heif',
+  'video/mp4': '.mp4',
+  'video/quicktime': '.mov',
+  'video/webm': '.webm',
+  'video/3gpp': '.3gp',
+  'video/x-matroska': '.mkv',
+};
+const UPLOAD_MAX_BYTES = 500 * 1024 * 1024;
+
 const PUBLIC_PATHS = new Set([
   '/api/health',
   '/api/setup',
@@ -88,11 +106,22 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
   const auth = deps.auth ?? new Auth(repo);
   const app = Fastify({ logger: { level: cfg.logLevel }, bodyLimit: 1024 * 1024 });
   await app.register(fastifyWebsocket);
+  // Share sheets post photos/videos as the raw request body (`POST /api/ingest/upload`); the
+  // route streams it to disk, so no parser buffers it. Other routes never see these types.
+  app.addContentTypeParser(/^(image|video)\//, (_req, payload, done) => done(null, payload));
   // The Capacitor WebView runs on its own origin (https://localhost); the API is token-gated,
   // so allowing cross-origin calls adds no exposure.
   await app.register(fastifyCors, {
     origin: ['https://localhost', 'http://localhost', 'capacitor://localhost'],
     methods: ['GET', 'POST', 'DELETE', 'OPTIONS'],
+    allowedHeaders: [
+      'authorization',
+      'content-type',
+      'x-doubletake-note',
+      'x-doubletake-channel',
+      'x-doubletake-mode',
+      'x-doubletake-client-id',
+    ],
   });
 
   // ---- public-host guard + auth gate ----
@@ -200,6 +229,120 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
       replayed: out.replayed ?? false,
     });
   });
+
+  // A photo or video from a share sheet (ADR 0029). Body = the file; metadata travels in
+  // headers because the body is not JSON. The file lands in `<dataDir>/media/<itemId>/` before
+  // the item exists so the id is minted here; the worker runs the media pipeline on it.
+  app.post(
+    '/api/ingest/upload',
+    { bodyLimit: UPLOAD_MAX_BYTES },
+    async (req: FastifyRequest, reply: FastifyReply) => {
+      const contentType =
+        (req.headers['content-type'] ?? '').split(';')[0]?.trim().toLowerCase() ?? '';
+      const ext = UPLOAD_EXT[contentType];
+      if (!ext) throw new IngestError(`unsupported upload type ${contentType || '(none)'}`);
+      const hdr = (name: string): string | undefined => {
+        const v = req.headers[name];
+        const raw = Array.isArray(v) ? v[0] : v;
+        if (raw === undefined || raw === '') return undefined;
+        try {
+          return decodeURIComponent(raw);
+        } catch {
+          return raw;
+        }
+      };
+      const meta = z
+        .object({
+          note: z.string().max(4_000).optional(),
+          channel: Channel.default('compose'),
+          modeHint: ModeRequested.default('auto'),
+          clientId: z.string().min(8).max(80).optional(),
+        })
+        .parse({
+          note: hdr('x-doubletake-note'),
+          channel: hdr('x-doubletake-channel'),
+          modeHint: hdr('x-doubletake-mode'),
+          clientId: hdr('x-doubletake-client-id'),
+        });
+      if (meta.clientId) {
+        const prior = repo.findByClientId(meta.clientId);
+        const chat = prior ? repo.getChatByItem(prior.id) : undefined;
+        const run = chat ? repo.listRuns(chat.id).at(-1) : undefined;
+        if (prior && chat && run) {
+          // Replay (offline queue re-post): drain the body, answer as the first attempt did.
+          for await (const _chunk of req.body as NodeJS.ReadableStream) {
+            /* discard */
+          }
+          return reply.code(202).send({
+            itemId: prior.id,
+            chatId: chat.id,
+            runId: run.id,
+            deduplicated: false,
+            replayed: true,
+          });
+        }
+      }
+      const itemId = newId();
+      const name = `${contentType.startsWith('video/') ? 'source' : 'image'}${ext}`;
+      const dir = path.join(cfg.dataDir, 'media', itemId);
+      fs.mkdirSync(dir, { recursive: true });
+      const abs = path.join(dir, name);
+      const tmp = `${abs}.part`;
+      const hash = crypto.createHash('sha256');
+      let bytes = 0;
+      try {
+        const out = fs.createWriteStream(tmp);
+        const src = req.body as NodeJS.ReadableStream;
+        // The raw-stream parser bypasses Fastify's bodyLimit, so the cap is enforced here.
+        let tooLarge = false;
+        src.on('data', (c: Buffer) => {
+          hash.update(c);
+          bytes += c.length;
+          if (bytes > UPLOAD_MAX_BYTES && !tooLarge) {
+            tooLarge = true;
+            (src as NodeJS.ReadableStream & { destroy?: (e?: Error) => void }).destroy?.(
+              new Error('too large'),
+            );
+          }
+        });
+        try {
+          await pipeline(src, out);
+        } catch (e) {
+          if (!tooLarge) throw e;
+        }
+        if (tooLarge) {
+          fs.rmSync(dir, { recursive: true, force: true });
+          return reply.code(413).send({ error: `upload exceeds ${UPLOAD_MAX_BYTES} bytes` });
+        }
+        if (bytes === 0) throw new IngestError('empty upload');
+        fs.renameSync(tmp, abs);
+      } catch (e) {
+        fs.rmSync(dir, { recursive: true, force: true });
+        throw e;
+      }
+      const out = ingestUpload(
+        {
+          contentType,
+          relPath: path.relative(cfg.dataDir, abs),
+          bytes,
+          sha256: hash.digest('hex'),
+          ...(meta.note ? { note: meta.note } : {}),
+          channel: meta.channel,
+          modeHint: meta.modeHint,
+          ...(meta.clientId ? { clientId: meta.clientId } : {}),
+        },
+        { repo, itemId, adapterFor: (m) => worker.brains.forMode(m) },
+      );
+      worker.kick();
+      return reply.code(202).send({
+        itemId: out.item.id,
+        chatId: out.chat.id,
+        runId: out.run.id,
+        deduplicated: false,
+        replayed: false,
+      });
+    },
+  );
 
   // Cross-library chat (ADR 0021): a question over what the owner saved, answered by the brain
   // from FTS-retrieved past chats. Same pipeline as a share, channel `library`.

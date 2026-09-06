@@ -41,6 +41,7 @@ channel; the Instagram bot is optional and documented as fragile.
 | Integrations | Other agents read and feed the library over MCP: stateless Streamable HTTP at `/mcp` behind the device-token gate, read tools mirror the REST library routes, extractions stay `<untrusted>`-wrapped, writes only enqueue runs. Karakeep and Memos interchange as files: export in their shapes, import a Karakeep file as `import`-channel items, no runs unless asked | [0023](adr/0023-mcp-server.md), [0024](adr/0024-karakeep-memos-interchange.md) |
 | Sharing | A manual list or saved search can be shared as a read-only page at `/s/<token>` (token = credential, script-free HTML, first answers only, never notes or extractions); links stay on the tailnet unless `DOUBLETAKE_SHARE_PUBLIC=on` | [0025](adr/0025-shareable-collection-pages.md) |
 | Multi-device | The media worker can run on another tailnet machine: same protocol over HTTP with a bearer token, server mirrors assets and frames into its own data dir (or trusts a shared filesystem path); database, brain, queue and vault never leave the server | [0026](adr/0026-remote-media-worker.md) |
+| Uploads | Photos and videos shared as files go to `POST /api/ingest/upload` (raw body, metadata in headers, 500 MiB cap) and become a `text` item with an `upload` media asset that the worker processes in place (`hints.local_path`, pushed to a remote worker with `PUT /files`); the Android sheet copies the file into private storage when queuing offline | [0029](adr/0029-media-uploads.md) |
 | Structure | Every run also extracts a category and typed entities (places, recipes, products, tools, tips); collections are automatic per category and entity kind; places are geocoded (brain coordinates first, else a Nominatim-compatible geocoder, cached) and shown on a Leaflet map | [0014](adr/0014-structured-extraction-and-categories.md), [0022](adr/0022-map-view-place-geocoding.md) |
 | Platforms | Server-side extractor registry, one file per platform, `web` fallback; v1: Instagram, TikTok, YouTube + Shorts, X, Reddit, AI-chat shares | [0015](adr/0015-platform-extractor-registry.md) |
 | Cost | Daily spend cap; runs queue as `capped` when hit; per-run cost shown in chat | [0012](adr/0012-cost-cap.md) |
@@ -126,7 +127,10 @@ Full column-level detail in [DATA-MODEL.md](DATA-MODEL.md).
 1. **Receive.** A channel handler normalises its input to `IngestRequest { url?, text?, note?,
    channel, focus, modeHint?, ig? }`. Dedupe on `canonical_url + focus` within 24 h: a re-share
    starts a new run on the existing chat instead of a new item. Create `item`, `chat`,
-   `run(queued)`; reply `202` immediately. Only the IG channel sends an immediate
+   `run(queued)`; reply `202` immediately. A photo or video shared as a file (no URL) arrives
+   on `POST /api/ingest/upload` instead: the body is streamed into `media/<item_id>/` under a
+   500 MiB cap, the item is a `text`-platform item whose `media_assets` row has
+   `source: upload`, and the same `clientId` replay applies ([ADR 0029](adr/0029-media-uploads.md)). Only the IG channel sends an immediate
    acknowledgement: a `love` reaction on the DM the moment the share is accepted, so the owner
    knows it was picked up before any research has run (nothing public for mentions); the share
    sheet already shows its own toast.
@@ -145,8 +149,10 @@ Full column-level detail in [DATA-MODEL.md](DATA-MODEL.md).
    the IG webhook first, yt-dlp second, cookies opt-in third), transcription (mlx-whisper /
    faster-whisper, captions preferred), scene-change frame sampling, OCR (RapidOCR, Tesseract
    fallback), frame descriptions (the brain's `describeImages` by default, local VLM opt-in),
-   comments (Reddit JSON, yt-dlp; IG Graph API with M4). Every extraction is stored and enters
-   the brief only as an untrusted block. With `focus = thread:<id>` the whole
+   comments (Reddit JSON, yt-dlp; IG Graph API with M4). An uploaded file skips download: the
+   worker gets `hints.local_path` (pushed with `PUT /files` when the worker is remote) and runs
+   transcription, frames, OCR and descriptions on it; the `upload` row survives re-extraction.
+   Every extraction is stored and enters the brief only as an untrusted block. With `focus = thread:<id>` the whole
    thread is fetched and marked primary; the rest of the comments are a sample.
 4. **Research.** Build a `ResearchBrief`: system framing, untrusted content blocks, the owner's
    note, focus instructions, mode budget, tool policy. The adapter runs it, streaming
@@ -187,9 +193,12 @@ every configured adapter and Settings shows them ([guide](BRAIN-ADAPTERS.md#sele
 
 - **Android share sheet** ([guide](channels/android-share.md)): translucent native activity,
   compact sheet with URL preview, note, mode chips; posts to `/api/ingest` with the device token
-  and finishes without booting the WebView. When the server is unreachable the body is parked in
-  a WorkManager-drained offline queue and delivered later; each share carries a `clientId` so the
-  server replays, rather than repeats, a retry whose first response was lost. Finished, failed and capped runs push a notification
+  and finishes without booting the WebView. A shared photo or video (`EXTRA_STREAM`) is streamed
+  to `/api/ingest/upload` from the content URI; of several files only the first is sent. When
+  the server is unreachable the body is parked in a WorkManager-drained offline queue and
+  delivered later (files are copied into app-private storage first, since the URI grant dies
+  with the sheet); each share carries a `clientId` so the server replays, rather than repeats,
+  a retry whose first response was lost. Finished, failed and capped runs push a notification
   (`NotificationHub`, [ADR 0016](adr/0016-push-keys-and-fcm-http-v1.md)) to every subscribed
   device: FCM for the Android app (the token is first posted from Settings → Notifications and
   re-posted on every sign-in while permission is granted, so a revoked-then-re-paired device is
@@ -311,6 +320,7 @@ connection recipe in [DEPLOYMENT.md](DEPLOYMENT.md#connect-an-agent-mcp)).
 | `POST setup`, `POST login` | create owner password once; exchange password for a device token |
 | `POST pair/start`, `POST pair/redeem`, `GET/DELETE devices[/:id]` | 10-minute single-use pairing codes; device list and revocation |
 | `POST ingest` | `{ url? , text?, note?, channel, modeHint?, focus?, clientId? }` → `202 { itemId, chatId, runId, deduplicated, replayed }`; a repeated `clientId` (offline share queue retrying after a lost response) returns the first ingest's ids with `replayed: true` and creates nothing |
+| `POST ingest/upload` | raw body = one image or video (`Content-Type: image/*` or `video/*`, allow-listed types, ≤ 500 MiB); note, channel, mode and client id travel in URI-encoded `x-doubletake-note/channel/mode/client-id` headers → same `202` shape; `415` for non-media types, `400` for a media type outside the list, `413` over the cap ([ADR 0029](adr/0029-media-uploads.md)) |
 | `POST library/chat` | `{ question, modeHint? }` → `202 { itemId, chatId, runId }`; a `library` item whose run answers from retrieved chats |
 | `GET chats?q=&tag=&collection=`, `GET chats/:id`, `POST chats/:id/read` | list (FTS when `q`, tag filter when `tag`, membership of a collection when `collection`; 404 for an unknown id), detail with messages/runs/entities/extractions (flattened text, newest per kind+tool), clear unread |
 | `GET tags`, `POST chats/:id/tags { name }`, `DELETE chats/:id/tags/:name` | all tags with counts; add a manual tag (normalised: trimmed, lowercase, ≤40 chars); remove any tag from the item. Both edits re-index FTS, re-export the note and emit `chat_updated` |

@@ -74,6 +74,12 @@ and a Reddit video.
   extraction budget per mode.
 - Untrusted wrappers applied to every extraction; a fixture with an injected instruction is
   ignored by the brain in tests.
+- Photo and video uploads from the share sheets ([ADR 0029](adr/0029-media-uploads.md)):
+  `POST /api/ingest/upload` streams the file into `media/<item_id>/`, the worker runs the same
+  pipeline on it (`hints.local_path`, pushed to a remote worker with `PUT /files`), the Android
+  sheet uploads `EXTRA_STREAM` and queues a private copy when offline, the chat shows the photo
+  or a frame as the share card. Covered by server, remote-client and worker tests; live device
+  verification pending.
 
 ## M4 — Instagram channel
 

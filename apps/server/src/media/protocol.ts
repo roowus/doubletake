@@ -11,11 +11,18 @@ export interface ExtractBudget {
 
 export interface ExtractParams {
   item_id: string;
+  /** Empty string when the item is an uploaded file with no source url (`hints.local_path`). */
   url: string;
   platform: string;
   focus: string;
   mode: Mode;
-  hints: { cdn_url?: string; media_id?: string; comment_id?: string };
+  hints: {
+    cdn_url?: string;
+    media_id?: string;
+    comment_id?: string;
+    /** Absolute path of an already-present source file inside `out_dir`; the worker skips download. */
+    local_path?: string;
+  };
   budget: ExtractBudget;
   out_dir: string;
 }

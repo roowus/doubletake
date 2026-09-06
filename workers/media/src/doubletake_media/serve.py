@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import hashlib
 import hmac
 import io
 import json
@@ -54,6 +55,9 @@ class _ChunkWriter(io.TextIOBase):
         self.wfile.flush()
 
 
+UPLOAD_MAX_BYTES = 500 * 1024 * 1024
+
+
 class RemoteWorker:
     def __init__(
         self,
@@ -88,12 +92,35 @@ class RemoteWorker:
             raise WorkerError("not_found", "no such file")
         return rp
 
+    @staticmethod
+    def _item_id(req: Mapping[str, Any]) -> str:
+        item_id = str(req.get("item_id") or "").strip()
+        if not item_id or "/" in item_id or item_id in {".", ".."}:
+            raise WorkerError("bad_request", "item_id required")
+        return item_id
+
+    def upload_path(self, raw: str) -> Path:
+        """Where `PUT /files?path=` may write: `media/<item_id>/<name>` under the data dir."""
+        rel = Path(raw)
+        if rel.is_absolute() or len(rel.parts) != 3 or rel.parts[0] != "media":
+            raise WorkerError("bad_request", "path must be media/<item_id>/<file>")
+        if any(part in {".", ".."} for part in rel.parts):
+            raise WorkerError("bad_request", "path must be media/<item_id>/<file>")
+        rp = (self.data_dir / rel).resolve()
+        if self.data_dir not in rp.parents:
+            raise WorkerError("bad_request", "path outside the worker data dir")
+        return rp
+
     def rewrite_request(self, req: dict[str, Any]) -> dict[str, Any]:
         if req.get("op") == "extract" and not self.shared_paths:
-            item_id = str(req.get("item_id") or "").strip()
-            if not item_id or "/" in item_id or item_id in {".", ".."}:
-                raise WorkerError("bad_request", "item_id required")
-            req = {**req, "out_dir": str(self.data_dir / "media" / item_id)}
+            item_id = self._item_id(req)
+            out_dir = self.data_dir / "media" / item_id
+            req = {**req, "out_dir": str(out_dir)}
+            hints = req.get("hints")
+            local = hints.get("local_path") if isinstance(hints, dict) else None
+            if isinstance(local, str) and local:
+                # The server uploaded the file with PUT /files first; only the name carries over.
+                req["hints"] = {**hints, "local_path": str(out_dir / Path(local).name)}
         return req
 
     def run(self, req: dict[str, Any], out: IO[str]) -> None:
@@ -173,6 +200,43 @@ def make_handler(worker: RemoteWorker) -> type[BaseHTTPRequestHandler]:
                         self.wfile.write(chunk)
                 return
             self._error(404, "not_found", "no such route")
+
+        def do_PUT(self) -> None:  # noqa: N802
+            u = urlparse(self.path)
+            if not self._auth():
+                return
+            if u.path != "/files":
+                self._error(404, "not_found", "no such route")
+                return
+            raw = (parse_qs(u.query).get("path") or [""])[0]
+            try:
+                dest = worker.upload_path(raw)
+            except WorkerError as e:
+                self._error(400, e.code, e.message)
+                return
+            n = int(self.headers.get("Content-Length") or 0)
+            if n <= 0 or n > UPLOAD_MAX_BYTES:
+                self._error(413, "too_large", f"body required (max {UPLOAD_MAX_BYTES} bytes)")
+                return
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            tmp = dest.with_name(dest.name + ".part")
+            h = hashlib.sha256()
+            remaining = n
+            try:
+                with tmp.open("wb") as f:
+                    while remaining > 0:
+                        chunk = self.rfile.read(min(1 << 16, remaining))
+                        if not chunk:
+                            raise ConnectionResetError("short body")
+                        h.update(chunk)
+                        f.write(chunk)
+                        remaining -= len(chunk)
+                tmp.replace(dest)
+            except (BrokenPipeError, ConnectionResetError):
+                with contextlib.suppress(FileNotFoundError):
+                    tmp.unlink()
+                return
+            self._json(200, {"ok": True, "path": str(dest), "bytes": n, "sha256": h.hexdigest()})
 
         def do_POST(self) -> None:  # noqa: N802
             u = urlparse(self.path)

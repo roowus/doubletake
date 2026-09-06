@@ -36,9 +36,18 @@
   over `HttpURLConnection` (8 s connect / 15 s read; `ShareApi.kt`). Success shows a toast and
   calls `finish()`; a server *rejection* (non-2xx) shows the `error` field (or `HTTP <code>`) and
   keeps the sheet open, since the same body would fail again. It never starts
-  `MainActivity`/the WebView. Image and video files are accepted by the intent filter but
-  uploaded only from M3 onwards (the media worker); until then the sheet says so and sends the
-  note as the item text if one was typed.
+  `MainActivity`/the WebView.
+- **Files.** A shared photo or video arrives as `EXTRA_STREAM` (`ACTION_SEND`) or the first
+  entry of `EXTRA_STREAM` for `ACTION_SEND_MULTIPLE` (the sheet says "N files shared: only the
+  first is sent"). The real MIME type comes from `contentResolver.getType`; JPEG, PNG, WebP,
+  GIF, HEIC/HEIF, MP4, QuickTime, WebM, 3GPP and Matroska are accepted (the same list as the
+  server), anything else is refused with a message and the note, if typed, is sent as text. The
+  sheet shows "Shared photo" / "Shared video" and on Send streams the content URI to
+  `POST {serverUrl}/api/ingest/upload` (`ShareApi.upload`: `Content-Type` = the MIME type,
+  fixed-length when the size is known, else chunked; note, mode, channel and client id in
+  URI-encoded `X-Doubletake-*` headers; 8 s connect / 60 s read). The server answers with the
+  same `202` shape as a URL share ([ADR 0029](../adr/0029-media-uploads.md)); the chat shows the
+  photo, or a frame of the video, as the share card.
 - If unpaired (`Pairing.get()` finds no URL + token in Preferences): the share is saved as JSON
   under `doubletake.pendingShare`, a toast asks to pair, and `MainActivity` opens. After
   pairing the web app consumes the pending share once and opens `/share?…&channel=android_share`
@@ -51,7 +60,10 @@
   constraint, exponential backoff from 30 s, `APPEND_OR_REPLACE`), drains the queue in order:
   2xx removes the record; 4xx other than 408/429 removes it and posts a local "could not send"
   notification with the server's reason; unreachable, 5xx, 408 and 429 stop the pass and retry
-  later. `MainActivity.onCreate` re-schedules the drain when records are waiting, so a queue
+  later. A file share that cannot reach the server is copied first into
+  `files/shareQueue/<clientId>` (the content-URI grant expires with the sheet) and the record
+  carries `file` + `contentType`; the worker uploads the copy and deletes it with the record,
+  and a record whose copy is gone is dropped. `MainActivity.onCreate` re-schedules the drain when records are waiting, so a queue
   survives reboots and app kills. Once at least one record went through, a local notification
   "Sent N queued shares" is posted (channel `doubletake`, the same one FCM uses). Every share
   mints a `clientId` (`share-<uuid>`) that travels with the body: the server treats a repeated
@@ -70,7 +82,8 @@ and is fine if native code is unwanted; Doubletake keeps the native activity for
 `"share_target": { "action": "/share", "method": "GET", "params": { "title": "title", "text": "text", "url": "url" } }`
 so an installed PWA on Android Chrome or desktop Chrome/Edge can receive text and link shares.
 The `/share` route shows the compose sheet pre-filled (`channel: "web_share_target"`). GET is
-enough for text; file shares would need POST + multipart and come with M3.
+enough for text; file shares through the web share target would need POST + multipart and are
+not implemented (the native Android sheet uploads files, see above).
 
 ## Push
 Every finished, failed or capped run sends one notification to each subscription of every

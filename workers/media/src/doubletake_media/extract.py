@@ -41,17 +41,35 @@ def _timed(fn, *a, **kw):  # noqa: ANN001, ANN202 - small helper
     return out, int((time.monotonic() - t0) * 1000)
 
 
+def _local_source(hints: Mapping[str, object], out_dir: Path) -> Path | None:
+    """`hints.local_path` must name an existing file inside `out_dir` (no escaping the item dir)."""
+    raw = hints.get("local_path") if hints else None
+    if not isinstance(raw, str) or not raw:
+        return None
+    p = Path(raw)
+    if not p.is_absolute():
+        raise WorkerError("bad_request", "hints.local_path must be absolute")
+    rp = p.resolve()
+    root = out_dir.resolve()
+    if root not in rp.parents:
+        raise WorkerError("bad_request", "hints.local_path must be inside out_dir")
+    if not rp.is_file():
+        raise WorkerError("not_found", "hints.local_path does not exist")
+    return rp
+
+
 def handle_extract(params: Mapping[str, object], progress: Progress) -> dict[str, object]:
     url = str(params.get("url") or "")
-    if not url:
-        raise WorkerError("bad_request", "extract needs a url")
     out_dir = Path(str(params.get("out_dir") or ""))
     if not out_dir.is_absolute():
         raise WorkerError("bad_request", "out_dir must be absolute")
+    hints = params.get("hints") if isinstance(params.get("hints"), Mapping) else {}
+    local = _local_source(hints, out_dir)
+    if not url and local is None:
+        raise WorkerError("bad_request", "extract needs a url or hints.local_path")
     out_dir.mkdir(parents=True, exist_ok=True)
     platform = str(params.get("platform") or "web")
     mode = str(params.get("mode") or "standard")
-    hints = params.get("hints") if isinstance(params.get("hints"), Mapping) else {}
     budget = _budget(params)
 
     assets: list[dict[str, object]] = []
@@ -65,7 +83,11 @@ def handle_extract(params: Mapping[str, object], progress: Progress) -> dict[str
 
     cdn = hints.get("cdn_url") if hints else None
     dl: download.Downloaded | None = None
-    if isinstance(cdn, str) and cdn:
+    if local is not None:
+        # An uploaded file the API already placed in out_dir: no network at all.
+        dl_progress(100, "uploaded file")
+        dl = download.from_local(local)
+    elif isinstance(cdn, str) and cdn:
         try:
             dl = download.download_direct(cdn, out_dir, dl_progress)
         except WorkerError as e:

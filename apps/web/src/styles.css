@@ -959,6 +959,13 @@ a.chip:hover {
 .msg.user.share:hover {
   border-color: color-mix(in srgb, var(--accent) 60%, transparent);
 }
+/* An uploaded photo/video is not a link: no hover affordance, image is the content. */
+.msg.user.share.upload {
+  cursor: default;
+}
+.msg.user.share.upload:hover {
+  border-color: var(--border);
+}
 .msg.user.share .share-thumb {
   display: block;
   width: 100%;
@@ -967,6 +974,10 @@ a.chip:hover {
   background: var(--surface-2);
 }
 .msg.user.share.portrait .share-thumb {
+  max-height: 320px;
+}
+.msg.user.share.upload .share-thumb {
+  object-fit: contain;
   max-height: 320px;
 }
 .msg.user.share .share-body {

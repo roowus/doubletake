@@ -90,6 +90,8 @@ export class RemoteMediaClient implements MediaClient {
     const signals = [opts.signal];
     if (opts.timeoutMs) signals.push(AbortSignal.timeout(opts.timeoutMs));
     const signal = AbortSignal.any(signals);
+    if (params.hints.local_path && !this.remote.sharedPaths)
+      await this.upload(params.item_id, params.hints.local_path, signal);
     let res: Response;
     try {
       res = await this.fetchImpl(`${this.base}/extract`, {
@@ -183,6 +185,41 @@ export class RemoteMediaClient implements MediaClient {
     }
     this.log.info({ files: seen.size, item: params.item_id }, 'mirrored media from remote worker');
     return { ...output, assets, vision_requests };
+  }
+
+  /**
+   * Push an owner-uploaded source file to the worker (`PUT /files?path=media/<item>/<name>`)
+   * so `hints.local_path` resolves there; the worker rewrites the hint to its own data dir.
+   */
+  private async upload(itemId: string, local: string, signal: AbortSignal): Promise<void> {
+    const name = path.basename(local);
+    const size = fs.statSync(local).size;
+    const url = `${this.base}/files?path=${encodeURIComponent(`media/${itemId}/${name}`)}`;
+    let res: Response;
+    try {
+      res = await this.fetchImpl(url, {
+        method: 'PUT',
+        headers: this.headers({
+          'content-type': 'application/octet-stream',
+          'content-length': String(size),
+        }),
+        body: fs.createReadStream(local),
+        // Node's fetch needs this for a streaming request body.
+        duplex: 'half',
+        signal,
+      } as unknown as RequestInit);
+    } catch (e) {
+      throw this.mapAbort(e, signal);
+    }
+    if (res.status === 401)
+      throw new MediaWorkerError('unauthorized', 'remote worker rejected the token', false);
+    if (!res.ok)
+      throw new MediaWorkerError(
+        'worker_unavailable',
+        `remote worker refused the upload of ${name} (HTTP ${res.status})`,
+        res.status >= 500,
+      );
+    this.log.info({ item: itemId, bytes: size }, 'uploaded source file to remote worker');
   }
 
   private async download(remotePath: string, local: string, signal: AbortSignal): Promise<void> {
