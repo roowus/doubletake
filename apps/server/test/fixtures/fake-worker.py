@@ -56,6 +56,62 @@ for raw in sys.stdin:
             )
             continue
         out_dir = req["out_dir"]
+        local = (req.get("hints") or {}).get("local_path")
+        if local:
+            # Uploaded file: no url, echo it back as the `upload` source asset plus one frame.
+            if not url and not os.path.isfile(local):
+                send(
+                    {
+                        "id": rid,
+                        "event": "result",
+                        "ok": False,
+                        "error": {"code": "not_found", "message": "no local file", "retryable": False},
+                    }
+                )
+                continue
+            os.makedirs(os.path.join(out_dir, "frames"), exist_ok=True)
+            frame = os.path.join(out_dir, "frames", "000000.jpg")
+            with open(frame, "wb") as f:
+                f.write(b"\xff\xd8\xff\xd9")
+            send(
+                {
+                    "id": rid,
+                    "event": "result",
+                    "ok": True,
+                    "assets": [
+                        {
+                            "kind": "image",
+                            "path": local,
+                            "sha256": "ab",
+                            "bytes": os.path.getsize(local),
+                            "width": 64,
+                            "height": 48,
+                            "source": "upload",
+                        },
+                        {
+                            "kind": "frame",
+                            "path": frame,
+                            "sha256": "01",
+                            "bytes": 4,
+                            "frame_ts_s": 0.0,
+                            "source": "ffmpeg",
+                        },
+                    ],
+                    "extractions": [
+                        {
+                            "kind": "ocr",
+                            "tool": "tesseract",
+                            "duration_ms": 3,
+                            "content": {"lines": [{"ts": 0.0, "text": "MENU  Tacos 3.50"}]},
+                        }
+                    ],
+                    "vision_requests": [{"frame_path": frame, "ts": 0.0}],
+                    "warnings": [],
+                    "canonical_url": None,
+                    "title": None,
+                }
+            )
+            continue
         os.makedirs(os.path.join(out_dir, "frames"), exist_ok=True)
         frame = os.path.join(out_dir, "frames", "000000.jpg")
         with open(frame, "wb") as f:

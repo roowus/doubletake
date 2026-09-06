@@ -35,8 +35,10 @@ way. Both targets declare the group in their `.entitlements`.
   `error` field is shown in red on failure and the sheet stays open; on success it shows
   "Sent" and completes the request.
 - Media-only shares (a photo or video with no URL or text) are accepted by the activation rule
-  but the file is **not uploaded** from the sheet in v1, as on Android; the note is sent as the
-  text and the card says so.
+  but the file is **not uploaded** from the iOS sheet yet; the note is sent as the text and the
+  card says so. The server route exists (`POST /api/ingest/upload`, [ADR 0029](../adr/0029-media-uploads.md))
+  and the Android sheet uses it; wiring the extension's `NSItemProvider` file to it is the next
+  iOS step once the extension is verified on a device.
 - **Unpaired**: the extension writes `doubletake.pendingShare` `{url,text,title}` into the App
   Group and asks the responder chain to open `doubletake://share` (the app registers that URL
   scheme in its `Info.plist`). On launch, `SceneDelegate.adoptPendingShare()` moves the value

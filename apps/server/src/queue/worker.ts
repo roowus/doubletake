@@ -1,4 +1,5 @@
 import { EventEmitter } from 'node:events';
+import path from 'node:path';
 import type { BrainAdapter, ResearchBrief, RunOptions, ToolPolicy } from '@doubletake/brain-sdk';
 import type { Answer, Mode, QuestionType, RunEvent, UntrustedBlock } from '@doubletake/shared';
 import { FOLLOWUP_BUDGET, MODE_BUDGETS, pickModeByKeywords } from '@doubletake/shared';
@@ -438,34 +439,43 @@ export class QueueWorker extends EventEmitter {
         this.repo.updateItem(item.id, { platform: extraction.platform });
         item = { ...item, platform: extraction.platform };
       }
-      // 1b. Media pipeline (download, transcript, frames, OCR, comments) for media platforms.
-      if (this.media && this.cfg.media.enabled && MEDIA_PLATFORMS.has(item.platform)) {
-        const m = await runMediaStage({
-          cfg: this.cfg,
-          repo: this.repo,
-          brain: this.brains.visionFor(bound.adapter),
-          media: this.media,
-          item,
-          url: item.canonicalUrl ?? url,
-          mode: forced ?? 'standard',
-          hints: this.mediaHints?.(item) ?? {},
-          signal,
-          emit: (phase, p) => emit('status', { phase, ...p }),
-        });
-        blocks.push(...m.blocks);
-        // The page extractor's "page-level only" note is moot once the worker supplied media.
-        if (m.blocks.length) {
-          extraction.warnings = extraction.warnings.filter((w) => w !== PAGE_ONLY);
-        }
-        for (const w of m.warnings) emit('status', { phase: 'warning', message: w });
-        if (m.title && (!item.title || isGenericTitle(item.title))) {
-          this.repo.updateItem(item.id, { title: m.title });
-          item = { ...item, title: m.title };
-        }
-        if (m.canonicalUrl && m.canonicalUrl !== (item.canonicalUrl ?? url)) {
-          this.repo.updateItem(item.id, { canonicalUrl: m.canonicalUrl });
-          item = { ...item, canonicalUrl: m.canonicalUrl };
-        }
+    }
+    // 1b. Media pipeline (download, transcript, frames, OCR, comments) for media platforms, and
+    // for files the owner uploaded from a share sheet (no url; `hints.local_path` names the file).
+    const uploaded = this.repo
+      .listMediaAssets(item.id)
+      .find((a) => a.source === 'upload' && (a.kind === 'image' || a.kind === 'video'));
+    const wantsMedia =
+      uploaded !== undefined || (url !== null && MEDIA_PLATFORMS.has(item.platform));
+    if (this.media && this.cfg.media.enabled && wantsMedia) {
+      const m = await runMediaStage({
+        cfg: this.cfg,
+        repo: this.repo,
+        brain: this.brains.visionFor(bound.adapter),
+        media: this.media,
+        item,
+        url: uploaded ? null : (item.canonicalUrl ?? url),
+        mode: forced ?? 'standard',
+        hints: {
+          ...(this.mediaHints?.(item) ?? {}),
+          ...(uploaded ? { local_path: path.join(this.cfg.dataDir, uploaded.path) } : {}),
+        },
+        signal,
+        emit: (phase, p) => emit('status', { phase, ...p }),
+      });
+      blocks.push(...m.blocks);
+      // The page extractor's "page-level only" note is moot once the worker supplied media.
+      if (extraction && m.blocks.length) {
+        extraction.warnings = extraction.warnings.filter((w) => w !== PAGE_ONLY);
+      }
+      for (const w of m.warnings) emit('status', { phase: 'warning', message: w });
+      if (m.title && (!item.title || isGenericTitle(item.title))) {
+        this.repo.updateItem(item.id, { title: m.title });
+        item = { ...item, title: m.title };
+      }
+      if (m.canonicalUrl && m.canonicalUrl !== (item.canonicalUrl ?? url)) {
+        this.repo.updateItem(item.id, { canonicalUrl: m.canonicalUrl });
+        item = { ...item, canonicalUrl: m.canonicalUrl };
       }
     }
     // 1c. Extractions a channel stored before the run (Instagram Graph comments / thread) are
@@ -713,7 +723,7 @@ export class QueueWorker extends EventEmitter {
 /** Titles ingest assigns before extraction: platform labels or a bare hostname. */
 function isGenericTitle(t: string): boolean {
   return (
-    /^(Instagram post|TikTok|YouTube (Short|video)|Post on X|Reddit thread|Shared AI chat|Shared link|Note)$/.test(
+    /^(Instagram post|TikTok|YouTube (Short|video)|Post on X|Reddit thread|Shared AI chat|Shared link|Shared photo|Shared video|Note)$/.test(
       t,
     ) || !t.includes(' ')
   );

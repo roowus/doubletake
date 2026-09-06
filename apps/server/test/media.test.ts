@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import type { ImageInput } from '@doubletake/brain-sdk';
 import { renderUntrustedAll } from '@doubletake/shared';
 import { afterAll, describe, expect, it } from 'vitest';
+import { buildServer } from '../src/api/server.js';
 import { parseDescriptions } from '../src/brains/claude-agent-sdk.js';
 import { ingest } from '../src/ingest/index.js';
 import type { MediaWorkerError } from '../src/media/protocol.js';
@@ -208,6 +209,101 @@ describe('media stage in a research run', () => {
       ),
     ).toBe(true);
     expect(env.repo.listMediaAssets(out.item.id)).toHaveLength(0);
+  });
+});
+
+describe('uploaded files', () => {
+  it('POST /api/ingest/upload stores the file, runs the media pipeline on it and keeps the upload row', async () => {
+    const app = await buildServer({ cfg: env.cfg, repo: env.repo, worker, brain });
+    await app.ready();
+    try {
+      const setup = await app.inject({
+        method: 'POST',
+        url: '/api/setup',
+        payload: { password: 'correct horse battery', deviceName: 'test' },
+      });
+      const token = setup.json().token as string;
+      const headers = {
+        authorization: `Bearer ${token}`,
+        'content-type': 'image/jpeg',
+        'x-doubletake-note': encodeURIComponent('what is on this menu?'),
+        'x-doubletake-channel': 'android_share',
+        'x-doubletake-mode': 'quick',
+        'x-doubletake-client-id': 'share-upload-0001',
+      };
+      const bytes = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 0x10, 0x4a, 0x46, 0xff, 0xd9]);
+
+      // Non-media bodies never reach the handler (Fastify has no parser for them → 415);
+      // media types outside the allow list are rejected by the route itself.
+      const pdf = await app.inject({
+        method: 'POST',
+        url: '/api/ingest/upload',
+        headers: { ...headers, 'content-type': 'application/pdf' },
+        payload: bytes,
+      });
+      expect(pdf.statusCode).toBe(415);
+      const tiff = await app.inject({
+        method: 'POST',
+        url: '/api/ingest/upload',
+        headers: { ...headers, 'content-type': 'image/tiff' },
+        payload: bytes,
+      });
+      expect(tiff.statusCode).toBe(400);
+      expect(tiff.json().error).toMatch(/unsupported upload type/);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/ingest/upload',
+        headers,
+        payload: bytes,
+      });
+      expect(res.statusCode).toBe(202);
+      const body = res.json() as {
+        itemId: string;
+        chatId: string;
+        runId: string;
+        replayed: boolean;
+      };
+      expect(body.replayed).toBe(false);
+
+      const item = env.repo.getItem(body.itemId);
+      expect(item).toMatchObject({
+        platform: 'text',
+        channel: 'android_share',
+        sourceUrl: null,
+        canonicalUrl: null,
+        title: 'what is on this menu?',
+      });
+      const stored = env.repo.listMediaAssets(body.itemId);
+      expect(stored).toHaveLength(1);
+      expect(stored[0]).toMatchObject({ kind: 'image', source: 'upload', bytes: bytes.length });
+      expect(fs.readFileSync(path.join(env.cfg.dataDir, stored[0]?.path ?? ''))).toEqual(bytes);
+      // The note is visible in the chat as the user's message.
+      expect(
+        env.repo.listMessages(body.chatId).some((m) => m.content.includes('what is on this menu?')),
+      ).toBe(true);
+
+      worker.kick();
+      await waitFor(() => env.repo.getRun(body.runId)?.status === 'done', 15_000);
+      const after = env.repo.listMediaAssets(body.itemId);
+      expect(after.filter((a) => a.source === 'upload')).toHaveLength(1);
+      expect(after.some((a) => a.kind === 'frame')).toBe(true);
+      const kinds = env.repo.listExtractions(body.itemId).map((e) => e.kind);
+      expect(kinds).toContain('ocr');
+      expect(kinds).toContain('frame_description');
+
+      // Same clientId → replay of the first ingest, no second item.
+      const again = await app.inject({
+        method: 'POST',
+        url: '/api/ingest/upload',
+        headers,
+        payload: bytes,
+      });
+      expect(again.statusCode).toBe(202);
+      expect(again.json()).toMatchObject({ itemId: body.itemId, replayed: true });
+    } finally {
+      await app.close();
+    }
   });
 });
 

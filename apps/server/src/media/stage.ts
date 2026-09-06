@@ -113,14 +113,16 @@ export async function runMediaStage(args: {
   brain: BrainAdapter;
   media: MediaClient;
   item: ItemRow;
-  url: string;
+  /** Null for an uploaded file (then `hints.local_path` names the source). */
+  url: string | null;
   mode: Mode;
-  /** Channel-supplied shortcuts (Instagram CDN url, media/comment ids); empty for most items. */
+  /** Channel-supplied shortcuts (Instagram CDN url, media/comment ids, uploaded file); empty for most items. */
   hints?: ExtractParams['hints'];
   signal: AbortSignal;
   emit: (phase: string, payload: Record<string, unknown>) => void;
 }): Promise<MediaStageResult> {
-  const { cfg, repo, brain, media, item, url, mode, signal, emit } = args;
+  const { cfg, repo, brain, media, item, mode, signal, emit } = args;
+  const url = args.url ?? '';
   const hints = args.hints ?? {};
   const out: MediaStageResult = {
     blocks: [],
@@ -160,7 +162,26 @@ export async function runMediaStage(args: {
   out.title = result.title;
   out.canonicalUrl = result.canonical_url;
   out.warnings.push(...result.warnings);
+  // Uploaded sources were written by the API before the run; the worker echoes them back as
+  // `source: upload`, so drop everything else and re-add what it reports (uploads survive a
+  // worker that returns nothing).
+  const uploads = repo.listMediaAssets(item.id).filter((a) => a.source === 'upload');
   repo.deleteMediaAssets(item.id);
+  const reported = new Set(result.assets.map((a) => path.relative(cfg.dataDir, a.path)));
+  for (const u of uploads) {
+    if (reported.has(u.path)) continue;
+    repo.addMediaAsset({
+      itemId: item.id,
+      kind: u.kind,
+      path: u.path,
+      sha256: u.sha256,
+      bytes: u.bytes,
+      ...(u.durationS !== null ? { durationS: u.durationS } : {}),
+      ...(u.width !== null ? { width: u.width } : {}),
+      ...(u.height !== null ? { height: u.height } : {}),
+      source: u.source,
+    });
+  }
   for (const a of result.assets) {
     repo.addMediaAsset({
       itemId: item.id,

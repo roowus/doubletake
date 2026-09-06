@@ -58,7 +58,7 @@ export const mediaAssets = sqliteTable(
     width: integer('width'),
     height: integer('height'),
     frameTsS: real('frame_ts_s'),
-    source: text('source').notNull(), // cdn | ytdlp | direct | ffmpeg
+    source: text('source').notNull(), // cdn | ytdlp | direct | ffmpeg | upload (owner-shared file)
     createdAt: text('created_at').notNull(),
   },
   (t) => [index('media_assets_item_idx').on(t.itemId)],

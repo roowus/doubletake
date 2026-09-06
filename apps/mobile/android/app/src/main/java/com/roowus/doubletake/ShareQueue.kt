@@ -9,6 +9,8 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.File
+import java.io.InputStream
 import java.util.concurrent.TimeUnit
 
 /**
@@ -17,6 +19,10 @@ import java.util.concurrent.TimeUnit
  * drains the queue once the network is back, with exponential backoff between attempts. Storage is
  * a JSON array in its own SharedPreferences file: a handful of small records that a worker reads
  * whole and rewrites whole, which does not warrant a Room database.
+ *
+ * A photo or video share is a record with `file` (a private copy under `files/shareQueue/`, since
+ * the sharing app's content-URI grant dies with the sheet) and `contentType`; the worker posts it
+ * to `/api/ingest/upload` and deletes the copy once the server has answered.
  */
 object ShareQueue {
     private const val FILE = "doubletake.shareQueue"
@@ -39,9 +45,32 @@ object ShareQueue {
         schedule(ctx)
     }
 
-    /** Drop the record with this `clientId` (after a 2xx or a permanent rejection). */
+    /**
+     * Copy a shared file into private storage and queue an upload record for it. Returns null when
+     * the copy fails (source unreadable, disk full); nothing is queued then.
+     */
+    fun addFile(ctx: Context, meta: JSONObject, contentType: String, open: () -> InputStream?): JSONObject? {
+        val dir = File(ctx.filesDir, "shareQueue").apply { mkdirs() }
+        val target = File(dir, meta.optString("clientId").ifEmpty { System.currentTimeMillis().toString() })
+        val tmp = File(dir, target.name + ".part")
+        try {
+            val src = open() ?: return null
+            src.use { i -> tmp.outputStream().use { o -> i.copyTo(o, 1 shl 16) } }
+            if (!tmp.renameTo(target)) return null
+        } catch (_: Exception) {
+            tmp.delete()
+            return null
+        }
+        val record = JSONObject(meta.toString()).put("file", target.absolutePath).put("contentType", contentType)
+        add(ctx, record)
+        return record
+    }
+
+    /** Drop the record with this `clientId` (after a 2xx or a permanent rejection) and its file copy. */
     fun remove(ctx: Context, clientId: String) = synchronized(lock) {
-        write(ctx, list(ctx).filter { it.optString("clientId") != clientId })
+        val (gone, keep) = list(ctx).partition { it.optString("clientId") == clientId }
+        gone.forEach { r -> r.optString("file").takeIf { it.isNotEmpty() }?.let { File(it).delete() } }
+        write(ctx, keep)
     }
 
     /**

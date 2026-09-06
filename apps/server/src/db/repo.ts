@@ -43,10 +43,12 @@ export class Repo {
     platform: Platform,
     canonicalUrl: string | null,
     title: string,
+    /** Pre-minted id (an upload wrote `media/<id>/…` before the row existed). */
+    id: string = newId(),
   ) {
     const now = nowIso();
     const item: typeof s.items.$inferInsert = {
-      id: newId(),
+      id,
       sourceUrl: req.url ?? null,
       canonicalUrl,
       platform,

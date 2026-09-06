@@ -23,7 +23,13 @@ class ShareUploadWorker(ctx: Context, params: WorkerParameters) : Worker(ctx, pa
         var sent = 0
         for (body in ShareQueue.list(ctx)) {
             val clientId = body.optString("clientId")
-            when (val out = ShareApi.ingest(paired, body)) {
+            val file = body.optString("file")
+            val out = if (file.isNotEmpty()) {
+                val f = java.io.File(file)
+                if (!f.isFile) { ShareQueue.remove(ctx, clientId); continue } // copy vanished: nothing to send
+                ShareApi.upload(paired, body, body.optString("contentType").ifEmpty { "application/octet-stream" }, f.length()) { f.inputStream() }
+            } else ShareApi.ingest(paired, body)
+            when (out) {
                 ShareApi.Outcome.Sent -> { ShareQueue.remove(ctx, clientId); sent++ }
                 is ShareApi.Outcome.Rejected -> {
                     if (out.code in 500..599 || out.code == 429 || out.code == 408) {
@@ -52,7 +58,8 @@ class ShareUploadWorker(ctx: Context, params: WorkerParameters) : Worker(ctx, pa
     }
 
     private fun preview(body: org.json.JSONObject): String =
-        body.optString("url").ifEmpty { body.optString("text") }.take(80)
+        body.optString("url").ifEmpty { body.optString("text") }.ifEmpty { body.optString("note") }
+            .ifEmpty { if (body.has("file")) "shared file" else "" }.take(80)
 
     companion object {
         /** Same channel id the web layer creates for FCM, so users see one "Doubletake" channel. */

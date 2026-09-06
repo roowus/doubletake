@@ -288,6 +288,13 @@ def _find_source(out_dir: Path) -> Path | None:
     return None
 
 
+def from_local(path: Path) -> Downloaded:
+    """Wrap a file that is already on disk (an owner upload); probes it like a download."""
+    if path.stat().st_size > MAX_BYTES:
+        raise WorkerError("too_large", f"file exceeds {MAX_BYTES} bytes")
+    return _finish(Downloaded(path=path, source="upload", kind="video"))
+
+
 def _finish(d: Downloaded) -> Downloaded:
     if d.path is None:
         return d

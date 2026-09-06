@@ -9,7 +9,11 @@ import { tempEnv } from './helpers.js';
 const silentLog = { info() {}, warn() {} };
 const env = tempEnv('dt-remote-media-');
 const remoteRoot = fs.mkdtempSync(path.join(env.root, 'remote-'));
-const seen: { auth: string[]; extracts: Record<string, unknown>[] } = { auth: [], extracts: [] };
+const seen: {
+  auth: string[];
+  extracts: Record<string, unknown>[];
+  puts: { path: string; bytes: number; order: number }[];
+} = { auth: [], extracts: [], puts: [] };
 let mode: 'ok' | 'error' | 'hang' | 'drop' = 'ok';
 
 /** Stand-in for `doubletake-media serve`: same routes, same line shapes. */
@@ -40,6 +44,30 @@ const fake = http.createServer((req, res) => {
     }
     res.writeHead(200, { 'content-type': 'application/octet-stream' });
     fs.createReadStream(p).pipe(res);
+    return;
+  }
+  if (req.method === 'PUT' && url.pathname === '/files') {
+    // `doubletake-media serve` accepts `media/<item_id>/<file>` only and stores it under its data dir.
+    const rel = url.searchParams.get('path') ?? '';
+    const parts = rel.split('/');
+    if (parts.length !== 3 || parts[0] !== 'media' || parts.some((x) => !x || x.startsWith('.'))) {
+      res.writeHead(400, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, error: { code: 'bad_path', message: rel } }));
+      return;
+    }
+    const target = path.join(remoteRoot, rel);
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    const out = fs.createWriteStream(target);
+    let bytes = 0;
+    req.on('data', (c: Buffer) => {
+      bytes += c.length;
+    });
+    req.pipe(out);
+    out.on('finish', () => {
+      seen.puts.push({ path: rel, bytes, order: seen.extracts.length });
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, path: target, bytes, sha256: 'x' }));
+    });
     return;
   }
   if (req.method === 'POST' && url.pathname === '/extract') {
@@ -167,6 +195,41 @@ describe('RemoteMediaClient', () => {
     expect(sent.op).toBe('extract');
     expect(sent.out_dir).toBe(path.join(env.cfg.dataDir, 'media', '01A'));
     expect(sent.id).toMatch(/^r\d+$/);
+  });
+
+  it('pushes an uploaded file with PUT /files before asking for the extract', async () => {
+    const itemId = 'up1';
+    const localDir = path.join(env.cfg.dataDir, 'media', itemId);
+    fs.mkdirSync(localDir, { recursive: true });
+    const local = path.join(localDir, 'image.jpg');
+    fs.writeFileSync(local, 'jpeg-upload-bytes');
+    const p = { ...params(itemId), url: '', hints: { local_path: local } };
+    const before = seen.extracts.length;
+    const result = await client().extract(p, { signal: new AbortController().signal });
+    expect(result.title).toBe('Remote title');
+    const put = seen.puts.find((x) => x.path === `media/${itemId}/image.jpg`);
+    expect(put).toMatchObject({ bytes: 'jpeg-upload-bytes'.length, order: before });
+    expect(fs.readFileSync(path.join(remoteRoot, 'media', itemId, 'image.jpg'), 'utf8')).toBe(
+      'jpeg-upload-bytes',
+    );
+    // The hint sent to the worker still names the local path; `serve` rewrites it to its own dir.
+    const sent = seen.extracts.at(-1) as { url: string; hints: { local_path: string } };
+    expect(sent.url).toBe('');
+    expect(sent.hints.local_path).toBe(local);
+  });
+
+  it('does not push when the filesystem is shared', async () => {
+    const itemId = 'up2';
+    const localDir = path.join(env.cfg.dataDir, 'media', itemId);
+    fs.mkdirSync(localDir, { recursive: true });
+    const local = path.join(localDir, 'image.jpg');
+    fs.writeFileSync(local, 'x');
+    const puts = seen.puts.length;
+    await client({ sharedPaths: true }).extract(
+      { ...params(itemId), url: '', hints: { local_path: local } },
+      { signal: new AbortController().signal },
+    );
+    expect(seen.puts).toHaveLength(puts);
   });
 
   it('keeps remote paths verbatim when the filesystem is shared', async () => {
