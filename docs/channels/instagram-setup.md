@@ -13,7 +13,7 @@ confirmed against the live API. M4 removes the markers as they are checked. Impl
 
 | variable | meaning |
 |---|---|
-| `IG_APP_ID`, `IG_APP_SECRET` | Meta app credentials; both set ⇒ the channel is enabled (boot log `instagram: connected` / `not connected`) |
+| `IG_APP_ID`, `IG_APP_SECRET` | The **Instagram app ID / secret** from Instagram → API setup with Instagram login → *Business login settings*, **not** the Meta App ID shown at the top of the dashboard (that one makes the login dialog fail with "Invalid platform app"); both set ⇒ the channel is enabled (boot log `instagram: connected` / `not connected`) |
 | `IG_WEBHOOK_VERIFY_TOKEN` | random string you also paste into the Meta webhook dialog |
 | `DOUBLETAKE_WEBHOOK_PUBLIC_HOST` | hostname of the tunnel; requests with that `Host` are refused (`404`) on every path except `/webhooks/instagram`. With Tailscale Funnel the public name equals the tailnet name, so use `host:8443` and only that port is guarded (the PWA on 443 keeps working) |
 | `IG_MENTION_POLLING` | `on` (default) polls `/tags` every 2 minutes; `off` relies on the webhook alone |
@@ -30,7 +30,10 @@ secret stays in `.env` and is never written to the database.
 2. Create a Meta developer account at developers.facebook.com and a new app of type
    **Business** (or "Other → Business"). No Facebook Page is required for the Instagram Login
    flavour of the API.
-3. Add the product **Instagram** → **API setup with Instagram login**.
+3. Add the product **Instagram** → **API setup with Instagram login**. Open **Business login
+   settings** there: it lists the *Instagram app ID* and *Instagram app secret* (these are the
+   `IG_APP_ID` / `IG_APP_SECRET` values; the embed URL on that page shows the same `client_id`)
+   and the **OAuth redirect URIs** field where `<public url>/api/ig/callback` goes.
 4. Add your shadow account as an **Instagram Tester** (App Roles) and accept the invite from
    the shadow account. App-role accounts are the only ones that trigger webhooks under Standard
    Access, which is exactly what a single-owner install needs.
