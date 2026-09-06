@@ -138,6 +138,7 @@ describe('API', () => {
       payload: { text: 'What is a Widget?', channel: 'compose', modeHint: 'quick' },
     });
     expect(ing.statusCode).toBe(202);
+    expect(ing.json().replayed).toBe(false);
     const { chatId, runId } = ing.json();
     await waitFor(() => env.repo.getRun(runId)?.status === 'done');
 

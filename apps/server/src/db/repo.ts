@@ -33,6 +33,11 @@ export class Repo {
       .get();
   }
 
+  /** The item a retrying client already created under this idempotency key, if any. */
+  findByClientId(clientId: string): ItemRow | undefined {
+    return this.db.select().from(s.items).where(eq(s.items.clientId, clientId)).get();
+  }
+
   createItemWithChat(
     req: IngestRequest,
     platform: Platform,
@@ -52,6 +57,7 @@ export class Repo {
       modeRequested: req.modeHint,
       status: 'new',
       title,
+      clientId: req.clientId ?? null,
       createdAt: now,
       updatedAt: now,
     };

@@ -22,9 +22,10 @@ JSON columns are validated with zod schemas from `packages/shared` on read and w
 | category | text | brain output: `place` · `food` · `product` · `tech` · `skill` · `health` · `travel` · `finance` · `entertainment` · `news` · `other` |
 | status | text | `new` · `extracting` · `researching` · `answered` · `failed` · `capped` |
 | title | text | derived (caption / page title / first line) |
+| client_id | text | idempotency key from a retrying client (`IngestRequest.clientId`, minted by the Android share sheet); a repeated key replays the first ingest instead of creating a second item |
 | created_at, updated_at | text | |
 
-Index: `(canonical_url, focus, created_at)` for the 24 h dedupe.
+Indexes: `(canonical_url, focus, created_at)` for the 24 h dedupe; unique `(client_id)`.
 
 ### media_assets
 `id`, `item_id` fk, `kind` (`video` · `image` · `audio` · `thumbnail` · `frame`), `path`

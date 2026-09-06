@@ -17,10 +17,15 @@ export const items = sqliteTable(
     category: text('category'),
     status: text('status').notNull().default('new'),
     title: text('title'),
+    /** Idempotency key sent by a retrying client (`IngestRequest.clientId`); unique when present. */
+    clientId: text('client_id'),
     createdAt: text('created_at').notNull(),
     updatedAt: text('updated_at').notNull(),
   },
-  (t) => [index('items_dedupe').on(t.canonicalUrl, t.focus, t.createdAt)],
+  (t) => [
+    index('items_dedupe').on(t.canonicalUrl, t.focus, t.createdAt),
+    uniqueIndex('items_client_id_idx').on(t.clientId),
+  ],
 );
 
 export const extractions = sqliteTable('extractions', {
