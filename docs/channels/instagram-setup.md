@@ -93,13 +93,23 @@ Payload shape (abridged):
     "mid": "…", "text": "is this legit?",
     "attachments": [{ "type": "ig_reel", "payload": { "url": "https://lookaside.fbsbx.com/…", "title": "…", "reel_video_id": "…" } }] } }] }] }
 ```
-`type` is `ig_reel` or `share` (`story_mention` is accepted too). `payload.url` is a signed CDN
-URL handed to the media worker as `hints.cdn_url` so it downloads it immediately (TTL
-undocumented) instead of going through yt-dlp. The item's URL is, in order: an
-`instagram.com` permalink found in the message text, the permalink of `reel_video_id` when the
-media is your own, else the CDN URL. `note` = message text minus that URL, else `payload.title`.
-Echoes (`is_echo`), messages without `mid` and plain text without an attachment are recorded
-as `other` and ignored; redeliveries of the same `mid` count as duplicates.
+`type` is `ig_reel` or `share` (`story_mention` is accepted too). When `payload.url` is a signed
+CDN URL it is handed to the media worker as `hints.cdn_url` so it downloads it immediately (TTL
+undocumented) instead of going through yt-dlp. **Observed live (2026-09-06, `dt.save`):** for
+`ig_reel` Meta puts the reel's *permalink* (`https://www.instagram.com/reel/<code>/`, an HTML
+page) in `payload.url`, so `instagram.com` URLs are never hinted; the worker goes straight to
+yt-dlp, and its direct downloader refuses any non image/video content type anyway. The item's
+URL is, in order: an `instagram.com` permalink found in the message text, the permalink of
+`reel_video_id` when the media is your own, else `payload.url`. `note` = message text minus
+that URL, else `payload.title`.
+
+Typing a message with the share arrives as **two webhook events**: the attachment first, then
+a text-only message a few hundred ms later (observed live). A text-only DM from the same sender
+within 2 minutes of their last share is recorded as `dm_note` and becomes that item's note,
+replacing a `payload.title` placeholder or appended to the sender's earlier text. If the run has
+already left the queue the text is also added to the chat as a question so it is not lost.
+Echoes (`is_echo`), messages without `mid` and other plain text without an attachment are
+recorded as `other` and ignored; redeliveries of the same `mid` count as duplicates.
 
 When the run finishes:
 `POST /<IG_ID>/messages` with
