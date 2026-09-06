@@ -78,5 +78,10 @@ to share one filesystem at one path.
   out of the repo like every other secret (`.env` only), and bind to the tailnet IP, never
   `0.0.0.0` on a machine with a public interface.
 - Verified 2026-09-04 with the real worker in `serve` mode and the real client on one machine
-  (a YouTube extraction streamed progress and mirrored three files). **Unverified** across two
-  physical tailnet machines; the first such run removes this line.
+  (a YouTube extraction streamed progress and mirrored three files). Verified 2026-09-06 across
+  two physical tailnet machines: server on the Mac, worker on a Fedora box as a systemd user
+  unit (`doubletake-media.service`, token in `~/.config/doubletake/worker.env`, bound to its
+  tailnet IP on 7392). A YouTube share ran download → captions → two scene frames → OCR →
+  cloud vision on the worker, the server streamed the stages live, mirrored `source.mp4` and
+  the frames into `~/.doubletake/media/<item>/`, and the worker journal shows the single
+  `POST /extract 200` from the Mac's tailnet address.
