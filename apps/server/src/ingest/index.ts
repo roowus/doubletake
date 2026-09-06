@@ -9,6 +9,8 @@ export interface IngestOutcome {
   run: RunRow;
   /** True when the same URL + focus was shared in the last 24 h and we re-ran on the existing chat. */
   deduplicated: boolean;
+  /** True when `clientId` matched an earlier ingest: nothing was created, the first result is returned. */
+  replayed?: boolean;
 }
 
 /** Which adapter (and model) a new research run is recorded with, given its provisional mode. */
@@ -32,6 +34,16 @@ const DEDUPE_HOURS = 24;
 export function ingest(req: IngestRequest, deps: IngestDeps): IngestOutcome {
   if (req.channel === 'library') return ingestLibraryQuestion(req, deps);
   const { repo } = deps;
+  if (req.clientId) {
+    // A retrying client (offline share queue) re-posts the same body until it gets a 2xx. The
+    // first attempt may have reached us while the response was lost, so replay its outcome.
+    const prior = repo.findByClientId(req.clientId);
+    if (prior) {
+      const chat = repo.getChatByItem(prior.id);
+      const run = chat ? repo.listRuns(chat.id).at(-1) : undefined;
+      if (chat && run) return { item: prior, chat, run, deduplicated: false, replayed: true };
+    }
+  }
   const url = req.url ?? (req.text ? firstUrlIn(req.text) : undefined);
   let platform: Platform = 'text';
   let canonicalUrl: string | null = null;
@@ -70,6 +82,8 @@ export function ingest(req: IngestRequest, deps: IngestDeps): IngestOutcome {
         repo.updateItem(dup.id, {
           status: 'new',
           ...(req.note ? { note: [dup.note, req.note].filter(Boolean).join('\n\n') } : {}),
+          // Remember the key so a retry of this very re-share replays instead of queuing again.
+          ...(req.clientId && !dup.clientId ? { clientId: req.clientId } : {}),
         });
         return { item: dup, chat, run, deduplicated: true };
       }

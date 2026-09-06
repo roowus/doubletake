@@ -197,6 +197,7 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
       chatId: out.chat.id,
       runId: out.run.id,
       deduplicated: out.deduplicated,
+      replayed: out.replayed ?? false,
     });
   });
 

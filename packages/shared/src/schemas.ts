@@ -145,6 +145,11 @@ export const IngestRequest = z
     channel: Channel,
     focus: Focus.default('whole'),
     modeHint: ModeRequested.default('auto'),
+    /**
+     * Client-minted idempotency key (share sheets that retry from an offline queue). A second
+     * ingest with the same key returns the first item/chat/run instead of creating anything.
+     */
+    clientId: z.string().min(8).max(80).optional(),
   })
   .refine((r) => r.url || (r.text && r.text.trim().length > 0), {
     message: 'url or text is required',

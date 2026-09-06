@@ -13,9 +13,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import org.json.JSONObject
-import java.io.IOException
-import java.net.HttpURLConnection
-import java.net.URL
+import java.util.UUID
 import java.util.concurrent.Executors
 import java.util.regex.Pattern
 
@@ -27,6 +25,10 @@ import java.util.regex.Pattern
  *
  * Media files (image/video) are accepted by the manifest filters so the app appears in those
  * share sheets, but uploads land in M3; until then only the note travels.
+ *
+ * When the server cannot be reached (offline, tunnel down) the exact body is parked in
+ * [ShareQueue] and a WorkManager job posts it later; the `clientId` minted here lets the server
+ * recognise a retry of a request whose response was lost, so nothing is ever saved twice.
  */
 class ShareReceiverActivity : AppCompatActivity() {
     private val io = Executors.newSingleThreadExecutor()
@@ -34,6 +36,8 @@ class ShareReceiverActivity : AppCompatActivity() {
     private var sharedUrl: String? = null
     private var sharedText: String? = null
     private var mediaOnly = false
+    /** Idempotency key for this share; the same one is reused across retries. */
+    private val clientId = "share-" + UUID.randomUUID().toString().replace("-", "")
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -127,47 +131,33 @@ class ShareReceiverActivity : AppCompatActivity() {
         if (note.isNotEmpty()) body.put("note", note)
         body.put("modeHint", modeHint)
         body.put("channel", "android_share")
+        body.put("clientId", clientId)
 
         send.isEnabled = false
         io.execute {
-            val result = try {
-                post("${paired.serverUrl}/api/ingest", paired.token, body.toString())
-                null
-            } catch (e: Exception) {
-                e.message ?: e.javaClass.simpleName
-            }
+            val outcome = ShareApi.ingest(paired, body)
             runOnUiThread {
-                if (result == null) {
-                    Toast.makeText(this, R.string.share_sent, Toast.LENGTH_SHORT).show()
-                    finish()
-                } else {
-                    Toast.makeText(this, getString(R.string.share_failed, result), Toast.LENGTH_LONG).show()
-                    send.isEnabled = true
+                when (outcome) {
+                    ShareApi.Outcome.Sent -> {
+                        Toast.makeText(this, R.string.share_sent, Toast.LENGTH_SHORT).show()
+                        finish()
+                    }
+                    is ShareApi.Outcome.Unreachable -> {
+                        // Nothing reached the server: park the body and let WorkManager deliver it.
+                        ShareQueue.add(this, body)
+                        val waiting = ShareQueue.size(this)
+                        val msg = if (waiting > 1) getString(R.string.share_queued_more, waiting)
+                        else getString(R.string.share_queued)
+                        Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
+                        finish()
+                    }
+                    is ShareApi.Outcome.Rejected -> {
+                        // The server answered: a retry with the same body would fail the same way.
+                        Toast.makeText(this, getString(R.string.share_failed, outcome.message), Toast.LENGTH_LONG).show()
+                        send.isEnabled = true
+                    }
                 }
             }
-        }
-    }
-
-    @Throws(IOException::class)
-    private fun post(url: String, token: String, json: String) {
-        val conn = URL(url).openConnection() as HttpURLConnection
-        try {
-            conn.requestMethod = "POST"
-            conn.connectTimeout = 8000
-            conn.readTimeout = 15000
-            conn.doOutput = true
-            conn.setRequestProperty("Content-Type", "application/json")
-            conn.setRequestProperty("Authorization", "Bearer $token")
-            conn.outputStream.use { it.write(json.toByteArray(Charsets.UTF_8)) }
-            val code = conn.responseCode
-            if (code < 200 || code >= 300) {
-                val err = try {
-                    conn.errorStream?.bufferedReader()?.readText()?.let { JSONObject(it).optString("error") }
-                } catch (_: Exception) { null }
-                throw IOException(if (err.isNullOrEmpty()) "HTTP $code" else err)
-            }
-        } finally {
-            conn.disconnect()
         }
     }
 

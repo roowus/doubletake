@@ -15,4 +15,13 @@
     <string name="share_media_only">Media file: uploads arrive in a later release. Only your note is sent.</string>
     <string name="share_sent">Sent to Doubletake</string>
     <string name="share_failed">Doubletake: could not send (%1$s)</string>
+    <string name="share_queued">Offline: saved, will send when the server is reachable</string>
+    <string name="share_queued_more">Offline: saved (%1$d waiting)</string>
+    <string name="queue_sent_body">Queued shares reached your server.</string>
+    <string name="queue_dropped_title">Doubletake could not send a share</string>
+    <string name="queue_dropped_body">%1$s: %2$s</string>
+    <plurals name="queue_sent">
+        <item quantity="one">Sent %1$d queued share</item>
+        <item quantity="other">Sent %1$d queued shares</item>
+    </plurals>
 </resources>

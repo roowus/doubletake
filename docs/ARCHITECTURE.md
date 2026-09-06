@@ -187,7 +187,9 @@ every configured adapter and Settings shows them ([guide](BRAIN-ADAPTERS.md#sele
 
 - **Android share sheet** ([guide](channels/android-share.md)): translucent native activity,
   compact sheet with URL preview, note, mode chips; posts to `/api/ingest` with the device token
-  and finishes without booting the WebView. Finished, failed and capped runs push a notification
+  and finishes without booting the WebView. When the server is unreachable the body is parked in
+  a WorkManager-drained offline queue and delivered later; each share carries a `clientId` so the
+  server replays, rather than repeats, a retry whose first response was lost. Finished, failed and capped runs push a notification
   (`NotificationHub`, [ADR 0016](adr/0016-push-keys-and-fcm-http-v1.md)) to every subscribed
   device: FCM for the Android app (the token is first posted from Settings → Notifications and
   re-posted on every sign-in while permission is granted, so a revoked-then-re-paired device is
@@ -308,7 +310,7 @@ connection recipe in [DEPLOYMENT.md](DEPLOYMENT.md#connect-an-agent-mcp)).
 | `GET health`, `GET status` | liveness; brain id/model, spend today vs cap, notes dir, `push: { kinds, channels, vapidPublicKey, quietHours, pending }` |
 | `POST setup`, `POST login` | create owner password once; exchange password for a device token |
 | `POST pair/start`, `POST pair/redeem`, `GET/DELETE devices[/:id]` | 10-minute single-use pairing codes; device list and revocation |
-| `POST ingest` | `{ url? , text?, note?, channel, mode? }` → `202 { itemId, chatId, runId }` |
+| `POST ingest` | `{ url? , text?, note?, channel, modeHint?, focus?, clientId? }` → `202 { itemId, chatId, runId, deduplicated, replayed }`; a repeated `clientId` (offline share queue retrying after a lost response) returns the first ingest's ids with `replayed: true` and creates nothing |
 | `POST library/chat` | `{ question, modeHint? }` → `202 { itemId, chatId, runId }`; a `library` item whose run answers from retrieved chats |
 | `GET chats?q=&tag=&collection=`, `GET chats/:id`, `POST chats/:id/read` | list (FTS when `q`, tag filter when `tag`, membership of a collection when `collection`; 404 for an unknown id), detail with messages/runs/entities/extractions (flattened text, newest per kind+tool), clear unread |
 | `GET tags`, `POST chats/:id/tags { name }`, `DELETE chats/:id/tags/:name` | all tags with counts; add a manual tag (normalised: trimmed, lowercase, ≤40 chars); remove any tag from the item. Both edits re-index FTS, re-export the note and emit `chat_updated` |

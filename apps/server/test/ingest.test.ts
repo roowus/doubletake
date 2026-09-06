@@ -104,6 +104,32 @@ describe('ingest', () => {
     expect(titleFromUrl('https://blog.example.org/post', 'web')).toBe('blog.example.org');
     expect(titleFromText(`${'x'.repeat(100)}\nsecond`)).toMatch(/^x{77}…$/);
   });
+  it('replays an ingest that carries an already-seen clientId instead of creating anything', () => {
+    const req = {
+      url: 'https://www.youtube.com/shorts/replay0001?feature=share',
+      channel: 'android_share' as const,
+      note: 'first try',
+      focus: 'whole' as const,
+      modeHint: 'auto' as const,
+      clientId: 'share-0123456789abcdef',
+    };
+    const a = ingest(req, deps);
+    expect(a.replayed).toBeUndefined();
+    expect(a.item.clientId).toBe('share-0123456789abcdef');
+    const b = ingest({ ...req, note: 'retry from the offline queue' }, deps);
+    expect(b.replayed).toBe(true);
+    expect(b.deduplicated).toBe(false);
+    expect(b.item.id).toBe(a.item.id);
+    expect(b.chat.id).toBe(a.chat.id);
+    expect(b.run.id).toBe(a.run.id);
+    expect(env.repo.listRuns(a.chat.id)).toHaveLength(1);
+    expect(env.repo.listMessages(a.chat.id).map((m) => m.content)).toEqual(['first try']);
+    // A different key for the same URL is a genuine re-share: dedupe path, new run.
+    const c = ingest({ ...req, clientId: 'share-fedcba9876543210' }, deps);
+    expect(c.deduplicated).toBe(true);
+    expect(c.replayed).toBeUndefined();
+    expect(env.repo.listRuns(a.chat.id)).toHaveLength(2);
+  });
 });
 
 describe('classifyItem', () => {

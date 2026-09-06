@@ -32,17 +32,35 @@
   text, a one-line note field (IME "Send" submits), mode chips **Auto · Quick · Standard ·
   Deep** (a `RadioGroup`), and **Send**.
 - On Send: `POST {serverUrl}/api/ingest` with `Authorization: Bearer <device token>`, body
-  `{ url? | text?, note?, modeHint: "auto" | "quick" | "standard" | "deep", channel: "android_share" }`
-  over `HttpURLConnection` (8 s connect / 15 s read). Success shows a toast and calls
-  `finish()`; failure shows the server's `error` field (or `HTTP <code>`) and keeps the sheet
-  open. It never starts `MainActivity`/the WebView. Image and video files are accepted by the
-  intent filter but uploaded only from M3 onwards (the media worker); until then the sheet says
-  so and sends the note as the item text if one was typed.
+  `{ url? | text?, note?, modeHint: "auto" | "quick" | "standard" | "deep", channel: "android_share", clientId }`
+  over `HttpURLConnection` (8 s connect / 15 s read; `ShareApi.kt`). Success shows a toast and
+  calls `finish()`; a server *rejection* (non-2xx) shows the `error` field (or `HTTP <code>`) and
+  keeps the sheet open, since the same body would fail again. It never starts
+  `MainActivity`/the WebView. Image and video files are accepted by the intent filter but
+  uploaded only from M3 onwards (the media worker); until then the sheet says so and sends the
+  note as the item text if one was typed.
 - If unpaired (`Pairing.get()` finds no URL + token in Preferences): the share is saved as JSON
   under `doubletake.pendingShare`, a toast asks to pair, and `MainActivity` opens. After
   pairing the web app consumes the pending share once and opens `/share?…&channel=android_share`
   pre-filled.
-- An offline queue (Room + WorkManager) is a roadmap item, not in M2.
+- **Offline queue.** When nothing reaches the server (airplane mode, tailnet down, DNS, timeout)
+  the exact body is appended to `ShareQueue` (a JSON array in the app-private SharedPreferences
+  file `doubletake.shareQueue`; a few small records, so no Room database) and the sheet closes
+  with "Offline: saved, will send when the server is reachable" (with the count when more are
+  waiting). `ShareUploadWorker`, a WorkManager unique job (`doubletake-share-queue`, network
+  constraint, exponential backoff from 30 s, `APPEND_OR_REPLACE`), drains the queue in order:
+  2xx removes the record; 4xx other than 408/429 removes it and posts a local "could not send"
+  notification with the server's reason; unreachable, 5xx, 408 and 429 stop the pass and retry
+  later. `MainActivity.onCreate` re-schedules the drain when records are waiting, so a queue
+  survives reboots and app kills. Once at least one record went through, a local notification
+  "Sent N queued shares" is posted (channel `doubletake`, the same one FCM uses). Every share
+  mints a `clientId` (`share-<uuid>`) that travels with the body: the server treats a repeated
+  key as a replay of the first ingest and returns its item/chat/run with `replayed: true`, so a
+  response lost on the way back never produces a second item or run. Verified on the API 36
+  emulator (2026-09-06): share with the tunnel removed → record parked, worker `RETRY`; tunnel
+  restored and the job run → `SUCCESS`, item on the server with the `clientId`, queue empty,
+  "Sent 1 queued share" notification; re-posting the same key by hand returned `replayed: true`
+  and no new run.
 
 Alternative documented in ADR 0007: `@capgo/capacitor-share-target` routes through the WebView
 and is fine if native code is unwanted; Doubletake keeps the native activity for speed.

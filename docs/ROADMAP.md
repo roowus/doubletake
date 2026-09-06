@@ -46,8 +46,8 @@ the CLI ([DEPLOYMENT.md](DEPLOYMENT.md)), server boots `push: webpush+fcm`, APK 
 FCM notifications arrive with the app killed and deep-link to the chat; pairing by QR URL
 against the `ts.net` hostname; real shares from Chrome, the Reddit app (the Reddit app short
 link needed a resolver + an Atom fallback in the extractor) and the Instagram app (reel link,
-answered with a notification). M2 acceptance is complete. Offline queue for the share sheet
-stays a v2 item.
+answered with a notification). M2 acceptance is complete. The offline queue for the share
+sheet (WorkManager + `clientId` replay on the server) shipped 2026-09-06.
 
 - Capacitor project builds a debug APK; QR pairing stores server URL + device token.
 - `ShareReceiverActivity` receives `text/plain` from Instagram, Reddit, Chrome, YouTube; shows
