@@ -185,7 +185,9 @@ every configured adapter and Settings shows them ([guide](BRAIN-ADAPTERS.md#sele
   compact sheet with URL preview, note, mode chips; posts to `/api/ingest` with the device token
   and finishes without booting the WebView. Finished, failed and capped runs push a notification
   (`NotificationHub`, [ADR 0016](adr/0016-push-keys-and-fcm-http-v1.md)) to every subscribed
-  device: FCM for the Android app, Web Push for installed PWAs. Owner-level channels (ntfy
+  device: FCM for the Android app (the token is first posted from Settings → Notifications and
+  re-posted on every sign-in while permission is granted, so a revoked-then-re-paired device is
+  not silently dropped), Web Push for installed PWAs. Owner-level channels (ntfy
   topic, Telegram chat; [ADR 0019](adr/0019-owner-notification-channels.md)) are configured
   in `.env` and receive every notification too.
 - **iOS share extension** ([guide](channels/ios-share.md),

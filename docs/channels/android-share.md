@@ -118,6 +118,13 @@ notification also goes to the owner channels (ntfy, Telegram) when configured
   and a precached shell kept serving the *previous* APK's bundle after `adb install -r`, so a
   fix looked like it had not shipped. Web Push on native is therefore impossible by design;
   FCM is the only native channel.
+- **FCM re-registration after pairing.** Enabling notifications from Settings is what first posts
+  the FCM token, but the server forgets that subscription when the device is revoked (or the app
+  is reinstalled). `App.tsx` therefore calls `resumeNativePush()` whenever the app becomes
+  authenticated: if `POST_NOTIFICATIONS` is already granted it re-creates the channel and
+  re-registers, and the `registration` listener re-posts the token. It never prompts; a device
+  that never enabled notifications stays silent until Settings → Enable. Found on the Pixel 4 XL
+  (2026-09-05): revoke → re-pair → share produced an answer with no notification.
 - **Pairing input.** The code field accepts the QR URL or `{url, code}` JSON and splits it into
   server URL + code only when both are present, so typing a URL by hand is not split mid-way.
 - **Plain-http server URLs (device testing over `adb reverse`).** The bundle is served from

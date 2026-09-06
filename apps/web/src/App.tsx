@@ -3,7 +3,12 @@ import { useEffect, useState } from 'react';
 import { getToken } from './api';
 import { Icon } from './components/Icon';
 import { resetLive } from './live';
-import { installNativeListeners, pendingShareToPath, takePendingShare } from './native';
+import {
+  installNativeListeners,
+  pendingShareToPath,
+  resumeNativePush,
+  takePendingShare,
+} from './native';
 import { Chat } from './pages/Chat';
 import { ChatList } from './pages/ChatList';
 import { Compose } from './pages/Compose';
@@ -30,6 +35,8 @@ export function App() {
     void takePendingShare().then((s) => {
       if (s) navigate(pendingShareToPath(s), true);
     });
+    // A re-paired device keeps its FCM token but the server forgot it; re-post when allowed.
+    void resumeNativePush();
   }, [authed]);
 
   if (!authed) {
