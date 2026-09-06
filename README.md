@@ -38,6 +38,7 @@ or tool in the post into categorised collections, even when you asked nothing.
 - [Data model](docs/DATA-MODEL.md) · [Brain adapters](docs/BRAIN-ADAPTERS.md) · [Media pipeline](docs/MEDIA-PIPELINE.md) · [Research modes](docs/RESEARCH-MODES.md)
 - Channels: [Instagram](docs/channels/instagram-setup.md) · [Android share sheet](docs/channels/android-share.md)
 - [Security](docs/SECURITY.md) and [threat model](docs/THREAT-MODEL.md)
+- [Privacy policy](docs/PRIVACY.md) — what an installation stores; the URL to give Meta for the Instagram app
 - [Deployment](docs/DEPLOYMENT.md) (macOS launchd, Linux systemd, Tailscale, tunnels)
 - [Roadmap](docs/ROADMAP.md) · [Contributing](CONTRIBUTING.md)
 
