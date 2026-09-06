@@ -106,8 +106,11 @@ that URL, else `payload.title`.
 Typing a message with the share arrives as **two webhook events**: the attachment first, then
 a text-only message a few hundred ms later (observed live). A text-only DM from the same sender
 within 2 minutes of their last share is recorded as `dm_note` and becomes that item's note,
-replacing a `payload.title` placeholder or appended to the sender's earlier text. If the run has
-already left the queue the text is also added to the chat as a question so it is not lost.
+replacing a `payload.title` placeholder or appended to the sender's earlier text. It always
+shows in the chat as the owner's own message (the placeholder question is rewritten in place,
+later text appends a new one) and the open chat page refreshes over `chat_updated`, so the
+owner can see their words were fed in. A still-queued run picks the note up as the question;
+after that it is kept as a follow-up question only.
 Echoes (`is_echo`), messages without `mid` and other plain text without an attachment are
 recorded as `other` and ignored; redeliveries of the same `mid` count as duplicates.
 

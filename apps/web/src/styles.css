@@ -983,6 +983,25 @@ a.chip:hover {
   padding: 6px 10px;
   text-align: left;
 }
+.md figure.svg {
+  margin: 12px 0;
+  padding: 8px;
+  background: var(--code-bg, var(--surface-2));
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow-x: auto;
+}
+.md figure.svg > * {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+.md del {
+  opacity: 0.7;
+}
+.md input[type="checkbox"] {
+  margin-right: 6px;
+}
 .md img {
   max-width: 100%;
   border-radius: var(--radius-sm);

@@ -53,6 +53,7 @@ export async function main(): Promise<void> {
       box: SecretBox.open(cfg.dataDir),
       adapterFor: (m) => brains.forMode(m),
       log: console,
+      onChatUpdated: (chatId) => worker.emit('chat_updated', chatId),
     });
     worker.onOutcome = (item, outcome) => ig?.onOutcome(item, outcome) ?? Promise.resolve();
     worker.mediaHints = (item) => ig?.mediaHints(item) ?? {};

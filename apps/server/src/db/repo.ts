@@ -173,6 +173,11 @@ export class Repo {
       .all();
   }
 
+  /** Rewrite one message's text (used to swap a placeholder question for the owner's words). */
+  updateMessageContent(id: string, content: string) {
+    this.db.update(s.messages).set({ content }).where(eq(s.messages.id, id)).run();
+  }
+
   // ---- runs ----
 
   createRun(r: {
