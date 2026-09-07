@@ -116,7 +116,7 @@ Order of preference per platform:
 |---|---|---|---|
 | instagram | signed CDN URL from the DM webhook (`hints.cdn_url`; TTL undocumented, fetch immediately; `ig_reel` shares carry the HTML permalink instead, which is not hinted, and the direct downloader raises `download_failed` on any non image/video content type so yt-dlp takes over) | `yt-dlp` (pinned ≥ 2026.08.19) anonymous | `yt-dlp --cookies-from-browser <browser>` if `DOUBLETAKE_YTDLP_COOKIES_FROM_BROWSER` is set |
 | tiktok | `yt-dlp` anonymous (resolves `vm.`/`vt.` short links first) | `yt-dlp --cookies-from-browser` opt-in | |
-| youtube (videos and Shorts) | `yt-dlp` with `--write-subs --write-auto-subs` (skip transcription if captions exist) | | |
+| youtube (videos and Shorts) | `yt-dlp` with `--write-subs --write-auto-subs` (skip transcription if captions exist; a caption track whose cues are all filler such as `Music` / `You` / `[Applause]`, which auto-ASR writes for music-only clips, counts as no captions and the audio is transcribed) | | |
 | x | `yt-dlp` for native video; images via the syndication CDN URLs in the tweet metadata | | |
 | reddit | `<permalink>.json` for post + comments; `yt-dlp` for v.redd.it video | | |
 | web / aichat | HTTP fetch + `trafilatura` readable text (AI share pages: gemini.google.com/share, chatgpt.com/share, claude.ai/share are ordinary pages; extract turns by their DOM roles when recognisable) | | |
