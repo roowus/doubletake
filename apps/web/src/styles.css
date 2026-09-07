@@ -2622,75 +2622,326 @@ details.card > summary svg.chev {
 }
 
 /* ---- Settings ------------------------------------------------------------ */
+/* Grouped list, the phone-settings idiom: a small-caps group title, a bordered surface with
+   one row per setting (label left, value or control right, chevron when it opens a page),
+   and a one-line footnote. Detail pages reuse the same parts (pages/settings/parts.tsx). */
 .settings {
   max-width: 720px;
 }
-.settings section.card {
+.settings > search {
+  display: block;
+}
+.help.lede {
+  font-family: var(--font-prose);
+  font-size: var(--text-lg);
+  line-height: 1.45;
+  color: var(--text-muted);
+  margin: calc(-1 * var(--space-2)) 0 0;
+}
+.sgroup {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
-}
-.list-row > svg {
-  flex: 0 0 auto;
-}
-.settings section.card > h3 {
-  display: flex;
-  align-items: center;
   gap: var(--space-2);
 }
-.settings section.card > h3 svg {
+.sgroup-title {
+  margin: 0 var(--space-3);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   color: var(--text-muted);
 }
-.list {
+.sgroup-body {
   display: flex;
   flex-direction: column;
+  background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   overflow: hidden;
 }
-.list-row {
+.sgroup-foot {
+  margin: 0 var(--space-3);
+}
+.srow {
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  min-height: 56px;
+  min-height: 52px;
   padding: var(--space-2) var(--space-3);
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  color: var(--text);
+  background: transparent;
+  border: 0;
+  border-radius: 0;
   border-bottom: 1px solid var(--border);
+  text-decoration: none;
+  transition: background var(--dur-fast) var(--ease);
 }
-.list-row:last-child {
+.srow:last-child {
   border-bottom: 0;
 }
-.list-row .body {
-  flex: 1;
+a.srow,
+button.srow {
+  cursor: pointer;
+}
+a.srow:hover,
+button.srow:hover {
+  background: var(--surface-2);
+}
+.srow:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+.srow.stack {
+  align-items: stretch;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-block: var(--space-3);
+}
+.srow.muted {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+.srow-icon {
+  flex: 0 0 auto;
+  color: var(--text-muted);
+}
+.srow-text {
+  flex: 1 1 auto;
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
 }
-.list-row .body .primary {
+.srow-label {
   font-weight: 500;
+  overflow-wrap: anywhere;
 }
-.list-row .body .secondary {
+.srow-hint {
   font-size: var(--text-sm);
   color: var(--text-muted);
+  overflow-wrap: anywhere;
 }
-.list-row > svg.ok {
-  color: var(--ok);
+.srow-value {
+  flex: 0 1 auto;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  text-align: right;
+  white-space: nowrap;
+  max-width: 55%;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.list-row > svg.err {
+.srow-value .truncate {
+  max-width: 40vw;
+}
+.srow-control {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+}
+.srow-control select {
+  min-height: 36px;
+  font-size: var(--text-sm);
+}
+.srow-chev {
+  flex: 0 0 auto;
+  color: var(--text-muted);
+}
+.srow.danger,
+.srow.danger .srow-icon,
+.srow.danger .srow-chev {
   color: var(--err);
 }
-.kv-row {
+.dot {
+  flex: 0 0 8px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+.dot.ok {
+  background: var(--ok);
+}
+.dot.warn {
+  background: var(--warn);
+}
+.dot.err {
+  background: var(--err);
+}
+
+/* Switch: a checkbox drawn as a toggle. 44 px hit area via the enclosing row. */
+.switch {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 44px;
+  height: 26px;
+  margin: 0;
+  position: relative;
+  flex: 0 0 auto;
+  background: var(--border-strong, var(--border));
+  border: 0;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition: background var(--dur) var(--ease);
+}
+.switch::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--bg);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  transition: transform var(--dur) var(--ease);
+}
+.switch:checked {
+  background: var(--accent);
+}
+.switch:checked::after {
+  transform: translateX(18px);
+}
+.switch:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.switch:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* Compact segmented choice inside a row (theme, prose size). */
+.segmented.compact {
+  grid-auto-columns: minmax(44px, auto);
+}
+.segmented.compact .segment {
+  min-height: 34px;
+  padding: 0 var(--space-3);
+}
+
+/* Appearance preview: a line of prose at the chosen size. */
+.srow.preview {
+  padding-block: var(--space-3);
+}
+.prose-sample {
+  margin: 0;
+  font-family: var(--font-prose);
+  font-size: var(--prose-size);
+  line-height: 1.55;
+}
+
+/* Research: today's spend as a big figure with a meter. */
+.stat-row {
   display: flex;
-  justify-content: space-between;
-  gap: var(--space-3);
-  font-size: var(--text-sm);
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
 }
-.kv-row span:first-child {
-  color: var(--text-muted);
+.stat-big {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
 }
-.kv-row span:last-child {
-  text-align: right;
-  overflow-wrap: anywhere;
+.stat-big .mono {
+  font-size: var(--text-2xl);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+.meter {
+  position: relative;
+  height: 6px;
+  background: var(--surface-2);
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+}
+.meter .fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 0;
+  background: var(--accent);
+  border-radius: inherit;
+  transition: width var(--dur-slow) var(--ease);
+}
+.meter[data-hot] .fill {
+  background: var(--warn);
+}
+.meter[data-pct="5"] .fill {
+  width: 5%;
+}
+.meter[data-pct="10"] .fill {
+  width: 10%;
+}
+.meter[data-pct="15"] .fill {
+  width: 15%;
+}
+.meter[data-pct="20"] .fill {
+  width: 20%;
+}
+.meter[data-pct="25"] .fill {
+  width: 25%;
+}
+.meter[data-pct="30"] .fill {
+  width: 30%;
+}
+.meter[data-pct="35"] .fill {
+  width: 35%;
+}
+.meter[data-pct="40"] .fill {
+  width: 40%;
+}
+.meter[data-pct="45"] .fill {
+  width: 45%;
+}
+.meter[data-pct="50"] .fill {
+  width: 50%;
+}
+.meter[data-pct="55"] .fill {
+  width: 55%;
+}
+.meter[data-pct="60"] .fill {
+  width: 60%;
+}
+.meter[data-pct="65"] .fill {
+  width: 65%;
+}
+.meter[data-pct="70"] .fill {
+  width: 70%;
+}
+.meter[data-pct="75"] .fill {
+  width: 75%;
+}
+.meter[data-pct="80"] .fill {
+  width: 80%;
+}
+.meter[data-pct="85"] .fill {
+  width: 85%;
+}
+.meter[data-pct="90"] .fill {
+  width: 90%;
+}
+.meter[data-pct="95"] .fill {
+  width: 95%;
+}
+.meter[data-pct="100"] .fill {
+  width: 100%;
+}
+
+/* Pairing: QR, code, URL, in one block inside the group. */
+.pair-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3);
 }
 .quiet-hours .times {
   display: grid;
@@ -2716,47 +2967,12 @@ details.card > summary svg.chev {
   align-self: center;
 }
 .msg-inline {
+  margin: 0 var(--space-3);
   font-size: var(--text-sm);
   color: var(--text-muted);
 }
-.file {
-  min-height: 0;
-  padding: 0;
-  border: 0;
-  background: transparent;
-}
-.file::file-selector-button {
-  font: inherit;
-  min-height: 40px;
-  padding: 0 var(--space-3);
-  margin-right: var(--space-2);
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  color: var(--text);
-  cursor: pointer;
-}
-details.card > summary {
-  cursor: pointer;
-  font-weight: 600;
-  list-style: none;
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  min-height: 28px;
-}
-details.card > summary::-webkit-details-marker {
-  display: none;
-}
-details.card[open] > summary {
-  margin-bottom: var(--space-3);
-}
-details.card > summary .grow {
-  flex: 1;
-  min-width: 0;
-}
-details.card[open] > summary svg.chev {
-  transform: rotate(180deg);
+.msg-inline.err {
+  color: var(--err);
 }
 
 /* ---- Welcome -------------------------------------------------------------- */

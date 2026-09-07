@@ -16,7 +16,17 @@ const token = process.env.DOUBLETAKE_TOKEN_FILE
 if (!token) throw new Error('set DOUBLETAKE_TOKEN_FILE or DOUBLETAKE_TOKEN');
 mkdirSync(out, { recursive: true });
 
-const routes = ['/', '/library', '/compose', '/settings', '/map', '/entities/place'];
+const routes = [
+  '/',
+  '/library',
+  '/compose',
+  '/settings',
+  '/settings/research',
+  '/settings/notifications',
+  '/settings/appearance',
+  '/map',
+  '/entities/place',
+];
 const targets = [
   ['phone-light', { width: 390, height: 844 }, 'light'],
   ['phone-dark', { width: 390, height: 844 }, 'dark'],

@@ -51,7 +51,7 @@ token** (`GET /access_token?grant_type=ig_exchange_token`). Tokens are refreshed
 scheduled job every 30 days (`GET /refresh_access_token?grant_type=ig_refresh_token`; the
 token must be at least 24 h old; `POST /api/ig/refresh` forces it). After connecting, the
 server subscribes the app to `messages`, `mentions`, `comments` (`POST /<IG_ID>/subscribed_apps`)
-and redirects to `/settings?ig=connected` (or `?ig=error&message=…`). `DELETE /api/ig/account`
+and redirects to `/settings/instagram?ig=connected` (or `?ig=error&message=…`). `DELETE /api/ig/account`
 disconnects.
 
 API host: `https://graph.instagram.com/v25.0`.
@@ -159,7 +159,7 @@ possible on your own media and are not used.
 
 ## 5. Settings UI
 Settings → **Instagram**: shows "not configured" when the server lacks the env vars,
-otherwise **Connect Instagram** (starts OAuth, returns to `/settings?ig=connected`), and once
+otherwise **Connect Instagram** (starts OAuth, returns to `/settings/instagram?ig=connected`), and once
 connected the username, token expiry, polling/webhook-host state, **Poll mentions now**,
 **Check comment access** (`POST /api/ig/verify`), **Refresh token**, **Disconnect**, and the last five webhook events. "Send test DM to myself"
 (`POST /api/ig/test { recipientId, text? }`) and "simulate mention" have routes but no buttons
