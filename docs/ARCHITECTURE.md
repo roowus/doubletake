@@ -125,7 +125,8 @@ Full column-level detail in [DATA-MODEL.md](DATA-MODEL.md).
 ## 6. Ingest and research pipeline
 
 1. **Receive.** A channel handler normalises its input to `IngestRequest { url?, text?, note?,
-   channel, focus, modeHint?, ig? }`. Dedupe on `canonical_url + focus` within 24 h: a re-share
+   channel, focus, modeHint?, adapter?, model?, ig? }` (`adapter`/`model` pin the run to one
+   configured brain instead of the mode binding, exactly like the research route). Dedupe on `canonical_url + focus` within 24 h: a re-share
    starts a new run on the existing chat instead of a new item. Create `item`, `chat`,
    `run(queued)`; reply `202` immediately. A photo or video shared as a file (no URL) arrives
    on `POST /api/ingest/upload` instead: the body is streamed into `media/<item_id>/` under a
@@ -322,7 +323,14 @@ lists (creates one inline) and the **Sources** disclosure showing every extracti
 saw (transcript, on-screen text, frame descriptions, caption, comments, thread, page text)
 flattened to readable text by `extract/flatten.ts`. The follow-up composer is a sticky bar
 with an icon Send button and a **Research this** menu (Quick/Standard/Deep re-run, with time
-hints, plus a **Brain** selector when several adapters are configured that pins the run). Compose (URL or text + note + mode chips); `/share` receives Web Share Target requests;
+hints, plus a **Brain** selector when several adapters are configured that pins the run). **Add** is a full-page compose (`pages/Compose.tsx`): a prose-face paste field
+that becomes a question when the text is not a URL, a note field, the research mode as a
+segmented control (`components/ModeControl.tsx`, radio group with the mode's hint and time
+below) and a **Default brain** menu that pins the run to one adapter (sent as `adapter` on
+`POST /api/ingest`) when several are configured; `/share` receives Web Share Target requests
+into the same page. The **entity view** (`pages/Entities.tsx`, `/entities/<kind>`) lists one
+kind with a count, a kind switcher and a filter field; cards show the attributes worth
+surfacing per kind as a mono-labelled definition list and link back to their chat;
 settings as titled sections (server status and spend vs cap, **Notifications** enable/disable
 + send test + quiet hours, **Instagram** connect/disconnect/status, QR pairing, devices,
 import/export, sign out). The service worker
@@ -346,7 +354,7 @@ connection recipe in [DEPLOYMENT.md](DEPLOYMENT.md#connect-an-agent-mcp)).
 | `GET health`, `GET status` | liveness; brain id/model, spend today vs cap, notes dir, `push: { kinds, channels, vapidPublicKey, quietHours, pending }` |
 | `POST setup`, `POST login` | create owner password once; exchange password for a device token |
 | `POST pair/start`, `POST pair/redeem`, `GET/DELETE devices[/:id]` | 10-minute single-use pairing codes; device list and revocation |
-| `POST ingest` | `{ url? , text?, note?, channel, modeHint?, focus?, clientId? }` → `202 { itemId, chatId, runId, deduplicated, replayed }`; a repeated `clientId` (offline share queue retrying after a lost response) returns the first ingest's ids with `replayed: true` and creates nothing |
+| `POST ingest` | `{ url? , text?, note?, channel, modeHint?, focus?, clientId?, adapter?, model? }` (`adapter` must name a configured brain, else `400`; with it the run is `pinned`) → `202 { itemId, chatId, runId, deduplicated, replayed }`; a repeated `clientId` (offline share queue retrying after a lost response) returns the first ingest's ids with `replayed: true` and creates nothing |
 | `POST ingest/upload` | raw body = one image or video (`Content-Type: image/*` or `video/*`, allow-listed types, ≤ 500 MiB); note, channel, mode and client id travel in URI-encoded `x-doubletake-note/channel/mode/client-id` headers → same `202` shape; `415` for non-media types, `400` for a media type outside the list, `413` over the cap ([ADR 0029](adr/0029-media-uploads.md)) |
 | `POST library/chat` | `{ question, modeHint? }` → `202 { itemId, chatId, runId }`; a `library` item whose run answers from retrieved chats |
 | `GET chats?q=&tag=&collection=`, `GET chats/:id`, `POST chats/:id/read` | list (FTS when `q`, tag filter when `tag`, membership of a collection when `collection`; 404 for an unknown id), detail with messages/runs/entities/extractions (flattened text, newest per kind+tool), clear unread |

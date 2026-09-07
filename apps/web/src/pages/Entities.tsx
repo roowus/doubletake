@@ -1,7 +1,7 @@
 import type { CollectionDto, EntityHit, EntityKind } from '@doubletake/shared';
 import { Fragment, useEffect, useState } from 'react';
 import { ApiError, api } from '../api';
-import { Icon } from '../components/Icon';
+import { Icon, platformIcon } from '../components/Icon';
 import { ago } from '../format';
 import { useLive } from '../live';
 import { Link } from '../router';
@@ -105,12 +105,10 @@ function EntityCard({ hit }: { hit: EntityHit }) {
         </dl>
       )}
       <div className="foot">
+        <Icon name={platformIcon(hit.platform)} size={14} />
         <Link to={`/chat/${hit.chatId}`} className="truncate">
           {hit.itemTitle}
         </Link>
-        <span>·</span>
-        <span>{hit.platform}</span>
-        <span>·</span>
         <time dateTime={hit.createdAt}>{ago(hit.createdAt)}</time>
       </div>
     </article>
@@ -140,12 +138,15 @@ export function Entities({ kind }: { kind: EntityKind }) {
     (h) => !f || h.name.toLowerCase().includes(f) || h.itemTitle.toLowerCase().includes(f),
   );
   return (
-    <div className="page stack loose">
+    <div className="page stack loose entities-page">
       <div className="page-head">
-        <Link to="/" className="icon-link" aria-label="Back to chats">
+        <Link to="/library" className="icon-link" aria-label="Back to Library">
           <Icon name="arrow-left" />
         </Link>
-        <h2>{spec.title}</h2>
+        <h1>
+          {spec.title}
+          {hits && <span className="count-badge">{hits.length}</span>}
+        </h1>
         {kind === 'place' && (
           <Link to="/map" className="icon-link" aria-label="Map view" title="Map view">
             <Icon name="map" />
@@ -164,15 +165,16 @@ export function Entities({ kind }: { kind: EntityKind }) {
           </Link>
         ))}
       </nav>
-      <label className="field">
-        <span className="sr-only">Filter {spec.title.toLowerCase()}</span>
+      <div className="searchbar">
+        <Icon name="search" size={18} />
         <input
           type="search"
-          placeholder={`Filter ${spec.title.toLowerCase()}…`}
+          placeholder={`Filter ${spec.title.toLowerCase()}`}
+          aria-label={`Filter ${spec.title.toLowerCase()}`}
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
         />
-      </label>
+      </div>
       {err && (
         <div className="banner error" role="alert">
           <Icon name="alert" />
