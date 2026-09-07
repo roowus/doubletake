@@ -3,6 +3,12 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
+    inputs:
+      update_snapshots:
+        description: Re-record the web visual-regression snapshots and upload them as an artifact
+        type: boolean
+        default: false
 jobs:
   typescript:
     runs-on: ubuntu-latest
@@ -32,3 +38,32 @@ jobs:
       - uses: actions/checkout@v4
       - name: check internal markdown links
         run: python3 scripts/check-links.py
+  web-visual:
+    # Playwright screenshots of the PWA against a fixture API (apps/web/e2e). Snapshots are
+    # recorded on Linux only, so they come from this job: dispatch the workflow with
+    # update_snapshots=true, download the `web-snapshots` artifact and commit it under
+    # apps/web/e2e/__screenshots__/.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @doubletake/web exec playwright install --with-deps chromium
+      - run: pnpm --filter @doubletake/web build
+      - if: ${{ inputs.update_snapshots != true }}
+        run: pnpm --filter @doubletake/web e2e
+      - if: ${{ inputs.update_snapshots == true }}
+        run: pnpm --filter @doubletake/web e2e:update
+      - if: ${{ inputs.update_snapshots == true }}
+        uses: actions/upload-artifact@v4
+        with: { name: web-snapshots, path: apps/web/e2e/__screenshots__ }
+      - if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-visual-report
+          path: |
+            apps/web/playwright-report
+            apps/web/test-results
+          retention-days: 7

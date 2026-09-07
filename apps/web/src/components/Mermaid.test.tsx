@@ -31,6 +31,7 @@ describe('renderMermaid', () => {
     const opts = initialize.mock.calls[0]?.[0];
     expect(opts.securityLevel).toBe('strict');
     expect(opts.startOnLoad).toBe(false);
+    expect(opts.htmlLabels).toBe(false);
     expect(opts.flowchart).toEqual({ htmlLabels: false });
     expect(opts.theme).toBe('base');
     expect(render).toHaveBeenCalledWith(

@@ -34,6 +34,8 @@ describe('ChartBlock', () => {
     expect(html).toContain('<figure class="chart bar">');
     expect(html).toContain('<figcaption>Price by size</figcaption>');
     expect(html.match(/<rect /g)?.length).toBe(4);
+    // The series colour is applied by CSS through the .bar class, not an inline fill.
+    expect(html.match(/<rect [^>]*class="bar"/g)?.length).toBe(4);
     expect(html).toContain('class="s1"');
     expect(html).toContain('class="s2"');
     expect(html).toContain('<ul class="chart-legend">');

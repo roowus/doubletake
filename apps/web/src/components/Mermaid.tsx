@@ -54,6 +54,10 @@ export async function loadMermaid(): Promise<MermaidModule> {
       securityLevel: 'strict',
       theme: 'base',
       themeVariables: themeVariables(),
+      // Both switches are needed: Mermaid 11 shape renderers read the top-level flag, the
+      // flowchart one alone still emits node labels as <foreignObject>, which the sanitizer
+      // strips (blank nodes).
+      htmlLabels: false,
       flowchart: { htmlLabels: false },
       sequence: { useMaxWidth: true },
       fontFamily: cssVar('--font-sans', 'system-ui, sans-serif'),

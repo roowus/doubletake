@@ -281,6 +281,25 @@ app renders the same offline. `pnpm --filter @doubletake/web shots <dir>` (Playw
 screenshots every route of a running server at phone and desktop sizes in both colour schemes
 for design review; `DOUBLETAKE_URL` and `DOUBLETAKE_TOKEN_FILE` point it at the server.
 
+**Visual regression** (`apps/web/e2e/`, `pnpm --filter @doubletake/web e2e`): Playwright
+(`@playwright/test`, `playwright.config.ts`) starts `e2e/fixture-server.mjs`, a dependency-free
+`node:http` server that serves the built `dist/` and answers the `/api` routes the pages call
+(chats, one rich chat, tags, collections, entities, status, devices, run events) from
+hand-written fixtures; the chat is `apps/server/test/fixtures/rich-answer.md`, so the GFM
+table, the ```chart bar chart and the ```mermaid flowchart are exercised end to end, including
+the lazy Mermaid chunk and the SVG sanitizer. `visual.spec.ts` opens Inbox, the filter sheet,
+Library, the chat and its Claims tab, Compose, Settings, Appearance and Welcome in three
+projects (phone 390×844 light and dark at 2×, desktop 1280×860 light), asserts the key content
+is present, then `toHaveScreenshot` (`maxDiffPixelRatio: 0.01`, animations disabled). Snapshots
+are rendered on Linux only (`ignoreSnapshots` elsewhere unless `E2E_SNAPSHOTS=1`), committed
+under `e2e/__screenshots__/` and compared by the `web-visual` CI job; to re-record them run
+the workflow by hand with `update_snapshots=true`, download the `web-snapshots` artifact and
+commit it. On a failure the job uploads the Playwright report and traces. Two renderer bugs
+this suite caught are now asserted: chart bars carry the `.bar` class that CSS colours by
+series, and Mermaid is initialised with both the top-level and the `flowchart` `htmlLabels:
+false`, because Mermaid 11 shape renderers read the top-level flag and otherwise emit node
+labels as `<foreignObject>`, which the sanitizer strips.
+
 Screens: **Library** tab (`pages/Library.tsx`): entity kinds and the map as tiles with counts
 (the counts come from the seeded `entity:<kind>` auto collections, so the page costs two
 requests), the owner's manual lists and saved searches then the non-empty category collections

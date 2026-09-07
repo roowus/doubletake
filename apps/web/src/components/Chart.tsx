@@ -141,6 +141,7 @@ function Bars({ spec }: { spec: SeriesChart }) {
                 width={barW}
                 height={Math.max(1, Math.abs(zero - y(p.y)))}
                 rx={2}
+                className="bar"
               />
             );
           })}
@@ -175,7 +176,9 @@ function Lines({ spec }: { spec: SeriesChart }) {
             className="line"
           />
           {s.values.length <= 24 &&
-            s.values.map((p) => <circle key={xLabel(p.x)} cx={xOf(p.x)} cy={y(p.y)} r={3.5} />)}
+            s.values.map((p) => (
+              <circle key={xLabel(p.x)} className="dot" cx={xOf(p.x)} cy={y(p.y)} r={3.5} />
+            ))}
         </g>
       ))}
       <XLabels
