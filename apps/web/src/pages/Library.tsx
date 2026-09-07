@@ -1,7 +1,9 @@
 import type { CollectionDto, EntityKind, TagDto } from '@doubletake/shared';
 import { useEffect, useState } from 'react';
 import { ApiError, api } from '../api';
+import { Confirm } from '../components/Confirm';
 import { Icon, type IconName } from '../components/Icon';
+import { Menu } from '../components/Menu';
 import { useLive } from '../live';
 import { Link } from '../router';
 
@@ -31,6 +33,8 @@ export function Library() {
   const [name, setName] = useState('');
   const [query, setQuery] = useState('');
   const [preview, setPreview] = useState<number | null>(null);
+  const [toDelete, setToDelete] = useState<CollectionDto | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const load = () => {
     api
@@ -69,6 +73,44 @@ export function Library() {
       setCreating(null);
       setName('');
       setQuery('');
+      load();
+    } catch (ex) {
+      setErr(ex instanceof ApiError ? ex.message : String(ex));
+    }
+  }
+
+  async function share(c: CollectionDto) {
+    try {
+      if (c.shareUrl) {
+        await api.unshareCollection(c.id);
+        setNotice(`"${c.name}" is private again.`);
+      } else {
+        const r = await api.shareCollection(c.id);
+        let copied = false;
+        try {
+          await navigator.clipboard.writeText(r.shareUrl);
+          copied = true;
+        } catch {
+          // clipboard needs a secure context; the link is shown in the notice anyway
+        }
+        setNotice(`${copied ? 'Link copied: ' : 'Read-only link: '}${r.shareUrl}`);
+      }
+      load();
+    } catch (ex) {
+      setErr(ex instanceof ApiError ? ex.message : String(ex));
+    }
+  }
+  async function hide(c: CollectionDto) {
+    try {
+      await api.updateCollection(c.id, { hidden: true });
+      load();
+    } catch (ex) {
+      setErr(ex instanceof ApiError ? ex.message : String(ex));
+    }
+  }
+  async function remove(c: CollectionDto) {
+    try {
+      await api.deleteCollection(c.id);
       load();
     } catch (ex) {
       setErr(ex instanceof ApiError ? ex.message : String(ex));
@@ -188,7 +230,7 @@ export function Library() {
         ) : (
           <ul className="tiles">
             {yours.map((c) => (
-              <li key={c.id}>
+              <li key={c.id} className="tile-wrap">
                 <Link
                   to={`/?collection=${c.id}`}
                   className="tile"
@@ -201,20 +243,61 @@ export function Library() {
                     {c.shareUrl && <Icon name="link" size={14} label="Shared read-only link" />}
                   </span>
                 </Link>
+                <Menu
+                  label={`Options for ${c.name}`}
+                  className="ghost icon tile-menu"
+                  trigger={<Icon name="more-vertical" size={18} />}
+                  items={[
+                    {
+                      label: c.shareUrl ? 'Stop sharing' : 'Share read-only link',
+                      icon: c.shareUrl ? 'x' : 'share',
+                      onSelect: () => void share(c),
+                    },
+                    'separator',
+                    {
+                      label: 'Delete collection',
+                      icon: 'trash',
+                      danger: true,
+                      onSelect: () => setToDelete(c),
+                    },
+                  ]}
+                />
               </li>
             ))}
             {categories.map((c) => (
-              <li key={c.id}>
+              <li key={c.id} className="tile-wrap">
                 <Link to={`/?collection=${c.id}`} className="tile" title={c.query}>
                   <Icon name="folder" size={22} />
                   <span className="tile-label">{c.name}</span>
                   <span className="tile-count">{c.count}</span>
                 </Link>
+                <Menu
+                  label={`Options for ${c.name}`}
+                  className="ghost icon tile-menu"
+                  trigger={<Icon name="more-vertical" size={18} />}
+                  items={[{ label: 'Hide from Library', icon: 'x', onSelect: () => void hide(c) }]}
+                />
               </li>
             ))}
           </ul>
         )}
+        {notice && (
+          <p className="small muted truncate" role="status">
+            {notice}
+          </p>
+        )}
       </section>
+
+      <Confirm
+        open={toDelete !== null}
+        onOpenChange={(o) => {
+          if (!o) setToDelete(null);
+        }}
+        title={`Delete "${toDelete?.name ?? ''}"?`}
+        body="Items stay in your library; only the collection goes away."
+        action="Delete"
+        onConfirm={() => (toDelete ? remove(toDelete) : undefined)}
+      />
 
       <section className="stack tight" aria-labelledby="lib-tags">
         <h2 id="lib-tags" className="section-title">

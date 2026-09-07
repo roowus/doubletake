@@ -36,6 +36,15 @@ for (const [name, viewport, colorScheme] of targets) {
   };
   for (const route of routes)
     await shoot(route, route === '/' ? '_inbox' : route.replace(/\//g, '_'));
+  // Inbox filter sheet (open) and a filtered inbox with the summary chip.
+  await page.goto(`${base}/`, { waitUntil: 'networkidle' }).catch(() => {});
+  const funnel = page.locator('button[aria-label^="Filters"]');
+  if (await funnel.count()) {
+    await funnel.click();
+    await page.waitForTimeout(600);
+    await page.screenshot({ path: `${out}/${name}_inbox-filter.png` });
+  }
+  await shoot('/?platform=youtube&status=answered', '_inbox-filtered');
   await page.goto(`${base}/`, { waitUntil: 'networkidle' });
   const href = await page
     .locator('a[href^="/chat/"]')

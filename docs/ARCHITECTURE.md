@@ -278,16 +278,24 @@ Screens: **Library** tab (`pages/Library.tsx`): entity kinds and the map as tile
 (the counts come from the seeded `entity:<kind>` auto collections, so the page costs two
 requests), the owner's manual lists and saved searches then the non-empty category collections
 as tiles, a **New collection** form, and every tag in use as an alphabetical list with counts;
-each tile opens the filtered inbox (`/?collection=`, `/?tag=`) or the entity view. Inbox: chat
-list with unread badges, tag filter and FTS search (the tag chips come from
-`GET /api/tags`, manual tags marked with a pencil icon; the same field has an **Ask library**
-button that turns the text into a `library` question and opens its chat), a **collections**
-row (auto collections per category and entity kind, manual lists with a list icon, saved
-searches with a search icon; selecting one filters the list via `?collection=<id>`; auto
-collections can be hidden, others deleted or **shared** as a read-only page whose link is
-copied to the clipboard and shown under the row, a link icon marking shared ones
-([ADR 0025](adr/0025-shareable-collection-pages.md)); a **Collection** chip opens a labelled
-form that creates a manual list or a saved search with a live match count) and links to the
+each tile opens the filtered inbox (`/?collection=`, `/?tag=`) or the entity view. **Inbox**
+(`pages/Inbox.tsx`): a search field over the FTS index whose **Ask** button turns the text into
+a `library` question and opens its chat, a funnel button beside it that opens the **Filter**
+sheet (`components/Sheet.tsx`, a Base UI `Dialog` drawn as a bottom sheet on phones and a
+centred dialog from 768 px: status, platform, collections and tags as pressed chips), and one
+removable **summary chip** ("Places to visit · #ski · YouTube") while filters are active. Tag
+and collection filters go to the server (`GET /api/chats?q=&tag=&collection=`); platform and
+status are applied client-side on the summaries. Filters live in the URL (`?tag=`,
+`?collection=`, `?platform=`, `?status=`) so Library tiles and shared links land on a filtered
+inbox. The list itself is split into an **Unread** section and the rest, each row showing the
+platform (or channel) glyph, the title in the prose face, a one-line meta row (status while a
+run is working or has failed, category, up to three tags in clay) and the age with an unread
+count. Collections are managed from the Library tab: each tile has an overflow menu
+(`components/Menu.tsx`, Base UI Menu) with hide, **share** as a read-only page whose link is
+copied to the clipboard ([ADR 0025](adr/0025-shareable-collection-pages.md)) and delete, the
+latter behind an alert dialog (`components/Confirm.tsx`); the **New collection** form creates a
+manual list or a saved search with a live match count.
+The Library tab also links to the
 **entity views** `/entities/<kind>` (kind chips, a filter field, one card per entity with the
 name, icon links to the web page and to Maps, attributes as a definition list and a footer
 linking back to the chat it came from; places, recipes, products, tools, tips, media, people,

@@ -10,9 +10,9 @@ import {
   takePendingShare,
 } from './native';
 import { Chat } from './pages/Chat';
-import { ChatList } from './pages/ChatList';
 import { Compose } from './pages/Compose';
 import { ENTITY_KINDS, Entities } from './pages/Entities';
+import { Inbox } from './pages/Inbox';
 import { Library } from './pages/Library';
 import { MapView } from './pages/MapView';
 import { Settings } from './pages/Settings';
@@ -79,7 +79,7 @@ export function App() {
   else if (url.pathname.startsWith('/entities/')) {
     const kind = url.pathname.slice('/entities/'.length) as EntityKind;
     page = <Entities kind={ENTITY_KINDS.includes(kind) ? kind : 'place'} />;
-  } else page = <ChatList />;
+  } else page = <Inbox />;
 
   return (
     <Shell pathname={url.pathname} bare={!!chatMatch}>

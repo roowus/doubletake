@@ -11,6 +11,7 @@ import type { SVGProps } from 'react';
 const PATHS = {
   plus: 'M12 5v14M5 12h14',
   x: 'M18 6 6 18M6 6l12 12',
+  'x-logo': 'M4 4h4l12 16h-4zM20 4l-6.5 8.5M4 20l6.5-8.5',
   check: 'm5 12 5 5L20 7',
   search: 'M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM20 20l-4-4',
   settings:
@@ -143,6 +144,8 @@ export function platformIcon(platform: string | null | undefined): IconName {
       return 'bot';
     case 'text':
       return 'text';
+    case 'x':
+      return 'x-logo';
     default:
       return 'globe';
   }
