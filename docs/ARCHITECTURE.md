@@ -303,27 +303,42 @@ linking back to the chat it came from; places, recipes, products, tools, tips, m
 events) and to the **map** `/map` (Leaflet over OpenStreetMap tiles fetched by the browser;
 one circle marker per located place, popup linking to its chat, a collapsible list of
 unlocated places with a Maps search link and a **Locate N more** backfill button,
-[ADR 0022](adr/0022-map-view-place-geocoding.md)). The chat view is answer-first: a compact
-header (back, title, status, source host, mode, cost, category), then a **share card** on the
-owner's side of the thread showing what was shared (platform icon, host, title, the canonical
-link and one still image when the media worker saved a thumbnail, image or sampled frame;
-`item.preview` on `GET /api/chats/:id` names the asset and
-`GET /api/chats/:id/media/:mediaId` serves it behind the same device-token gate, fetched by the
-page with a bearer header into a blob URL so the token never appears in an `src`; typed text
-has no card), the owner's note as their first message, then the messages with entity
-cards and the claims table inside the answer (answer text is GitHub-flavoured Markdown via
-`react-markdown` + `remark-gfm`, so tables, task lists and strikethrough render; raw HTML never
-does; a fenced \`\`\`svg block is the one drawable exception, inlined only after DOMPurify's SVG
-profile has stripped scripts, links, styles, images, `<use>`/`foreignObject` and any external
-`url()` reference, otherwise it stays a code block — `components/Markdown.tsx`), active runs with their live timeline over the
-`/api/events` WebSocket, and below them one collapsed **Tags, collections and sources** panel
-holding the editable tag chips (remove icon, inline field to add a manual tag; every edit
-re-indexes FTS and re-exports the Markdown note), the **Add to collection** picker for manual
-lists (creates one inline) and the **Sources** disclosure showing every extraction the brain
-saw (transcript, on-screen text, frame descriptions, caption, comments, thread, page text)
-flattened to readable text by `extract/flatten.ts`. The follow-up composer is a sticky bar
-with an icon Send button and a **Research this** menu (Quick/Standard/Deep re-run, with time
-hints, plus a **Brain** selector when several adapters are configured that pins the run). **Add** is a full-page compose (`pages/Compose.tsx`): a prose-face paste field
+[ADR 0022](adr/0022-map-view-place-geocoding.md)). The chat view is a **notebook page** about one shared thing, not a chat
+transcript (`pages/Chat.tsx`, split into `components/ChatHeader.tsx`, `ClipCard.tsx`,
+`Answer.tsx`, `AnswerTabs.tsx` and `FollowUp.tsx`): nothing sits in a bubble. The header is
+back, the status badge and an overflow menu (Tags…, Collections…, **Research again, deeper**),
+then the title in the prose face with the platform glyph and one mono small-caps meta line
+(mode, category, host, total cost). The **clip card** shows what was shared (thumbnail, image
+or sampled frame, title, canonical link; `item.preview` on `GET /api/chats/:id` names the
+asset and `GET /api/chats/:id/media/:mediaId` serves it behind the same device-token gate,
+fetched with a bearer header into a blob URL so the token never appears in an `src`; typed
+text has no card), followed by the tag chips. Turns then run down the page: the owner's note
+and follow-up questions are a dated one-line label ("You wrote" / "You asked") over italic
+prose, and every answer is full-width prose (Newsreader, measure capped at 68 ch, GitHub-
+flavoured Markdown via `react-markdown` + `remark-gfm`: tables with hairlines and a sticky
+first column on phones, task lists, blockquotes set as margin notes, code on `--code-bg`; raw
+HTML never renders; a fenced \`\`\`svg block is the one drawable exception, inlined only after
+DOMPurify's SVG profile has stripped scripts, links, styles, images, `<use>`/`foreignObject`
+and any external `url()` reference, otherwise it stays a code block — `components/Markdown.tsx`)
+beside the **margin rail**, the app's signature element: a 3 px rule in the accent colour that
+marks where an answer starts, with the run's meta (mode, brain when pinned, duration, cost,
+time) in mono small caps above it. While a run is live the rail is drawn faded and fills
+top-to-bottom as the run moves through queued → extracting → classifying → researching (a
+`data-rail-pct` attribute mapped to CSS, nudged by the number of tool events), skeleton lines
+stand in for the answer and a Cancel button sits in the label. Under the turns four segmented
+tabs (Base UI `Tabs`) hold the detail: **Claims** (verdict chip in `--ok/--warn/--err`, a
+confidence bar, numbered source links), **Things** (entities grouped by kind with their
+attributes and links), **Sources** (every extraction the brain saw — transcript, on-screen
+text, frame descriptions, caption, comments, thread, page text — flattened to readable text by
+`extract/flatten.ts`, one collapsible per extraction) and **Run** (each run as a disclosure with
+its status, mode, duration and cost, and the live or backfilled event timeline from
+`GET /api/chats/:id/runs/:runId/events` and the `/api/events` WebSocket). Tags and collections
+are edited from bottom sheets opened by the tag chips or the overflow menu (`TagEditor.tsx`,
+`CollectionPicker` from `pages/Entities.tsx`; every tag edit re-indexes FTS and re-exports the
+Markdown note). The follow-up composer is a sticky bar at the foot of the page: a one-line
+field that grows to six, Enter sends, and a compass opens the **Research this** menu
+(Quick/Standard/Deep re-run with time hints plus a **Brain** selector when several adapters are
+configured that pins the run). **Add** is a full-page compose (`pages/Compose.tsx`): a prose-face paste field
 that becomes a question when the text is not a URL, a note field, the research mode as a
 segmented control (`components/ModeControl.tsx`, radio group with the mode's hint and time
 below) and a **Default brain** menu that pins the run to one adapter (sent as `adapter` on

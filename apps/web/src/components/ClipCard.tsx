@@ -44,12 +44,12 @@ export function hostOf(url: string | null | undefined): string | null {
 }
 
 /**
- * The shared thing itself, shown on the owner's side of the chat above their note: platform,
- * title, the link, and one still image when the media worker saved a thumbnail or frame.
- * An uploaded photo or video (no URL, but a preview) gets a non-link card with the image;
- * typed text (no URL, no media) has no card, its text is already the first user message.
+ * The clip: the shared thing itself, at the top of the notebook page. Platform, title, the
+ * link, and one still image when the media worker saved a thumbnail or frame. An uploaded
+ * photo or video (no URL, but a preview) gets a non-link card with the image; typed text (no
+ * URL, no media) has no card, its text is the first "You wrote" line instead.
  */
-export function ShareCard({ chat, item }: Pick<ChatDetail, 'chat' | 'item'>) {
+export function ClipCard({ chat, item }: Pick<ChatDetail, 'chat' | 'item'>) {
   const url = item.canonicalUrl ?? item.sourceUrl ?? chat.sourceUrl;
   const host = hostOf(url);
   const img = useAuthedImage(
@@ -64,11 +64,11 @@ export function ShareCard({ chat, item }: Pick<ChatDetail, 'chat' | 'item'>) {
     const label = video ? 'Shared video' : 'Shared photo';
     return (
       <section
-        className={`msg user share upload${img ? ' has-image' : ''}${portrait ? ' portrait' : ''}`}
+        className={`clip upload${img ? ' has-image' : ''}${portrait ? ' portrait' : ''}`}
         aria-label={label}
       >
-        {img && <img src={img} alt={label} className="share-thumb" loading="lazy" />}
-        <span className="share-body">
+        {img && <img src={img} alt={label} className="clip-thumb" loading="lazy" />}
+        <span className="clip-body">
           <span className="row small muted">
             <Icon name={video ? 'film' : 'image'} size={14} />
             <span className="grow">{label}</span>
@@ -80,21 +80,21 @@ export function ShareCard({ chat, item }: Pick<ChatDetail, 'chat' | 'item'>) {
   const title = item.title && item.title !== url ? item.title : null;
   return (
     <a
-      className={`msg user share${img ? ' has-image' : ''}${portrait ? ' portrait' : ''}`}
+      className={`clip${img ? ' has-image' : ''}${portrait ? ' portrait' : ''}`}
       href={url}
       target="_blank"
       rel="noopener noreferrer"
       aria-label={`Open the shared ${chat.platform} link on ${host}`}
     >
-      {img && <img src={img} alt="" className="share-thumb" loading="lazy" />}
-      <span className="share-body">
+      {img && <img src={img} alt="" className="clip-thumb" loading="lazy" />}
+      <span className="clip-body">
         <span className="row small muted">
           <Icon name={platformIcon(chat.platform)} size={14} />
           <span className="grow">{host}</span>
           <Icon name="external-link" size={14} />
         </span>
-        {title && <span className="share-title clamp-2">{title}</span>}
-        <span className="share-url mono clamp-1">{url.replace(/^https?:\/\//, '')}</span>
+        {title && <span className="clip-title clamp-2">{title}</span>}
+        <span className="clip-url mono clamp-1">{url.replace(/^https?:\/\//, '')}</span>
       </span>
     </a>
   );

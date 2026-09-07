@@ -8,6 +8,10 @@ export type MenuAction = {
   onSelect: () => void;
   danger?: boolean;
   disabled?: boolean;
+  /** Draw a check mark: the item is the current choice of a mutually exclusive set. */
+  checked?: boolean;
+  /** Small muted text at the right edge (a duration, a shortcut). */
+  hint?: string;
 };
 
 /**
@@ -20,13 +24,18 @@ export function Menu({
   trigger,
   items,
   align = 'end',
+  side = 'bottom',
   className,
+  heading,
 }: {
   label: string;
   trigger: ReactNode;
-  items: (MenuAction | 'separator')[];
+  items: (MenuAction | 'separator' | { heading: string })[];
   align?: 'start' | 'end' | 'center';
+  side?: 'bottom' | 'top';
   className?: string;
+  /** Optional title line at the top of the popup. */
+  heading?: string;
 }) {
   return (
     <BaseMenu.Root>
@@ -34,21 +43,32 @@ export function Menu({
         {trigger}
       </BaseMenu.Trigger>
       <BaseMenu.Portal>
-        <BaseMenu.Positioner className="menu-positioner" side="bottom" align={align} sideOffset={6}>
+        <BaseMenu.Positioner className="menu-positioner" side={side} align={align} sideOffset={6}>
           <BaseMenu.Popup className="menu">
+            {heading && <div className="menu-heading">{heading}</div>}
             {items.map((it, i) =>
               it === 'separator' ? (
                 // biome-ignore lint/suspicious/noArrayIndexKey: separators have no identity
                 <BaseMenu.Separator key={`sep-${i}`} className="menu-sep" />
+              ) : 'heading' in it ? (
+                <div key={it.heading} className="menu-heading" role="presentation">
+                  {it.heading}
+                </div>
               ) : (
                 <BaseMenu.Item
                   key={it.label}
-                  className={`menu-item${it.danger ? ' danger' : ''}`}
+                  className={`menu-item${it.danger ? ' danger' : ''}${it.checked != null ? ' checkable' : ''}`}
                   disabled={it.disabled}
+                  aria-checked={it.checked}
                   onClick={it.onSelect}
                 >
-                  {it.icon && <Icon name={it.icon} size={16} />}
-                  {it.label}
+                  {it.checked != null ? (
+                    <Icon name="check" size={16} className={it.checked ? '' : 'hidden-check'} />
+                  ) : (
+                    it.icon && <Icon name={it.icon} size={16} />
+                  )}
+                  <span className="grow">{it.label}</span>
+                  {it.hint && <span className="hint">{it.hint}</span>}
                 </BaseMenu.Item>
               ),
             )}

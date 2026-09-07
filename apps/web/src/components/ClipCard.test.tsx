@@ -2,7 +2,7 @@
 import type { ChatDetail } from '@doubletake/shared';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { hostOf, ShareCard } from './ShareCard';
+import { ClipCard, hostOf } from './ClipCard';
 
 const chat: ChatDetail['chat'] = {
   id: 'c1',
@@ -30,9 +30,9 @@ const item: ChatDetail['item'] = {
   preview: null,
 };
 
-describe('ShareCard', () => {
+describe('ClipCard', () => {
   it('links the canonical URL with host, platform icon and title', () => {
-    const html = renderToStaticMarkup(<ShareCard chat={chat} item={item} />);
+    const html = renderToStaticMarkup(<ClipCard chat={chat} item={item} />);
     expect(html).toContain('href="https://www.instagram.com/reel/abc/"');
     expect(html).toContain('instagram.com');
     expect(html).toContain('A reel');
@@ -41,7 +41,7 @@ describe('ShareCard', () => {
   });
   it('renders nothing for typed text without a URL', () => {
     const html = renderToStaticMarkup(
-      <ShareCard
+      <ClipCard
         chat={{ ...chat, platform: 'text', sourceUrl: null }}
         item={{ ...item, canonicalUrl: null, sourceUrl: null }}
       />,
@@ -50,7 +50,7 @@ describe('ShareCard', () => {
   });
   it('never puts the token or the media URL in the markup before the image is fetched', () => {
     const html = renderToStaticMarkup(
-      <ShareCard
+      <ClipCard
         chat={chat}
         item={{ ...item, preview: { mediaId: 'm1', kind: 'frame', width: 720, height: 1280 } }}
       />,
