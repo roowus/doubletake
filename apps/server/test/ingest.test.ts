@@ -31,6 +31,34 @@ describe('ingest', () => {
     ]);
   });
 
+  it('records a brain pin from the sharer instead of the mode binding', () => {
+    const out = ingest(
+      {
+        url: 'https://example.com/pinned-article',
+        channel: 'compose',
+        focus: 'whole',
+        modeHint: 'quick',
+        adapter: 'other-brain',
+        model: 'big-model',
+      },
+      deps,
+    );
+    expect(out.run.adapter).toBe('other-brain');
+    expect(out.run.model).toBe('big-model');
+    expect(out.run.pinned).toBe(true);
+    const plain = ingest(
+      {
+        url: 'https://example.com/unpinned',
+        channel: 'compose',
+        focus: 'whole',
+        modeHint: 'quick',
+      },
+      deps,
+    );
+    expect(plain.run.adapter).toBe('fake');
+    expect(plain.run.pinned).toBe(false);
+  });
+
   it('pulls the URL out of shared free text', () => {
     const out = ingest(
       {

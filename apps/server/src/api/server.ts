@@ -219,6 +219,8 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
   // ---- ingest ----
   app.post('/api/ingest', async (req, reply) => {
     const body = IngestRequest.parse(req.body);
+    if (body.adapter && !worker.brains.all().some((b) => b.id === body.adapter))
+      return reply.code(400).send({ error: `unknown adapter "${body.adapter}"` });
     const out = ingest(body, { repo, adapterFor: (m) => worker.brains.forMode(m) });
     worker.kick();
     return reply.code(202).send({

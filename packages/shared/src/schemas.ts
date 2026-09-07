@@ -150,7 +150,14 @@ export const IngestRequest = z
      * ingest with the same key returns the first item/chat/run instead of creating anything.
      */
     clientId: z.string().min(8).max(80).optional(),
+    /**
+     * Pin the run to one configured brain (optionally a model on it) instead of the mode's
+     * default binding; same semantics as `POST /api/chats/:id/research`.
+     */
+    adapter: z.string().min(1).max(80).optional(),
+    model: z.string().min(1).max(200).optional(),
   })
+  .refine((r) => !r.model || r.adapter, { message: 'model needs an adapter' })
   .refine((r) => r.url || (r.text && r.text.trim().length > 0), {
     message: 'url or text is required',
   });

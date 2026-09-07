@@ -24,6 +24,13 @@ function pickAdapter(deps: IngestDeps): AdapterPick {
     : () => ({ adapter: { id: deps.adapterId }, model: null });
 }
 
+/** Adapter/model/pinned fields for a new run: the sharer's pin wins over the mode binding. */
+function runBinding(req: Pick<IngestRequest, 'adapter' | 'model'>, deps: IngestDeps, mode: Mode) {
+  if (req.adapter) return { adapter: req.adapter, model: req.model ?? null, pinned: true };
+  const bound = pickAdapter(deps)(mode);
+  return { adapter: bound.adapter.id, model: bound.model, pinned: false };
+}
+
 const DEDUPE_HOURS = 24;
 
 /**
@@ -70,14 +77,12 @@ export function ingest(req: IngestRequest, deps: IngestDeps): IngestOutcome {
           repo.addMessage({ chatId: chat.id, role: 'user', kind: 'question', content: req.note });
         }
         const mode = forcedMode ?? (dup.modeEffective as Mode | null) ?? 'standard';
-        const bound = pickAdapter(deps)(mode);
         const run = repo.createRun({
           itemId: dup.id,
           chatId: chat.id,
           kind: 'research',
           mode,
-          adapter: bound.adapter.id,
-          model: bound.model,
+          ...runBinding(req, deps, mode),
         });
         repo.updateItem(dup.id, {
           status: 'new',
@@ -95,14 +100,12 @@ export function ingest(req: IngestRequest, deps: IngestDeps): IngestOutcome {
   // Placeholder until the worker classifies; forced modes are final. The worker rebinds the
   // adapter if classification lands on a mode with a different binding.
   const mode = forcedMode ?? 'standard';
-  const bound = pickAdapter(deps)(mode);
   const run = repo.createRun({
     itemId: item.id,
     chatId: chat.id,
     kind: 'research',
     mode,
-    adapter: bound.adapter.id,
-    model: bound.model,
+    ...runBinding(req, deps, mode),
   });
   if (req.note?.trim()) {
     repo.addMessage({ chatId: chat.id, role: 'user', kind: 'question', content: req.note });
@@ -131,14 +134,12 @@ function ingestLibraryQuestion(req: IngestRequest, deps: IngestDeps): IngestOutc
   };
   const { item, chat } = repo.createItemWithChat(normalised, 'text', null, titleFromText(question));
   const mode = forcedMode ?? 'quick';
-  const bound = pickAdapter(deps)(mode);
   const run = repo.createRun({
     itemId: item.id,
     chatId: chat.id,
     kind: 'research',
     mode,
-    adapter: bound.adapter.id,
-    model: bound.model,
+    ...runBinding(req, deps, mode),
   });
   repo.addMessage({ chatId: chat.id, role: 'user', kind: 'question', content: question });
   return { item, chat, run, deduplicated: false };
@@ -158,6 +159,8 @@ export interface UploadRequest {
   channel: IngestRequest['channel'];
   modeHint?: IngestRequest['modeHint'];
   clientId?: string;
+  adapter?: string;
+  model?: string;
 }
 
 /**
@@ -197,14 +200,12 @@ export function ingestUpload(
     source: 'upload',
   });
   const mode = forcedMode ?? 'standard';
-  const bound = pickAdapter(deps)(mode);
   const run = repo.createRun({
     itemId: item.id,
     chatId: chat.id,
     kind: 'research',
     mode,
-    adapter: bound.adapter.id,
-    model: bound.model,
+    ...runBinding(req, deps, mode),
   });
   if (req.note?.trim()) {
     repo.addMessage({ chatId: chat.id, role: 'user', kind: 'question', content: req.note });
