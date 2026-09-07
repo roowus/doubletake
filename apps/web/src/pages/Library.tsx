@@ -4,6 +4,8 @@ import { ApiError, api } from '../api';
 import { Confirm } from '../components/Confirm';
 import { Icon, type IconName } from '../components/Icon';
 import { Menu } from '../components/Menu';
+import { ListSkeleton } from '../components/Skeleton';
+import { toast } from '../components/Toast';
 import { useLive } from '../live';
 import { Link } from '../router';
 
@@ -34,7 +36,6 @@ export function Library() {
   const [query, setQuery] = useState('');
   const [preview, setPreview] = useState<number | null>(null);
   const [toDelete, setToDelete] = useState<CollectionDto | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
 
   const load = () => {
     api
@@ -83,7 +84,7 @@ export function Library() {
     try {
       if (c.shareUrl) {
         await api.unshareCollection(c.id);
-        setNotice(`"${c.name}" is private again.`);
+        toast(`"${c.name}" is private again`);
       } else {
         const r = await api.shareCollection(c.id);
         let copied = false;
@@ -91,9 +92,9 @@ export function Library() {
           await navigator.clipboard.writeText(r.shareUrl);
           copied = true;
         } catch {
-          // clipboard needs a secure context; the link is shown in the notice anyway
+          // clipboard needs a secure context; the link is shown in the toast anyway
         }
-        setNotice(`${copied ? 'Link copied: ' : 'Read-only link: '}${r.shareUrl}`);
+        toast(copied ? 'Link copied' : 'Read-only link', r.shareUrl);
       }
       load();
     } catch (ex) {
@@ -222,7 +223,9 @@ export function Library() {
         <h2 id="lib-collections" className="section-title">
           Collections
         </h2>
-        {cols && yours.length === 0 && categories.length === 0 ? (
+        {!cols ? (
+          <ListSkeleton rows={3} label="Loading collections" />
+        ) : yours.length === 0 && categories.length === 0 ? (
           <p className="muted">
             Collections group items. Categories appear here as items are researched; make your own
             list or saved search with <strong>New collection</strong>.
@@ -280,11 +283,6 @@ export function Library() {
               </li>
             ))}
           </ul>
-        )}
-        {notice && (
-          <p className="small muted truncate" role="status">
-            {notice}
-          </p>
         )}
       </section>
 

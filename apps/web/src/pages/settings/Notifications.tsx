@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, type QuietHours, type Status } from '../../api';
+import { toast } from '../../components/Toast';
 import {
   disableNativePush,
   enableNativePush,
@@ -58,13 +59,13 @@ export function NotificationsSettings() {
           throw new Error('The server has no FCM credentials (set FCM_SERVICE_ACCOUNT_PATH).');
         await enableNativePush();
         setPush('on');
-        setPushMsg('Notifications enabled on this device.');
+        toast('Notifications enabled on this device');
       } else {
         const key = status?.push.vapidPublicKey;
         if (!key) throw new Error('The server has no Web Push key (is webpush configured?).');
         await enablePush(key);
         setPush('on');
-        setPushMsg('Notifications enabled on this device.');
+        toast('Notifications enabled on this device');
       }
     } catch (e) {
       setPush(was === 'on' ? 'on' : 'off');
@@ -113,17 +114,17 @@ export function NotificationsSettings() {
               api
                 .pushTest()
                 .then((r) =>
-                  setPushMsg(
-                    r.sent > 0
-                      ? 'Test sent.'
-                      : `Nothing sent (gone ${r.gone}, failed ${r.failed}). Turn push off and on again.`,
-                  ),
+                  r.sent > 0
+                    ? toast('Test sent')
+                    : setPushMsg(
+                        `Nothing sent (gone ${r.gone}, failed ${r.failed}). Turn push off and on again.`,
+                      ),
                 )
                 .catch((e) => setPushMsg(errText(e)))
             }
           />
         )}
-        <Note>{pushMsg}</Note>
+        <Note error>{pushMsg}</Note>
       </Group>
 
       {status && (status.push.kinds.length > 0 || status.push.channels.length > 0) && (
@@ -143,11 +144,9 @@ export function NotificationsSettings() {
                   api
                     .pushChannelsTest()
                     .then((r) =>
-                      setPushMsg(
-                        r.failed === 0
-                          ? `Sent to ${r.sent} channel${r.sent === 1 ? '' : 's'}.`
-                          : `${r.failed} channel(s) failed. See the server log.`,
-                      ),
+                      r.failed === 0
+                        ? toast(`Sent to ${r.sent} channel${r.sent === 1 ? '' : 's'}`)
+                        : setPushMsg(`${r.failed} channel(s) failed. See the server log.`),
                     )
                     .catch((e) => setPushMsg(errText(e)))
                 }
@@ -219,7 +218,7 @@ export function NotificationsSettings() {
                   .then((r) => {
                     setQuiet(r.quietHours);
                     setDirty(false);
-                    setQuietMsg('Saved.');
+                    toast('Quiet hours saved');
                     void load();
                   })
                   .catch((e) => setQuietMsg(errText(e)))
@@ -233,14 +232,14 @@ export function NotificationsSettings() {
                 api
                   .flushDigest()
                   .then((r) => {
-                    setQuietMsg(`Digest sent (${r.sent}).`);
+                    toast(`Digest sent to ${r.sent} device${r.sent === 1 ? '' : 's'}`);
                     void load();
                   })
                   .catch((e) => setQuietMsg(errText(e)))
               }
             />
           )}
-          <Note>{quietMsg}</Note>
+          <Note error>{quietMsg}</Note>
         </Group>
       )}
     </SettingsPage>

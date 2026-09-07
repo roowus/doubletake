@@ -78,22 +78,42 @@ export function Welcome({ onAuthed }: { onAuthed: () => void }) {
   }
 
   return (
-    <div className="center">
-      <form className="card welcome" onSubmit={submit} aria-busy={busy}>
+    <div className="welcome-layout">
+      <aside className="welcome-brand">
         <div className="hero">
           <span className="brand-mark">
             <Icon name="doubletake" size={30} />
           </span>
-          <h1>Doubletake</h1>
-          <p className="muted">Share it now, get a researched answer later.</p>
+          <h1 className="welcome-name">Doubletake</h1>
+          <p className="tagline">A field notebook that fills itself in.</p>
         </div>
-        {hasOwner === false && (
-          <div className="banner">
-            <Icon name="info" />
+        <ol className="welcome-steps">
+          <li className="welcome-step">
+            <strong className="welcome-step-title">Share</strong>
+            <span>Send a post, a link or a photo from your phone the moment you see it.</span>
+          </li>
+          <li className="welcome-step">
+            <strong className="welcome-step-title">Walk away</strong>
             <span>
-              First run: choose the owner password. You will use it to sign in new devices.
+              Your own machine reads it, checks the claims and pulls out the useful things.
             </span>
-          </div>
+          </li>
+          <li className="welcome-step">
+            <strong className="welcome-step-title">Come back</strong>
+            <span>
+              A well-set page is waiting: the answer, its sources and everything it found.
+            </span>
+          </li>
+        </ol>
+      </aside>
+      <form className="card welcome" onSubmit={submit} aria-busy={busy}>
+        <h2 className="welcome-title">
+          {hasOwner === false ? 'Set up this notebook' : 'Open your notebook'}
+        </h2>
+        {hasOwner === false && (
+          <p className="muted welcome-first">
+            First run. Choose the owner password; you will use it to sign in new devices.
+          </p>
         )}
         {hasOwner && (
           <div className="tabs" role="tablist" aria-label="Sign-in method">

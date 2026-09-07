@@ -4,6 +4,7 @@ import 'leaflet/dist/leaflet.css';
 import { useEffect, useRef, useState } from 'react';
 import { ApiError, api } from '../api';
 import { Icon } from '../components/Icon';
+import { toast } from '../components/Toast';
 import { useLive } from '../live';
 import { Link, navigate } from '../router';
 import { mapsUrl } from './Entities';
@@ -91,10 +92,10 @@ export function MapView() {
       if (!h.geo) continue;
       const p: L.LatLngExpression = [h.geo.lat, h.geo.lon];
       pts.push(p);
+      // Colour comes from CSS (.map-pin uses the accent token) so markers follow the theme.
       L.circleMarker(p, {
         radius: 8,
-        color: '#7c9cff',
-        fillColor: '#7c9cff',
+        className: 'map-pin',
         fillOpacity: 0.85,
         weight: 2,
       })
@@ -112,7 +113,11 @@ export function MapView() {
     api
       .geocodePlaces()
       .then((r) => {
-        setErr(r.unknown ? `${r.located} located, ${r.unknown} still unknown` : null);
+        setErr(null);
+        toast(
+          `${r.located} place${r.located === 1 ? '' : 's'} located`,
+          r.unknown ? `${r.unknown} still without coordinates` : undefined,
+        );
         return load();
       })
       .catch((e) => setErr(e instanceof ApiError ? e.message : String(e)))
@@ -140,8 +145,8 @@ export function MapView() {
         )}
       </div>
       {err && (
-        <div className="banner" role="status">
-          <Icon name="info" />
+        <div className="banner error" role="alert">
+          <Icon name="alert" />
           <span>{err}</span>
         </div>
       )}
@@ -149,14 +154,15 @@ export function MapView() {
       {hits && hits.length === 0 && (
         <div className="card quiet empty">
           <Icon name="map-pin" className="icon-lg" />
-          <p>No places yet. Places mentioned in answers show up here.</p>
+          <p>No places yet. Share a post about somewhere and the answer pins it here.</p>
         </div>
       )}
       {hits && hits.length > 0 && located.length === 0 && (
-        <div className="card quiet">
+        <div className="card quiet empty">
+          <Icon name="map-pin" className="icon-lg" />
           <p>
-            {hits.length} places saved but none located yet. Enable the geocoder (GEOCODER in .env)
-            or use “Locate”.
+            {hits.length} place{hits.length === 1 ? '' : 's'} saved, none on the map yet. Press
+            Locate above, or set GEOCODER in .env so new ones are placed automatically.
           </p>
         </div>
       )}

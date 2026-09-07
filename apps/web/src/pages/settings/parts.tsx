@@ -183,11 +183,14 @@ export function Choice<T extends string>({
   );
 }
 
-/** Inline status line under a group's actions (`role="status"` so screen readers hear it). */
+/**
+ * Inline result line under a group's actions: `role="alert"` for errors so they are announced
+ * at once, `role="status"` for informational results. Transient successes use `toast()` instead.
+ */
 export function Note({ children, error = false }: { children: ReactNode; error?: boolean }) {
   if (!children) return null;
   return (
-    <p className={`msg-inline${error ? ' err' : ''}`} role="status">
+    <p className={`msg-inline${error ? ' err' : ''}`} role={error ? 'alert' : 'status'}>
       {children}
     </p>
   );

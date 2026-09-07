@@ -266,8 +266,14 @@ properties and small utility classes (`.page`, `.card`, `.stack`, `.row`, `.chip
 `.banner`, `.srow` settings rows), no inline `style=` in components; icons are an inline SVG
 set (`components/Icon.tsx`, `platformIcon()` for platform marks), never emoji or arrow glyphs;
 every icon-only control has an `aria-label`; form inputs have visible labels and inline help;
-errors render as `.banner.error` with `role="alert"` and keep the user's input; chips never
-wrap mid-word and use `aria-pressed` / `aria-current` for state; motion respects
+feedback follows one rule: transient successes ("Link copied", "3 places located") are
+toasts (`components/Toast.tsx`, Base UI `Toast` behind a module-level `toast(title, detail?)`,
+the viewport mounted once in the shell, dismissable, auto-hiding), while errors stay **inline
+where the action happened** as `.banner.error` or the settings `Note` with `role="alert"` and
+keep the user's input; loading states are `components/Skeleton.tsx` (`ListSkeleton`, shimmering
+rows with an `aria-busy` region and a visually hidden label, used by the inbox, library, entity
+and chat lists) rather than spinners; empty states are one line that says what to do next; chips
+never wrap mid-word and use `aria-pressed` / `aria-current` for state; motion respects
 `prefers-reduced-motion`. Fonts are bundled, never fetched from a CDN: `src/fonts.css` declares
 the latin subsets of Instrument Sans, Newsreader and JetBrains Mono from `@fontsource-variable`
 and the service worker precaches the `woff2` files with the rest of the shell, so an installed
@@ -302,9 +308,12 @@ name, icon links to the web page and to Maps, attributes as a definition list an
 linking back to the chat it came from; places, recipes, products, tools, tips, media, people,
 events) and to the **map** `/map` (Leaflet, lazy-loaded as its own chunk so it never sits in
 the main bundle, over OpenStreetMap tiles fetched by the browser;
-one circle marker per located place, popup linking to its chat, a collapsible list of
-unlocated places with a Maps search link and a **Locate N more** backfill button,
-[ADR 0022](adr/0022-map-view-place-geocoding.md)). The chat view is a **notebook page** about one shared thing, not a chat
+one circle marker per located place drawn in the accent colour through a CSS class, popup
+linking to its chat, a collapsible list of unlocated places with a Maps search link and a
+**Locate N more** backfill button, [ADR 0022](adr/0022-map-view-place-geocoding.md)); Leaflet's
+own stylesheet arrives with the lazy chunk, so the theme overrides for controls, popups and
+attribution are scoped under `.map` to win, and the ink theme darkens the OpenStreetMap tiles
+with a CSS filter (`--map-filter`, `--map-sea`) instead of a second tile provider. The chat view is a **notebook page** about one shared thing, not a chat
 transcript (`pages/Chat.tsx`, split into `components/ChatHeader.tsx`, `ClipCard.tsx`,
 `Answer.tsx`, `AnswerTabs.tsx` and `FollowUp.tsx`): nothing sits in a bubble. The header is
 back, the status badge and an overflow menu (Tags…, Collections…, **Research again, deeper**),
@@ -383,8 +392,10 @@ them and `[data-motion="reduce"]` disables transitions like `prefers-reduced-mot
 the `theme-color` meta so the browser chrome follows a forced theme. The service worker
 is a custom `src/sw.ts` (vite-plugin-pwa `injectManifest`): Workbox precache for the shell,
 never the API, plus `push` (shows the notification) and `notificationclick` (focuses an open
-window and navigates to `/chat/<id>`, else opens one) handlers. First run asks for the owner password; other devices redeem a pairing
-code shown as a QR. Android wraps this in Capacitor and adds the native share activity and FCM.
+window and navigates to `/chat/<id>`, else opens one) handlers. First run (`pages/Welcome.tsx`) asks for the owner password; other devices redeem a
+pairing code shown as a QR. The page is two columns from 900 px (the brand statement and the
+three-step "how it works" list set against the margin rail, the form beside it) and one column
+on phones. Android wraps this in Capacitor and adds the native share activity and FCM.
 Desktop uses the installed PWA over Tailscale.
 
 ### API surface (M1 + M2 + M4 + M6)

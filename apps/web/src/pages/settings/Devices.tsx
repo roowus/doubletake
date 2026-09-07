@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { api, type Device, setToken } from '../../api';
 import { Confirm } from '../../components/Confirm';
 import { Icon } from '../../components/Icon';
+import { toast } from '../../components/Toast';
 import { seen } from '../../format';
 import { apiBase, isNative } from '../../native';
 import { navigate } from '../../router';
@@ -114,7 +115,7 @@ export function DevicesSettings() {
           </div>
         ))}
       </Group>
-      <Note>{msg}</Note>
+      <Note error>{msg}</Note>
 
       <Confirm
         open={revoke !== null}
@@ -126,7 +127,10 @@ export function DevicesSettings() {
           revoke
             ? api
                 .revokeDevice(revoke.id)
-                .then(load)
+                .then(() => {
+                  toast(`${revoke.name} revoked`);
+                  load();
+                })
                 .catch((e) => setMsg(errText(e)))
             : undefined
         }

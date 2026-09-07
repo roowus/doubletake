@@ -2,6 +2,7 @@ import type { CollectionDto, EntityHit, EntityKind } from '@doubletake/shared';
 import { Fragment, useEffect, useState } from 'react';
 import { ApiError, api } from '../api';
 import { Icon, platformIcon } from '../components/Icon';
+import { ListSkeleton } from '../components/Skeleton';
 import { ago } from '../format';
 import { useLive } from '../live';
 import { Link } from '../router';
@@ -10,29 +11,49 @@ import { Link } from '../router';
 const KINDS: Record<EntityKind, { title: string; empty: string; attrs: string[] }> = {
   place: {
     title: 'Places to visit',
-    empty: 'No places yet.',
+    empty: 'No places yet. Research a post about somewhere and it lands here.',
     attrs: ['city', 'country', 'address', 'type', 'price'],
   },
   recipe: {
     title: 'Recipes',
-    empty: 'No recipes yet.',
+    empty: 'No recipes yet. Share a cooking video or a recipe page to start the list.',
     attrs: ['cuisine', 'time', 'servings', 'ingredients'],
   },
   product: {
     title: 'Products mentioned',
-    empty: 'No products yet.',
+    empty: 'No products yet. Anything an answer names and prices shows up here.',
     attrs: ['brand', 'price', 'category'],
   },
   tool: {
     title: 'Tools',
-    empty: 'No tools yet.',
+    empty: 'No tools yet. Share a repo, an app or a how-to and the tools it uses appear here.',
     attrs: ['install', 'language', 'platform', 'license'],
   },
-  tip: { title: 'Tips', empty: 'No tips yet.', attrs: ['topic', 'summary'] },
-  media: { title: 'Media', empty: 'No media yet.', attrs: ['creator', 'type', 'year'] },
-  person: { title: 'People', empty: 'No people yet.', attrs: ['role', 'handle', 'known_for'] },
-  event: { title: 'Events', empty: 'No events yet.', attrs: ['date', 'location', 'price'] },
-  other: { title: 'Other things', empty: 'Nothing here yet.', attrs: [] },
+  tip: {
+    title: 'Tips',
+    empty: 'No tips yet. Practical advice pulled from answers collects here.',
+    attrs: ['topic', 'summary'],
+  },
+  media: {
+    title: 'Media',
+    empty: 'No media yet. Books, films, podcasts and albums that answers mention go here.',
+    attrs: ['creator', 'type', 'year'],
+  },
+  person: {
+    title: 'People',
+    empty: 'No people yet. Creators and names worth remembering collect here.',
+    attrs: ['role', 'handle', 'known_for'],
+  },
+  event: {
+    title: 'Events',
+    empty: 'No events yet. Dated things from your answers collect here.',
+    attrs: ['date', 'location', 'price'],
+  },
+  other: {
+    title: 'Other things',
+    empty: 'Nothing here yet. Things that fit no other kind land here.',
+    attrs: [],
+  },
 };
 
 export const ENTITY_KINDS = Object.keys(KINDS) as EntityKind[];
@@ -181,11 +202,7 @@ export function Entities({ kind }: { kind: EntityKind }) {
           <span>{err}</span>
         </div>
       )}
-      {!hits && !err && (
-        <div className="muted small" aria-busy="true">
-          Loading…
-        </div>
-      )}
+      {!hits && !err && <ListSkeleton rows={5} label={`Loading ${spec.title.toLowerCase()}`} />}
       {hits && shown.length === 0 && (
         <div className="card quiet empty">
           <Icon name="inbox" className="icon-lg" />

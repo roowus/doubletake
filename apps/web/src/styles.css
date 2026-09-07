@@ -70,6 +70,7 @@
   --space-2: 8px;
   --space-3: 12px;
   --space-4: 16px;
+  --space-5: 20px;
   --space-6: 24px;
   --space-8: 32px;
   --space-12: 48px;
@@ -129,6 +130,8 @@
     --chart-8: #a3c46a;
     --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.4);
     --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.5);
+    --map-filter: invert(1) hue-rotate(180deg) brightness(0.8) contrast(0.9) saturate(0.6);
+    --map-sea: #1f3037;
   }
 }
 :root[data-theme="ink"] {
@@ -162,6 +165,8 @@
   --chart-8: #a3c46a;
   --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.4);
   --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.5);
+  --map-filter: invert(1) hue-rotate(180deg) brightness(0.8) contrast(0.9) saturate(0.6);
+  --map-sea: #1f3037;
 }
 
 /* Prose size (Settings → Appearance). */
@@ -1845,6 +1850,36 @@ a.clip:hover {
 .skeleton .sk.w100 {
   width: 100%;
 }
+.list-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+}
+.list-skeleton-row {
+  flex-direction: row;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-2);
+  border-bottom: 1px solid var(--border);
+}
+.list-skeleton-row:last-child {
+  border-bottom: 0;
+}
+.list-skeleton-row .sk.lead {
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-sm);
+}
+.list-skeleton-row .sk-lines {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6em;
+  min-width: 0;
+  padding-top: 0.3em;
+}
 @keyframes shimmer {
   to {
     background-position: -200% 0;
@@ -2487,8 +2522,28 @@ a.clip:hover {
   border-radius: var(--radius-sm);
   margin: 0;
 }
+/* A card that opens: summary is one row (icon, label, chevron), the marker is ours. */
+details.card > summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  list-style: none;
+  cursor: pointer;
+  font-weight: 500;
+  min-height: 44px;
+}
+details.card > summary::-webkit-details-marker {
+  display: none;
+}
 details.card > summary svg.chev {
+  margin-left: auto;
   transition: transform var(--dur) var(--ease);
+}
+details.card[open] > summary .chev {
+  transform: rotate(180deg);
+}
+details.card > summary + .md {
+  margin-top: var(--space-3);
 }
 .disclosure {
   width: 100%;
@@ -2612,13 +2667,57 @@ details.card > summary svg.chev {
   border: 1px solid var(--border);
   background: var(--surface);
 }
-.leaflet-container {
+/* Leaflet's own stylesheet ships inside the lazy map chunk, so it loads after this one;
+   everything here is scoped under .map to out-rank it. */
+.map.leaflet-container {
   font: inherit;
-  /* OSM ocean colour, so the band past the Mercator poles (no tiles) looks like sea. */
-  background: #aad3df;
+  /* OSM ocean colour, so the band past the Mercator poles (no tiles) looks like sea; on ink
+     it is the same colour the tile filter turns the sea into. */
+  background: var(--map-sea, #aad3df);
 }
-.leaflet-popup-content a[href] {
-  color: #3a55cc;
+.map.leaflet-container .leaflet-control-attribution {
+  background: color-mix(in srgb, var(--surface) 85%, transparent);
+  color: var(--text-muted);
+  font-size: 10px;
+}
+.map .leaflet-control-attribution a {
+  color: var(--accent-text);
+}
+/* Ink: the OSM raster tiles are light, so the tile pane is inverted and desaturated to sit on
+   the dark surface; markers and popups live in other panes and keep their real colours. */
+.map .leaflet-tile-pane {
+  filter: var(--map-filter, none);
+}
+.map-pin {
+  stroke: var(--accent);
+  fill: var(--accent);
+}
+.map .leaflet-popup-content-wrapper,
+.map .leaflet-popup-tip {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-md);
+}
+.map .leaflet-popup-content a[href] {
+  color: var(--accent-text);
+}
+.map .leaflet-control-zoom-in,
+.map .leaflet-control-zoom-out {
+  background-color: var(--surface);
+  color: var(--text);
+  border-bottom-color: var(--border);
+}
+.map .leaflet-control-zoom-in:hover,
+.map .leaflet-control-zoom-out:hover {
+  background-color: var(--surface-2);
+}
+.map .leaflet-bar .leaflet-disabled {
+  background-color: var(--surface-2);
+  color: var(--text-muted);
+}
+.map .leaflet-bar {
+  border-color: var(--border);
+  box-shadow: var(--shadow-sm);
 }
 
 /* ---- Settings ------------------------------------------------------------ */
@@ -2976,31 +3075,120 @@ button.srow:hover {
 }
 
 /* ---- Welcome -------------------------------------------------------------- */
+/* Brand statement + form. One column on phones, two from 900 px with the statement
+   sitting on the paper and only the form on a card. */
+.welcome-layout {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  padding: calc(var(--space-8) + var(--inset-top)) var(--space-4)
+    calc(var(--space-8) + var(--inset-bottom));
+  max-width: 480px;
+  margin: 0 auto;
+}
+.welcome-brand {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+.welcome-brand .hero {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.welcome-brand .hero .brand-mark {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-1);
+}
+.welcome-name {
+  margin: 0;
+  font-family: var(--font-prose);
+  font-size: var(--text-3xl);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.welcome-brand .tagline {
+  margin: 0;
+  font-family: var(--font-prose);
+  font-size: var(--text-lg);
+  font-style: italic;
+  color: var(--text-muted);
+}
+.welcome-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 var(--space-4);
+  border-left: 3px solid var(--rail);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  counter-reset: step;
+}
+.welcome-step {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+.welcome-step-title {
+  color: var(--text);
+  font-weight: 600;
+  font-size: var(--text-md);
+}
+.welcome-step-title::before {
+  counter-increment: step;
+  content: counter(step) " ";
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--accent);
+  margin-right: var(--space-1);
+}
 .welcome {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
-  padding: var(--space-6) var(--space-4);
+  padding: var(--space-5) var(--space-4);
 }
-.welcome .hero {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  gap: var(--space-2);
+.welcome-title {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: var(--text-lg);
+  font-weight: 600;
 }
-.welcome .hero .brand-mark {
-  width: 56px;
-  height: 56px;
-  border-radius: var(--radius-lg);
-  margin-bottom: var(--space-1);
+.welcome-first {
+  margin: calc(-1 * var(--space-2)) 0 0;
+  font-size: var(--text-sm);
 }
 @media (min-width: 768px) {
   .card {
     padding: var(--space-6);
   }
   .welcome {
-    padding: var(--space-8) var(--space-6);
+    padding: var(--space-6);
+  }
+}
+@media (min-width: 900px) {
+  .welcome-layout {
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: calc(var(--space-8) * 2);
+    max-width: 960px;
+  }
+  .welcome-brand {
+    flex: 1 1 0;
+    max-width: 420px;
+  }
+  .welcome-brand .hero .brand-mark {
+    width: 56px;
+    height: 56px;
+  }
+  .welcome {
+    flex: 0 0 400px;
   }
 }
 
@@ -3103,4 +3291,71 @@ button.srow:hover {
   font-size: var(--text-sm);
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
+}
+
+/* Toasts: transient confirmations above the tab bar; errors never come here. */
+.toasts {
+  position: fixed;
+  z-index: 50;
+  left: 0;
+  right: 0;
+  bottom: calc(var(--tabbar-h) + var(--inset-bottom) + var(--space-3));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-4);
+  pointer-events: none;
+}
+.toast {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: min(100%, 420px);
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4);
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  font-size: var(--text-sm);
+  transform: translateY(0);
+  opacity: 1;
+  transition:
+    transform var(--dur) var(--ease),
+    opacity var(--dur) var(--ease);
+}
+.toast-icon {
+  flex: 0 0 auto;
+  color: var(--accent);
+}
+.toast[data-starting-style],
+.toast[data-ending-style] {
+  transform: translateY(12px);
+  opacity: 0;
+}
+.toast-body {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.toast-title {
+  margin: 0;
+  font-weight: 500;
+}
+.toast-desc {
+  margin: 2px 0 0;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+@media (min-width: 900px) {
+  .toasts {
+    bottom: var(--space-6);
+    left: auto;
+    right: var(--space-6);
+    align-items: flex-end;
+    padding: 0;
+  }
 }
