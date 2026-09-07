@@ -264,6 +264,38 @@ export const EntityHit = Entity.extend({
 });
 export type EntityHit = z.infer<typeof EntityHit>;
 
+/** What a saved-list entry is: any entity kind, or a free-form `task` (ADR 0031). */
+export const TodoKind = z.enum([...EntityKind.options, 'task']);
+export type TodoKind = z.infer<typeof TodoKind>;
+
+/**
+ * One entry of the owner's saved list. Entities are replaced on every re-run, so an entry
+ * snapshots the thing it came from (title, url, attributes) instead of pointing at an entity id.
+ */
+export const TodoDto = z.object({
+  id: z.string(),
+  kind: TodoKind,
+  title: z.string(),
+  url: z.string().nullable(),
+  note: z.string().nullable(),
+  attributes: z.record(z.string(), z.unknown()),
+  chatId: z.string().nullable(),
+  chatTitle: z.string().nullable(),
+  doneAt: z.string().nullable(),
+  createdAt: z.string(),
+});
+export type TodoDto = z.infer<typeof TodoDto>;
+
+export const TodoCreate = z.object({
+  kind: TodoKind,
+  title: z.string().trim().min(1).max(300),
+  url: z.string().url().nullable().optional(),
+  note: z.string().max(2000).nullable().optional(),
+  attributes: z.record(z.string(), z.unknown()).optional(),
+  chatId: z.string().nullable().optional(),
+});
+export type TodoCreate = z.infer<typeof TodoCreate>;
+
 export const TagDto = z.object({
   name: z.string(),
   kind: z.enum(['auto', 'manual']),

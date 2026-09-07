@@ -66,7 +66,7 @@ function attrText(v: unknown): string {
 }
 
 /** Places get a Maps link even when the model gave no URL. */
-export function mapsUrl(hit: EntityHit): string | null {
+export function mapsUrl(hit: Pick<EntityHit, 'kind' | 'name' | 'attributes'>): string | null {
   if (hit.kind !== 'place') return null;
   const a = hit.attributes;
   const explicit = a.maps_url ?? a.map_url ?? a.google_maps;

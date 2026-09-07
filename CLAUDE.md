@@ -29,8 +29,9 @@ current by the rule below.
 
 - Domain nouns: `item` (one share), `chat` (its conversation), `run` (one brain execution),
   `extraction` (derived text), `brain` / `adapter`, `channel` (how it arrived), `mode`
-  (quick | standard | deep), `focus` (whole | comments | thread:<id>). Do not introduce
-  synonyms (`save`, `bookmark`, `job`, `session` for a run).
+  (quick | standard | deep), `focus` (whole | comments | thread:<id>), `todo` (one entry on
+  the owner's saved list, ADR 0031). Do not introduce synonyms (`save`, `bookmark`, `job`,
+  `session` for a run; `favourite`, `pin` for a todo).
 - Packages: `apps/server` (Fastify), `apps/web` (Vite PWA), `apps/mobile` (Capacitor),
   `packages/shared` (zod + types), `packages/brain-sdk` (adapter interface + contract tests),
   `workers/media` (Python, uv).

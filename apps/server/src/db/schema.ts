@@ -310,3 +310,20 @@ export const igEvents = sqliteTable(
   },
   (t) => [index('ig_events_item_idx').on(t.itemId)],
 );
+
+/** Saved list (ADR 0031): things the owner chose to keep from an answer, plus free-form tasks. */
+export const todos = sqliteTable(
+  'todos',
+  {
+    id: text('id').primaryKey(),
+    kind: text('kind').notNull(), // an entity kind, or `task` for a free-form to-do
+    title: text('title').notNull(),
+    url: text('url'),
+    note: text('note'),
+    attributes: text('attributes').notNull().default('{}'), // JSON snapshot of the entity's attributes
+    chatId: text('chat_id').references(() => chats.id, { onDelete: 'set null' }),
+    doneAt: text('done_at'),
+    createdAt: text('created_at').notNull(),
+  },
+  (t) => [index('todos_done_created_idx').on(t.doneAt, t.createdAt)],
+);

@@ -8,6 +8,8 @@ import type {
   Mode,
   RunEvent,
   TagDto,
+  TodoCreate,
+  TodoDto,
 } from '@doubletake/shared';
 import { apiBase, mirrorToken } from './native';
 
@@ -232,6 +234,13 @@ export const api = {
     call<{ collectionIds: string[] }>('GET', `/api/chats/${chatId}/collections`),
   entities: (kind: EntityKind, limit = 200) =>
     call<EntityHit[]>('GET', `/api/entities?kind=${kind}&limit=${limit}`),
+  // Saved list (ADR 0031)
+  todos: (done: 'open' | 'done' | 'all' = 'open') =>
+    call<TodoDto[]>('GET', done === 'open' ? '/api/todos' : `/api/todos?done=${done}`),
+  createTodo: (input: TodoCreate) => call<TodoDto>('POST', '/api/todos', input),
+  updateTodo: (id: string, patch: { done?: boolean; title?: string; note?: string | null }) =>
+    call<TodoDto>('POST', `/api/todos/${id}`, patch),
+  deleteTodo: (id: string) => call<void>('DELETE', `/api/todos/${id}`),
   /** Geocode every place without coordinates (409 when the server's geocoder is off). */
   geocodePlaces: () =>
     call<{ places: number; located: number; unknown: number; retried: number }>(

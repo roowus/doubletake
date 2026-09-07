@@ -1845,6 +1845,43 @@ a.clip:hover {
 .recs li + li {
   margin-top: 4px;
 }
+.recs li {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+.recs li > span {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Bookmark button on a Thing row or a recommendation: saves it to the To do list (ADR 0031). */
+.thing-save {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  min-height: 32px;
+  margin: -6px 0 -6px auto;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  flex: 0 0 auto;
+  transition:
+    color var(--dur) var(--ease),
+    background var(--dur) var(--ease);
+}
+.thing-save:hover,
+.thing-save:focus-visible {
+  color: var(--accent-text);
+  background: var(--surface-2);
+}
+.thing .thing-save {
+  align-self: center;
+}
 
 /* Skeleton lines while the answer is being written. */
 .skeleton {
@@ -3387,4 +3424,159 @@ input.switch {
     align-items: flex-end;
     padding: 0;
   }
+}
+
+/* ---- To do (ADR 0031) ------------------------------------------------------ */
+/* Library entry: one wide row above the Things tiles, because the list is the owner's own. */
+.todo-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 64px;
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-md);
+  color: var(--text);
+  transition:
+    border-color var(--dur) var(--ease),
+    background var(--dur) var(--ease);
+}
+.todo-row:hover {
+  text-decoration: none;
+  background: var(--surface-2);
+}
+.todo-row > svg:first-child {
+  color: var(--accent-text);
+  flex: 0 0 auto;
+}
+.todo-row-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.todo-row-title {
+  font-weight: 600;
+}
+.todo-row-hint {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.todos {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+.todo {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-1);
+  border-bottom: 1px solid var(--border);
+}
+.todo:last-child {
+  border-bottom: 0;
+}
+.todo-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--tap);
+  min-height: var(--tap);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  flex: 0 0 auto;
+}
+.todo-check:hover,
+.todo-check:focus-visible {
+  color: var(--accent-text);
+}
+.todo.done .todo-check {
+  color: var(--accent-text);
+}
+.todo-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 0;
+}
+.todo-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-weight: 500;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.todo-title a {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-color: var(--border-strong);
+}
+.todo-kind {
+  color: var(--accent-2);
+  flex: 0 0 auto;
+}
+.todo.done .todo-title {
+  color: var(--text-muted);
+  text-decoration: line-through;
+  text-decoration-color: var(--border-strong);
+}
+.todo-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+.todo-note {
+  font-family: var(--font-prose);
+  font-style: italic;
+  color: var(--text);
+}
+.todo.done .todo-note {
+  color: var(--text-muted);
+}
+.todo-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-3);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+.todo-foot a {
+  color: var(--text-muted);
+  max-width: 60%;
+}
+.todo-foot time {
+  margin-left: auto;
+  font-family: var(--font-mono);
+}
+.todo > .ghost.icon {
+  align-self: center;
+  color: var(--text-muted);
+}
+.fold {
+  justify-content: flex-start;
+  gap: var(--space-2);
+  padding-left: var(--space-2);
 }

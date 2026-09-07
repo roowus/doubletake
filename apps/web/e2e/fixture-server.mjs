@@ -329,6 +329,7 @@ const routes = [
   ],
   ['POST', /^\/api\/chats\/[^/]+\/read$/, () => ({ ok: true })],
   ['GET', /^\/api\/tags$/, () => tags],
+  ['GET', /^\/api\/todos$/, () => []],
   [
     'GET',
     /^\/api\/collections$/,

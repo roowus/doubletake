@@ -7,6 +7,7 @@ import type {
   MessageDto,
   PreviewDto,
   RunDto,
+  TodoDto,
 } from '@doubletake/shared';
 import type { ChatRow, ItemRow, MessageRow, Repo, RunRow } from '../db/repo.js';
 import { extractionText, parseExtraction } from '../extract/flatten.js';
@@ -156,5 +157,24 @@ export function toEntityHit(
     itemTitle: r.item.title ?? r.item.sourceUrl ?? 'Untitled',
     platform: r.item.platform as EntityHit['platform'],
     createdAt: r.item.createdAt,
+  };
+}
+
+/** One saved-list entry with the title of the chat it was saved from (ADR 0031). */
+export function toTodoDto(
+  row: ReturnType<Repo['listTodos']>[number]['todo'],
+  chatTitle: string | null | undefined,
+): TodoDto {
+  return {
+    id: row.id,
+    kind: row.kind as TodoDto['kind'],
+    title: row.title,
+    url: row.url,
+    note: row.note,
+    attributes: safeJson(row.attributes),
+    chatId: row.chatId,
+    chatTitle: chatTitle ?? null,
+    doneAt: row.doneAt,
+    createdAt: row.createdAt,
   };
 }

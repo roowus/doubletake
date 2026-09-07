@@ -41,8 +41,14 @@ function attrText(v: unknown): string {
   return String(v);
 }
 
-/** Entity cards grouped by kind, for the Things tab. */
-function Things({ entities }: { entities: Entity[] }) {
+/** Entity cards grouped by kind, for the Things tab. `onSave` adds a row to the saved list. */
+export function Things({
+  entities,
+  onSave,
+}: {
+  entities: Entity[];
+  onSave?: ((e: Entity) => void) | undefined;
+}) {
   if (entities.length === 0)
     return <p className="muted small empty-note">Nothing was extracted from this one.</p>;
   const groups = new Map<EntityKind, Entity[]>();
@@ -78,6 +84,17 @@ function Things({ entities }: { entities: Entity[] }) {
                         </span>
                       ))}
                     </span>
+                  )}
+                  {onSave && (
+                    <button
+                      type="button"
+                      className="thing-save"
+                      aria-label={`Save ${e.name} to your list`}
+                      title="Save to your list"
+                      onClick={() => onSave(e)}
+                    >
+                      <Icon name="bookmark" size={16} />
+                    </button>
                   )}
                 </li>
               );
@@ -199,6 +216,7 @@ export function AnswerTabs({
   events,
   onOpenRun,
   onCancel,
+  onSave,
 }: {
   claims: Answer['claims'];
   entities: Entity[];
@@ -207,6 +225,8 @@ export function AnswerTabs({
   events: Record<string, RunEvent[]>;
   onOpenRun: (runId: string) => void;
   onCancel: (runId: string) => void;
+  /** Save one extracted thing to the owner's list (ADR 0031). */
+  onSave?: (e: Entity) => void;
 }) {
   const live = runs.some((r) => ACTIVE.has(r.status));
   const [value, setValue] = useState<string>(live ? 'run' : 'claims');
@@ -232,7 +252,7 @@ export function AnswerTabs({
         <Claims claims={claims} />
       </Tabs.Panel>
       <Tabs.Panel className="apanel" value="things">
-        <Things entities={entities} />
+        <Things entities={entities} onSave={onSave} />
       </Tabs.Panel>
       <Tabs.Panel className="apanel" value="sources">
         <Sources extractions={extractions} />
