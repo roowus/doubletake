@@ -9,7 +9,7 @@ import { ShareCard } from '../components/ShareCard';
 import { Sources, TagEditor } from '../components/Sources';
 import { useLive } from '../live';
 import { navigate } from '../router';
-import { CollectionPicker } from './Library';
+import { CollectionPicker } from './Entities';
 
 const ACTIVE = new Set(['queued', 'extracting', 'classifying', 'researching']);
 
@@ -321,7 +321,7 @@ export function Chat({ id }: { id: string }) {
               aria-label="Run a full research pass"
               title="Research this"
             >
-              <Icon name="sparkles" />
+              <Icon name="compass" />
             </button>
             {menu && (
               <div className="popover" role="menu" aria-label="Research this">

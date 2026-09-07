@@ -1,7 +1,7 @@
 import type { EntityKind } from '@doubletake/shared';
 import { useEffect, useState } from 'react';
 import { getToken } from './api';
-import { Icon } from './components/Icon';
+import { Shell } from './components/Shell';
 import { resetLive } from './live';
 import {
   installNativeListeners,
@@ -12,11 +12,12 @@ import {
 import { Chat } from './pages/Chat';
 import { ChatList } from './pages/ChatList';
 import { Compose } from './pages/Compose';
-import { ENTITY_KINDS, Entities } from './pages/Library';
+import { ENTITY_KINDS, Entities } from './pages/Entities';
+import { Library } from './pages/Library';
 import { MapView } from './pages/MapView';
 import { Settings } from './pages/Settings';
 import { Welcome } from './pages/Welcome';
-import { Link, navigate, usePath } from './router';
+import { navigate, usePath } from './router';
 
 export function App() {
   const path = usePath();
@@ -55,6 +56,7 @@ export function App() {
   const url = new URL(path, location.origin);
   let page: React.ReactNode;
   const chatMatch = url.pathname.match(/^\/chat\/([^/]+)$/);
+  const settingsMatch = url.pathname.match(/^\/settings(?:\/([a-z-]+))?$/);
   if (chatMatch?.[1]) page = <Chat id={chatMatch[1]} />;
   else if (url.pathname === '/compose') page = <Compose />;
   else if (url.pathname === '/share')
@@ -71,7 +73,8 @@ export function App() {
           : {})}
       />
     );
-  else if (url.pathname === '/settings') page = <Settings />;
+  else if (url.pathname === '/library') page = <Library />;
+  else if (settingsMatch) page = <Settings section={settingsMatch[1]} />;
   else if (url.pathname === '/map') page = <MapView />;
   else if (url.pathname.startsWith('/entities/')) {
     const kind = url.pathname.slice('/entities/'.length) as EntityKind;
@@ -79,25 +82,8 @@ export function App() {
   } else page = <ChatList />;
 
   return (
-    <div className="app">
-      <header className="topbar">
-        <Link to="/" className="brand">
-          <span className="brand-mark">
-            <Icon name="sparkles" size={18} />
-          </span>
-          Doubletake
-        </Link>
-        <span className="spacer" />
-        <nav className="actions" aria-label="Primary">
-          <Link to="/compose" className="icon-link" aria-label="New item" title="New item">
-            <Icon name="plus" size={22} />
-          </Link>
-          <Link to="/settings" className="icon-link" aria-label="Settings" title="Settings">
-            <Icon name="settings" size={22} />
-          </Link>
-        </nav>
-      </header>
-      <main>{page}</main>
-    </div>
+    <Shell pathname={url.pathname} bare={!!chatMatch}>
+      {page}
+    </Shell>
   );
 }
