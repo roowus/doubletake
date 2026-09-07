@@ -134,7 +134,11 @@ Backend chosen by `DOUBLETAKE_WHISPER_BACKEND=auto`:
 | Linux / Intel CPU (`auto` → `faster`) | `faster-whisper` int8 (`uv sync --extra whisper-cpu`) | quick: `small` · standard: `medium` · deep: `large-v3-turbo` |
 | any | `off` | transcription skipped, captions still used when the platform provides them |
 
-whisper.cpp is not wired in. A missing backend is a `tool_missing` warning, not a failed run.
+whisper.cpp is not wired in. A missing backend is a `tool_missing` warning, not a failed run
+(`Transcription unavailable: faster-whisper not installed …` in the answer's extraction notes;
+fix = `uv sync` with the extra on the worker machine). The `faster` path was live-verified
+2026-09-06 on the remote Fedora worker: a narrated caption-less upload transcribed by `small` in
+quick mode, and a music-only clip ending in `No speech detected; transcription skipped.`.
 
 Audio extracted with ffmpeg to 16 kHz mono WAV. Output: language, segments with timestamps.
 Silence/no-speech detection short-circuits to an empty transcript (music-only reels).
