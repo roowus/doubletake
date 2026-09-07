@@ -232,7 +232,10 @@ describe('headless-cli adapter', () => {
     expect(c.command).toBe('some-cli');
     expect(c.args).not.toContain('--resume');
     expect(c.args[0]).toContain('Conversation so far');
-    expect(c.args[0]).toContain('Web search: not available');
+    // The replayed follow-up states the real search budget so the model looks things up
+    // instead of declaring them unknown.
+    expect(c.args[0]).toContain('Web search: up to');
+    expect(c.args[0]).not.toContain('Answer from what you know.');
     expect(res.text).toBe('Because.');
     expect(res.sessionId).toBeUndefined();
   });

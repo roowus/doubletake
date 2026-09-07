@@ -61,6 +61,9 @@ collection even when the owner asked nothing.
 ## Follow-ups and escalation
 
 Follow-ups run with `maxTurns` 3 and `maxBudgetUsd` 0.10, no extraction, tools limited to
-`web_search` ×2. The model is told it may answer `{ "escalate": true, "mode": "standard" |
-"deep" }` if the question needs research; the UI also has **Research this** which schedules a
+`web_search` ×2 and `web_fetch` ×2. The prompt states that budget and tells the model to spend it
+on any term or fact it does not recognise before answering: a follow-up must never come back as
+"I don't know what X is" while a search is available (an earlier prompt said "answer from what you
+know", and models took it literally). The model may set `escalate: { mode, reason }` if the
+question needs more than that budget; the UI also has **Research this** which schedules a
 Standard run (long-press: Deep). Escalated runs resume the chat's brain session.
