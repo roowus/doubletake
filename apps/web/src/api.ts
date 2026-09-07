@@ -283,6 +283,16 @@ export const api = {
   igRefresh: () => call<IgStatus>('POST', '/api/ig/refresh'),
   igPoll: () =>
     call<{ handled: unknown[]; duplicates: number; ignored: number }>('POST', '/api/ig/poll'),
+  /** Asks Graph which webhook fields are live and whether comments can be read; re-subscribes. */
+  igVerify: () =>
+    call<{
+      subscribedFields: string[];
+      missingFields: string[];
+      resubscribed: boolean;
+      tagsReadable: boolean;
+      commentsOk: boolean;
+      errors: Record<string, string>;
+    }>('POST', '/api/ig/verify'),
 };
 
 export type LiveEvent =

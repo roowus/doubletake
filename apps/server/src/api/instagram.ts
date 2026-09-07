@@ -154,6 +154,8 @@ export async function registerInstagramRoutes(app: FastifyInstance, deps: IgRout
 
   app.post('/api/ig/poll', async () => ({ ingested: await ig.pollMentions() }));
 
+  app.post('/api/ig/verify', async () => ig.verifyAccess());
+
   const TestDm = z.object({
     recipientId: z.string().min(1),
     text: z.string().min(1).max(500).default('Doubletake test'),

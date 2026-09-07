@@ -484,6 +484,28 @@ export function Settings() {
                     className="ghost"
                     onClick={() =>
                       api
+                        .igVerify()
+                        .then((r) =>
+                          setIgMsg(
+                            r.commentsOk
+                              ? `Comments OK: webhook covers ${r.subscribedFields.join(', ')}${r.resubscribed ? ' (re-subscribed)' : ''}.`
+                              : `Comments not ready: ${
+                                  r.missingFields.length
+                                    ? `webhook missing ${r.missingFields.join(', ')}`
+                                    : 'comment scope refused'
+                                }${Object.values(r.errors).length ? ` — ${Object.values(r.errors).join('; ')}` : ''}`,
+                          ),
+                        )
+                        .catch((e) => setIgMsg(String(e.message ?? e)))
+                    }
+                  >
+                    Check comment access
+                  </button>
+                  <button
+                    type="button"
+                    className="ghost"
+                    onClick={() =>
+                      api
                         .igRefresh()
                         .then((s) => {
                           setIg(s);
