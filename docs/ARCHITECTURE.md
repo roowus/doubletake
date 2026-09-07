@@ -300,7 +300,8 @@ The Library tab also links to the
 **entity views** `/entities/<kind>` (kind chips, a filter field, one card per entity with the
 name, icon links to the web page and to Maps, attributes as a definition list and a footer
 linking back to the chat it came from; places, recipes, products, tools, tips, media, people,
-events) and to the **map** `/map` (Leaflet over OpenStreetMap tiles fetched by the browser;
+events) and to the **map** `/map` (Leaflet, lazy-loaded as its own chunk so it never sits in
+the main bundle, over OpenStreetMap tiles fetched by the browser;
 one circle marker per located place, popup linking to its chat, a collapsible list of
 unlocated places with a Maps search link and a **Locate N more** backfill button,
 [ADR 0022](adr/0022-map-view-place-geocoding.md)). The chat view is a **notebook page** about one shared thing, not a chat
@@ -317,10 +318,23 @@ and follow-up questions are a dated one-line label ("You wrote" / "You asked") o
 prose, and every answer is full-width prose (Newsreader, measure capped at 68 ch, GitHub-
 flavoured Markdown via `react-markdown` + `remark-gfm`: tables with hairlines and a sticky
 first column on phones, task lists, blockquotes set as margin notes, code on `--code-bg`; raw
-HTML never renders; a fenced \`\`\`svg block is the one drawable exception, inlined only after
-DOMPurify's SVG profile has stripped scripts, links, styles, images, `<use>`/`foreignObject`
-and any external `url()` reference, otherwise it stays a code block — `components/Markdown.tsx`)
-beside the **margin rail**, the app's signature element: a 3 px rule in the accent colour that
+HTML never renders). Three fenced blocks are drawn instead of shown as code
+(`components/Markdown.tsx` detects the fence language): \`\`\`chart is a JSON spec validated by
+`packages/shared/src/chart.ts` (bar / line / pie with ≤ 8 series × 60 points, or `stat` rows)
+and drawn as themed SVG by `components/Chart.tsx` from the parsed numbers only — colours come
+from the `--chart-1..8` tokens through class names, labels are React text, and the same data is
+always emitted as a table (visually hidden, or shown in place of the picture when the spec fails
+validation, together with the reason); \`\`\`mermaid is rendered by `components/Mermaid.tsx`,
+which lazy-loads Mermaid as its own chunk on first use, initialises it once per theme at
+`securityLevel: 'strict'` with HTML labels off and theme variables read from the CSS tokens,
+and still passes the returned SVG through DOMPurify (`svg.ts` `cleanMermaidSvg`: styles kept,
+scripts / handlers / links / images / remote `url()` and `@import` stripped) before insertion,
+falling back to the source as a code block with Mermaid's first error line when it does not
+parse; \`\`\`svg is a small diagram the brain drew itself, inlined only after the stricter
+`cleanSvg` profile (no styles either). The system prompt documents all three and when to use
+which (numbers → chart, structure → mermaid, spatial → svg) and forbids facts that live only
+in a picture (`apps/server/src/brains/prompts.ts`, `test/prompts.test.ts`, fixture
+`test/fixtures/rich-answer.md` shared with the web render test). The prose sits beside the **margin rail**, the app's signature element: a 3 px rule in the accent colour that
 marks where an answer starts, with the run's meta (mode, brain when pinned, duration, cost,
 time) in mono small caps above it. While a run is live the rail is drawn faded and fills
 top-to-bottom as the run moves through queued → extracting → classifying → researching (a
@@ -412,9 +426,11 @@ Detailed in [SECURITY.md](SECURITY.md) and [THREAT-MODEL.md](THREAT-MODEL.md).
 - Brain network access only through `web_search` and `web_fetch` (SSRF guard: no private
   ranges, size caps, no credentials).
 - Brain output is rendered as Markdown with raw HTML disabled. The only markup that reaches the
-  DOM is a fenced `svg` block after DOMPurify (SVG profile, no scripts / links / styles / images /
-  external references), so an injected answer can draw shapes but cannot run code, navigate or
-  fetch from a third party.
+  DOM is SVG: a fenced `svg` block or Mermaid's output, both after DOMPurify (SVG profile, no
+  scripts / handlers / links / images / external references; styles only for Mermaid), and
+  charts drawn by our own renderer from validated numbers. An injected answer can draw shapes
+  but cannot run code, navigate or fetch from a third party. Mermaid itself runs at
+  `securityLevel: 'strict'`, so `click` directives and HTML in labels are inert.
 - The MCP endpoint exposes the library only: no file, shell or network tools, no settings or
   deletion. Scraped text leaves it inside the same `<untrusted>` wrapper the brain gets, and
   the calling agent is a paired device that Settings → Devices can revoke

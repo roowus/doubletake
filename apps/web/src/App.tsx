@@ -1,5 +1,5 @@
 import type { EntityKind } from '@doubletake/shared';
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { getToken } from './api';
 import { Shell } from './components/Shell';
 import { resetLive } from './live';
@@ -14,10 +14,12 @@ import { Compose } from './pages/Compose';
 import { ENTITY_KINDS, Entities } from './pages/Entities';
 import { Inbox } from './pages/Inbox';
 import { Library } from './pages/Library';
-import { MapView } from './pages/MapView';
 import { Settings } from './pages/Settings';
 import { Welcome } from './pages/Welcome';
 import { navigate, usePath } from './router';
+
+// Leaflet is only needed on the map, so it ships as its own chunk.
+const MapView = lazy(() => import('./pages/MapView').then((m) => ({ default: m.MapView })));
 
 export function App() {
   const path = usePath();
@@ -75,7 +77,18 @@ export function App() {
     );
   else if (url.pathname === '/library') page = <Library />;
   else if (settingsMatch) page = <Settings section={settingsMatch[1]} />;
-  else if (url.pathname === '/map') page = <MapView />;
+  else if (url.pathname === '/map')
+    page = (
+      <Suspense
+        fallback={
+          <div className="page muted" aria-busy="true">
+            Loading map…
+          </div>
+        }
+      >
+        <MapView />
+      </Suspense>
+    );
   else if (url.pathname.startsWith('/entities/')) {
     const kind = url.pathname.slice('/entities/'.length) as EntityKind;
     page = <Entities kind={ENTITY_KINDS.includes(kind) ? kind : 'place'} />;
