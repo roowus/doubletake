@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { api, getToken, type Status } from '../../api';
+import { toast } from '../../components/Toast';
 import { apiBase } from '../../native';
 import { errText, Group, Note, Row, SettingsPage } from './parts';
 
@@ -39,8 +40,10 @@ export function DataSettings() {
     try {
       const parsed: unknown = JSON.parse(await f.text());
       const r = await api.importKarakeep(parsed, research || undefined);
-      setMsg(
-        `Imported ${r.imported}, skipped ${r.skipped} already saved or empty, ${r.collections} new collection${r.collections === 1 ? '' : 's'}${r.runs ? `, ${r.runs} research runs queued` : ''}.`,
+      setMsg(null);
+      toast(
+        `Imported ${r.imported}`,
+        `${r.skipped} skipped as already saved or empty, ${r.collections} new collection${r.collections === 1 ? '' : 's'}${r.runs ? `, ${r.runs} research runs queued` : ''}`,
       );
     } catch (e) {
       setMsg(`Import failed: ${errText(e)}`);
@@ -113,7 +116,7 @@ export function DataSettings() {
           />
         </Group>
       )}
-      <Note>{msg}</Note>
+      <Note error={msg !== 'Importing…'}>{msg}</Note>
     </SettingsPage>
   );
 }

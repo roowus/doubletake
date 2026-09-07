@@ -2,6 +2,7 @@ import type { EntityKind } from '@doubletake/shared';
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { getToken } from './api';
 import { Shell } from './components/Shell';
+import { Toaster } from './components/Toast';
 import { resetLive } from './live';
 import {
   installNativeListeners,
@@ -97,6 +98,7 @@ export function App() {
   return (
     <Shell pathname={url.pathname} bare={!!chatMatch}>
       {page}
+      <Toaster />
     </Shell>
   );
 }

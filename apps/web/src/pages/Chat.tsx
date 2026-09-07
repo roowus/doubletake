@@ -9,6 +9,7 @@ import { FollowUp } from '../components/FollowUp';
 import { Icon } from '../components/Icon';
 import type { MenuAction } from '../components/Menu';
 import { Sheet } from '../components/Sheet';
+import { ListSkeleton } from '../components/Skeleton';
 import { TagEditor } from '../components/TagEditor';
 import { useLive } from '../live';
 import { navigate } from '../router';
@@ -103,8 +104,9 @@ export function Chat({ id }: { id: string }) {
     );
   if (!detail)
     return (
-      <div className="page narrow muted" aria-busy="true">
-        Loading…
+      <div className="page narrow notebook">
+        <ListSkeleton rows={1} label="Loading the page" />
+        <AnswerSkeleton />
       </div>
     );
 

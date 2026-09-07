@@ -3,6 +3,7 @@ import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { api } from '../api';
 import { Icon, type IconName, platformIcon } from '../components/Icon';
 import { Sheet } from '../components/Sheet';
+import { ListSkeleton } from '../components/Skeleton';
 import { ago } from '../format';
 import { useLive } from '../live';
 import { Link, navigate } from '../router';
@@ -284,6 +285,7 @@ export function Inbox() {
         </div>
       )}
 
+      {!visible && !err && <ListSkeleton rows={6} label="Loading your inbox" />}
       {visible && visible.length === 0 && !err && (
         <div className="card quiet empty">
           <Icon name="inbox" size={28} />

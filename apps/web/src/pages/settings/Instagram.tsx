@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ApiError, api, type IgStatus } from '../../api';
 import { Confirm } from '../../components/Confirm';
+import { toast } from '../../components/Toast';
 import { errText, Group, Note, Row, SettingsPage } from './parts';
 
 /** Settings → Instagram: the connected account, its token, comment access and mention polling. */
@@ -10,10 +11,16 @@ export function InstagramSettings() {
   // The OAuth callback lands back here with ?ig=connected or ?ig=error&message=…
   const [msg, setMsg] = useState<string | null>(() => {
     const q = new URLSearchParams(location.search);
-    if (q.get('ig') === 'connected') return 'Instagram connected.';
     if (q.get('ig') === 'error') return `Instagram: ${q.get('message') ?? 'connection failed'}`;
     return null;
   });
+  const [isErr, setIsErr] = useState(
+    () => new URLSearchParams(location.search).get('ig') === 'error',
+  );
+  useEffect(() => {
+    if (new URLSearchParams(location.search).get('ig') === 'connected')
+      toast('Instagram connected');
+  }, []);
   const load = () =>
     api
       .igStatus()
@@ -23,7 +30,14 @@ export function InstagramSettings() {
   useEffect(() => {
     void load();
   }, []);
-  const fail = (e: unknown) => setMsg(errText(e));
+  const note = (m: string) => {
+    setIsErr(false);
+    setMsg(m);
+  };
+  const fail = (e: unknown) => {
+    setIsErr(true);
+    setMsg(errText(e));
+  };
 
   return (
     <SettingsPage
@@ -65,7 +79,7 @@ export function InstagramSettings() {
                     api
                       .igPoll()
                       .then((r) =>
-                        setMsg(
+                        note(
                           `Poll: ${r.handled.length} new, ${r.duplicates} seen before, ${r.ignored} ignored.`,
                         ),
                       )
@@ -79,7 +93,7 @@ export function InstagramSettings() {
                     api
                       .igVerify()
                       .then((r) =>
-                        setMsg(
+                        note(
                           r.commentsOk
                             ? `Comments OK: webhook covers ${r.subscribedFields.join(', ')}${r.resubscribed ? ' (re-subscribed)' : ''}.`
                             : `Comments not ready: ${
@@ -99,7 +113,7 @@ export function InstagramSettings() {
                       .igRefresh()
                       .then((s) => {
                         setIg(s);
-                        setMsg('Token refreshed.');
+                        toast('Token refreshed');
                       })
                       .catch(fail)
                   }
@@ -138,7 +152,7 @@ export function InstagramSettings() {
           )}
         </>
       )}
-      <Note>{msg}</Note>
+      <Note error={isErr}>{msg}</Note>
       <Confirm
         open={confirmOff}
         onOpenChange={setConfirmOff}
@@ -149,7 +163,7 @@ export function InstagramSettings() {
           api
             .igDisconnect()
             .then(() => {
-              setMsg('Disconnected.');
+              toast('Instagram disconnected');
               void load();
             })
             .catch(fail)
