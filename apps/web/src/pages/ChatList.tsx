@@ -5,7 +5,7 @@ import { Icon, type IconName, platformIcon } from '../components/Icon';
 import { ago } from '../format';
 import { useLive } from '../live';
 import { Link, navigate } from '../router';
-import { CollectionBar } from './Library';
+import { CollectionBar } from './Entities';
 
 const TAG_LIMIT = 8;
 
@@ -102,7 +102,7 @@ export function ChatList() {
               disabled={asking}
               title="Answer this question from your saved chats"
             >
-              <Icon name="sparkles" size={16} />
+              <Icon name="compass" size={16} />
               {asking ? 'Asking…' : 'Ask'}
             </button>
           )}

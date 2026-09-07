@@ -6,7 +6,7 @@ import { ApiError, api } from '../api';
 import { Icon } from '../components/Icon';
 import { useLive } from '../live';
 import { Link, navigate } from '../router';
-import { mapsUrl } from './Library';
+import { mapsUrl } from './Entities';
 
 /**
  * Map view over place entities (ADR 0022). Pins come from `GET /api/entities?kind=place`; a place

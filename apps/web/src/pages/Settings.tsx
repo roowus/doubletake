@@ -23,7 +23,7 @@ import {
 import { disablePush, enablePush, pushEnabled, pushSupported } from '../push';
 import { navigate } from '../router';
 
-export function Settings() {
+export function Settings({ section: _section }: { section?: string | undefined } = {}) {
   const [status, setStatus] = useState<Status | null>(null);
   const [devices, setDevices] = useState<Device[]>([]);
   const [pair, setPair] = useState<{

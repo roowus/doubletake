@@ -249,9 +249,17 @@ One PWA (`apps/web`, Vite + React, served by the server at `/` from `apps/web/di
 the Vite dev server with `/api` proxied). Its visual language is defined in
 [`design-system/doubletake/MASTER.md`](../design-system/doubletake/MASTER.md): experience
 principles per moment (**Capture** = share sheet / compose, **Return** = the answer chat,
-**Browse** = list, collections, entities, map), colour tokens (dark default, light via
-`prefers-color-scheme`, contrast checked), typography (system stack, 16 px / 1.5), a 4/8 px
-spacing rhythm, 44 px touch targets, component rules and anti-patterns. Implementation
+**Browse** = list, collections, entities, map), colour tokens (**paper** light by default,
+**ink** dark via `prefers-color-scheme` or a `data-theme` attribute on `<html>`, contrast
+checked), typography (Instrument Sans for the interface, Newsreader for answer prose,
+JetBrains Mono for run meta and code), a 4/8 px spacing rhythm, 44 px touch targets,
+component rules and anti-patterns. The app is a four-tab shell (`components/Shell.tsx`):
+**Inbox** `/`, **Library** `/library`, **Add** `/compose` and **Settings** `/settings`
+(sections at `/settings/<section>`), drawn as a bottom tab bar on phones (56 px plus the safe
+area; hidden on a chat page so the follow-up composer owns the bottom edge) and as a left rail
+with the brand mark from 900 px, the content column capped at 760 px. `navigateWithTransition()`
+in `router.tsx` wraps a navigation in the View Transitions API when the browser has it and
+motion is not reduced. Implementation
 conventions that follow from it: all styling lives in `src/styles.css` as CSS custom
 properties and small utility classes (`.page`, `.card`, `.stack`, `.row`, `.chips`, `.field`,
 `.banner`, `.list-row`, `.kv-row`), no inline `style=` in components; icons are an inline SVG
@@ -266,7 +274,12 @@ app renders the same offline. `pnpm --filter @doubletake/web shots <dir>` (Playw
 screenshots every route of a running server at phone and desktop sizes in both colour schemes
 for design review; `DOUBLETAKE_URL` and `DOUBLETAKE_TOKEN_FILE` point it at the server.
 
-Screens: chat list with unread badges, tag filter and FTS search (the tag chips come from
+Screens: **Library** tab (`pages/Library.tsx`): entity kinds and the map as tiles with counts
+(the counts come from the seeded `entity:<kind>` auto collections, so the page costs two
+requests), the owner's manual lists and saved searches then the non-empty category collections
+as tiles, a **New collection** form, and every tag in use as an alphabetical list with counts;
+each tile opens the filtered inbox (`/?collection=`, `/?tag=`) or the entity view. Inbox: chat
+list with unread badges, tag filter and FTS search (the tag chips come from
 `GET /api/tags`, manual tags marked with a pencil icon; the same field has an **Ask library**
 button that turns the text into a `library` question and opens its chat), a **collections**
 row (auto collections per category and entity kind, manual lists with a list icon, saved

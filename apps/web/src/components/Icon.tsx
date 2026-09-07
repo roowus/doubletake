@@ -25,6 +25,16 @@ const PATHS = {
   map: 'M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14',
   list: 'M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01',
   send: 'M22 2 11 13M22 2 15 22l-4-9-9-4 20-7z',
+  // Brand mark: two pages, the second one taking another look at the first.
+  doubletake: 'M9 3h8a2 2 0 0 1 2 2v10M5 7h9a2 2 0 0 1 2 2v12H7a2 2 0 0 1-2-2zM9 12h4M9 16h4',
+  'more-vertical': 'M12 6h.01M12 12h.01M12 18h.01',
+  library: 'M4 4h4v16H4zM10 4h4v16h-4zM16.5 5.5l3.5-.5 2 15-3.5.5z',
+  tag: 'M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8zM7.5 7.5h.01',
+  'chevron-left': 'm15 6-6 6 6 6',
+  copy: 'M9 9h11v11H9zM5 15H4V4h11v1',
+  sun: 'M12 17a5 5 0 1 0 0-10 5 5 0 0 0 0 10zM12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4',
+  moon: 'M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z',
+  compass: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM16.2 7.8l-2.1 6.3-6.3 2.1 2.1-6.3z',
   sparkles:
     'M12 3v3M12 18v3M3 12h3M18 12h3M6.5 6.5l2 2M15.5 15.5l2 2M6.5 17.5l2-2M15.5 8.5l2-2M12 8l1.2 2.8L16 12l-2.8 1.2L12 16l-1.2-2.8L8 12l2.8-1.2z',
   bell: 'M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0',

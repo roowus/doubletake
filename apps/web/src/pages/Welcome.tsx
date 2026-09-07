@@ -82,7 +82,7 @@ export function Welcome({ onAuthed }: { onAuthed: () => void }) {
       <form className="card welcome" onSubmit={submit} aria-busy={busy}>
         <div className="hero">
           <span className="brand-mark">
-            <Icon name="sparkles" size={30} />
+            <Icon name="doubletake" size={30} />
           </span>
           <h1>Doubletake</h1>
           <p className="muted">Share it now, get a researched answer later.</p>
