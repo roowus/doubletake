@@ -36,7 +36,7 @@ export default defineConfig({
       },
       injectManifest: {
         // Never precache /api; the worker also denylists it and /s/ share pages for navigations.
-        globPatterns: ['**/*.{js,css,html,svg,webmanifest}'],
+        globPatterns: ['**/*.{js,css,html,svg,woff2,webmanifest}'],
       },
     }),
   ],

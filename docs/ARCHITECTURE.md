@@ -259,7 +259,12 @@ set (`components/Icon.tsx`, `platformIcon()` for platform marks), never emoji or
 every icon-only control has an `aria-label`; form inputs have visible labels and inline help;
 errors render as `.banner.error` with `role="alert"` and keep the user's input; chips never
 wrap mid-word and use `aria-pressed` / `aria-current` for state; motion respects
-`prefers-reduced-motion`.
+`prefers-reduced-motion`. Fonts are bundled, never fetched from a CDN: `src/fonts.css` declares
+the latin subsets of Instrument Sans, Newsreader and JetBrains Mono from `@fontsource-variable`
+and the service worker precaches the `woff2` files with the rest of the shell, so an installed
+app renders the same offline. `pnpm --filter @doubletake/web shots <dir>` (Playwright, Chromium)
+screenshots every route of a running server at phone and desktop sizes in both colour schemes
+for design review; `DOUBLETAKE_URL` and `DOUBLETAKE_TOKEN_FILE` point it at the server.
 
 Screens: chat list with unread badges, tag filter and FTS search (the tag chips come from
 `GET /api/tags`, manual tags marked with a pencil icon; the same field has an **Ask library**
