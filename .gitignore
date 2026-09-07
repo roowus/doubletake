@@ -41,3 +41,7 @@ apps/mobile/ios/App/Pods/
 # firebase client config (per-install, contains project ids)
 google-services.json
 GoogleService-Info.plist
+
+# Playwright (apps/web e2e): reports and traces are artifacts, snapshots are committed
+test-results/
+playwright-report/
