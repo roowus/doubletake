@@ -81,6 +81,17 @@ under Standard Access is **unverified**. If mentions do not arrive, Doubletake p
 **unverified** that `tags` covers comment mentions for this API flavour. DM share is the
 guaranteed path either way.
 
+What *is* verified (2026-09-06, `dt.save` connected under Standard Access): the app
+subscription on the account (`GET /<IG_ID>/subscribed_apps`) lists `messages`, `mentions` and
+`comments`, and `GET /<IG_ID>/tags` answers (it needs `instagram_business_manage_comments`), so
+the comment scope was granted. `POST /api/ig/verify` (Settings → **Check comment access**)
+runs exactly these probes, re-subscribes the missing webhook fields when the list is short,
+and reports `commentsOk`. On `graph.instagram.com` there is no `me/permissions` edge ("Tried
+accessing nonexisting field (permissions)") and `debug_token` refuses user tokens
+("Application does not have permission for this action"), so the scope list in the report
+comes from the `tags` probe rather than a permissions call; the `errors.permissions` field
+carries that message and is expected.
+
 ## 4. Flows
 
 ### DM share (reliable)
@@ -150,7 +161,7 @@ possible on your own media and are not used.
 Settings → **Instagram**: shows "not configured" when the server lacks the env vars,
 otherwise **Connect Instagram** (starts OAuth, returns to `/settings?ig=connected`), and once
 connected the username, token expiry, polling/webhook-host state, **Poll mentions now**,
-**Refresh token**, **Disconnect**, and the last five webhook events. "Send test DM to myself"
+**Check comment access** (`POST /api/ig/verify`), **Refresh token**, **Disconnect**, and the last five webhook events. "Send test DM to myself"
 (`POST /api/ig/test { recipientId, text? }`) and "simulate mention" have routes but no buttons
 yet; call them with `curl` and a device token.
 

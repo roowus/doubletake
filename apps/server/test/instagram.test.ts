@@ -69,8 +69,21 @@ class FakeGraph implements IgGraph {
   async recentTags(): Promise<IgMedia[]> {
     return this.tags;
   }
+  subscribed: string[] = [];
+  permissions = [
+    { permission: 'instagram_business_basic', status: 'granted' },
+    { permission: 'instagram_business_manage_messages', status: 'granted' },
+    { permission: 'instagram_business_manage_comments', status: 'granted' },
+  ];
   async subscribeApp(_t: string, _ig: string, fields: string[]) {
     this.calls.push(`subscribe:${fields.join(',')}`);
+    this.subscribed = [...fields];
+  }
+  async subscribedFields() {
+    return this.subscribed;
+  }
+  async grantedPermissions() {
+    return this.permissions;
   }
 }
 
@@ -298,6 +311,30 @@ describe('account', () => {
       'long-short-abc-refreshed',
     );
     expect(await ig.refreshIfDue()).toBe(false);
+  });
+
+  it('verify reports granted scopes and re-subscribes missing webhook fields', async () => {
+    graph.subscribed = ['messages'];
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/ig/verify',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(res.statusCode).toBe(200);
+    const r = res.json();
+    expect(r.missingScopes).toEqual([]);
+    expect(r.resubscribed).toBe(true);
+    expect(r.subscribedFields).toEqual(['messages', 'mentions', 'comments']);
+    expect(r.missingFields).toEqual([]);
+    expect(r.commentsOk).toBe(true);
+
+    graph.permissions = graph.permissions.map((p) =>
+      p.permission === 'instagram_business_manage_comments' ? { ...p, status: 'declined' } : p,
+    );
+    const again = (await ig.verifyAccess()) as { commentsOk: boolean; declined: string[] };
+    expect(again.commentsOk).toBe(false);
+    expect(again.declined).toEqual(['instagram_business_manage_comments']);
+    graph.permissions = graph.permissions.map((p) => ({ ...p, status: 'granted' }));
   });
 });
 

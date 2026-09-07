@@ -62,6 +62,10 @@ export interface IgGraph {
   sendText(token: string, igUserId: string, recipientId: string, text: string): Promise<void>;
   recentTags(token: string, igUserId: string): Promise<IgMedia[]>;
   subscribeApp(token: string, igUserId: string, fields: string[]): Promise<void>;
+  /** Webhook fields the app is currently subscribed to for this account (`GET /<id>/subscribed_apps`). */
+  subscribedFields(token: string, igUserId: string): Promise<string[]>;
+  /** Scopes Meta actually granted on this token (`GET /debug_token`). */
+  grantedPermissions(token: string): Promise<{ permission: string; status: string }[]>;
 }
 
 const COMMENT_FIELDS = 'id,text,username,timestamp,parent_id,like_count';
@@ -232,5 +236,29 @@ export class IgGraphClient implements IgGraph {
       { subscribed_fields: fields.join(',') },
       token,
     );
+  }
+
+  async subscribedFields(token: string, igUserId: string): Promise<string[]> {
+    const r = await this.call<{ data?: { subscribed_fields?: string[] }[] }>(
+      'GET',
+      `${igUserId}/subscribed_apps`,
+      {},
+      token,
+    );
+    return (r.data ?? []).flatMap((d) => d.subscribed_fields ?? []);
+  }
+
+  async grantedPermissions(token: string) {
+    // graph.instagram.com has no `me/permissions` edge (observed 2026-09-06: "Tried accessing
+    // nonexisting field (permissions)"). `debug_token` exists there but a user token is refused
+    // ("Application does not have permission for this action", same day); `verifyAccess()`
+    // falls back to probing `/<id>/tags` when this throws.
+    const r = await this.call<{ data?: { scopes?: string[]; is_valid?: boolean } }>(
+      'GET',
+      'debug_token',
+      { input_token: token },
+      token,
+    );
+    return (r.data?.scopes ?? []).map((permission) => ({ permission, status: 'granted' }));
   }
 }

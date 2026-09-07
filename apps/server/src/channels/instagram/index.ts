@@ -78,6 +78,22 @@ export interface IgStatus {
   }[];
 }
 
+/** Result of `verifyAccess()`: what Meta says it granted vs what the channel needs. */
+export interface IgAccessReport {
+  granted: string[];
+  declined: string[];
+  missingScopes: string[];
+  subscribedFields: string[];
+  missingFields: string[];
+  resubscribed: boolean;
+  /** `GET /<id>/tags` answered: the comments scope works even if the scope listing did not. */
+  tagsReadable: boolean;
+  /** True when comments and mentions can be read and the webhook covers them. */
+  commentsOk: boolean;
+  /** Per-probe Graph errors; an empty object means every probe answered. */
+  errors: Record<string, string>;
+}
+
 export interface WebhookResult {
   /** Events that were new and handled (or failed) — redeliveries are counted in `duplicates`. */
   handled: { id: string; kind: string; itemId: string | null; error: string | null }[];
@@ -209,6 +225,73 @@ export class InstagramChannel {
 
   disconnect(): void {
     this.deps.repo.deleteIgAccount();
+  }
+
+  /**
+   * Ask Graph what it actually granted and which webhook fields are live, and re-subscribe when
+   * `comments` or `mentions` are missing. This is how the comment channel is checked without
+   * waiting for someone to @mention the account.
+   */
+  async verifyAccess(): Promise<IgAccessReport> {
+    const { graph, log } = this.deps;
+    const t = this.token();
+    if (!t) throw new Error('Instagram is not connected');
+    const { igUserId, token } = t;
+    const errors: Record<string, string> = {};
+    let granted: string[] = [];
+    let declined: string[] = [];
+    try {
+      const perms = await graph.grantedPermissions(token);
+      granted = perms.filter((p) => p.status === 'granted').map((p) => p.permission);
+      declined = perms.filter((p) => p.status !== 'granted').map((p) => p.permission);
+    } catch (e) {
+      errors.permissions = (e as Error).message;
+    }
+    const missingScopes = errors.permissions ? [] : IG_SCOPES.filter((s) => !granted.includes(s));
+    let subscribedFields: string[] = [];
+    try {
+      subscribedFields = await graph.subscribedFields(token, igUserId);
+    } catch (e) {
+      errors.subscribedFields = (e as Error).message;
+    }
+    let missingFields = IG_WEBHOOK_FIELDS.filter((f) => !subscribedFields.includes(f));
+    let resubscribed = false;
+    if (missingFields.length) {
+      try {
+        await graph.subscribeApp(token, igUserId, IG_WEBHOOK_FIELDS);
+        resubscribed = true;
+        subscribedFields = await graph.subscribedFields(token, igUserId);
+        missingFields = IG_WEBHOOK_FIELDS.filter((f) => !subscribedFields.includes(f));
+      } catch (e) {
+        errors.subscribe = (e as Error).message;
+        log.warn(`instagram: re-subscribe failed: ${(e as Error).message}`);
+      }
+    }
+    // A comment-mention round trip is the ground truth; `GET /<id>/tags` needs the same scope.
+    let tagsReadable = false;
+    try {
+      await graph.recentTags(token, igUserId);
+      tagsReadable = true;
+    } catch (e) {
+      errors.tags = (e as Error).message;
+    }
+    const commentsOk =
+      (errors.permissions
+        ? tagsReadable
+        : granted.includes('instagram_business_manage_comments')) &&
+      subscribedFields.includes('comments') &&
+      subscribedFields.includes('mentions');
+    return {
+      granted,
+      declined,
+      missingScopes,
+      subscribedFields,
+      missingFields,
+      resubscribed,
+      tagsReadable,
+      commentsOk,
+      errors,
+    };
   }
 
   /** Refresh the long-lived token when it is ≥30 days old. Returns true when refreshed. */
