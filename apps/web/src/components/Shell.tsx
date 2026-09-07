@@ -12,7 +12,12 @@ interface Tab {
 
 const TABS: Tab[] = [
   { to: '/', label: 'Inbox', icon: 'inbox', match: /^\/(chat\/.*)?$/ },
-  { to: '/library', label: 'Library', icon: 'library', match: /^\/(library|entities\/.*|map)$/ },
+  {
+    to: '/library',
+    label: 'Library',
+    icon: 'library',
+    match: /^\/(library|entities\/.*|map|todo)$/,
+  },
   { to: '/compose', label: 'Add', icon: 'plus', match: /^\/(compose|share)$/ },
   { to: '/settings', label: 'Settings', icon: 'settings', match: /^\/settings(\/.*)?$/ },
 ];

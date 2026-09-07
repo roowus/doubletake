@@ -37,7 +37,7 @@ channel; the Instagram bot is optional and documented as fragile.
 | Push keys | VAPID pair auto-generated into `settings` unless env-provided; FCM HTTP v1 with a hand-rolled service-account JWT; `gone` prunes, 8 failures prune | [0016](adr/0016-push-keys-and-fcm-http-v1.md) |
 | Network | Bind loopback; Tailscale serve by default; Cloudflare Tunnel or Tailscale Funnel only for the IG webhook path | [0009](adr/0009-networking.md) |
 | Auth | Owner password at setup + long-lived per-device tokens via QR pairing | [0010](adr/0010-auth-owner-password-device-tokens.md) |
-| Knowledge | Markdown export of every finished chat into `~/Doubletake`; FTS5 search; auto tags and collections; cross-library questions answered by the brain from FTS-retrieved chats | [0011](adr/0011-markdown-export-fts-tags.md), [0021](adr/0021-cross-library-chat.md) |
+| Knowledge | Markdown export of every finished chat into `~/Doubletake`; FTS5 search; auto tags and collections; cross-library questions answered by the brain from FTS-retrieved chats; a saved list ("To do") of things and tasks picked out of answers | [0011](adr/0011-markdown-export-fts-tags.md), [0021](adr/0021-cross-library-chat.md), [0031](adr/0031-todo-list.md) |
 | Integrations | Other agents read and feed the library over MCP: stateless Streamable HTTP at `/mcp` behind the device-token gate, read tools mirror the REST library routes, extractions stay `<untrusted>`-wrapped, writes only enqueue runs. Karakeep and Memos interchange as files: export in their shapes, import a Karakeep file as `import`-channel items, no runs unless asked | [0023](adr/0023-mcp-server.md), [0024](adr/0024-karakeep-memos-interchange.md) |
 | Sharing | A manual list or saved search can be shared as a read-only page at `/s/<token>` (token = credential, script-free HTML, first answers only, never notes or extractions); links stay on the tailnet unless `DOUBLETAKE_SHARE_PUBLIC=on` | [0025](adr/0025-shareable-collection-pages.md) |
 | Multi-device | The media worker can run on another tailnet machine: same protocol over HTTP with a bearer token, server mirrors assets and frames into its own data dir (or trusts a shared filesystem path); database, brain, queue and vault never leave the server | [0026](adr/0026-remote-media-worker.md) |
@@ -120,6 +120,10 @@ Full column-level detail in [DATA-MODEL.md](DATA-MODEL.md).
 - **artifact**: files the brain wrote into the notes dir during a run.
 - **entity**: a typed thing extracted from the item (place, recipe, product, tool, tip, …) with
   a free-form attribute map; items also carry one `category`.
+- **todo**: one entry on the owner's saved list ([ADR 0031](adr/0031-todo-list.md)): a
+  snapshot of an entity (a place to visit, a tool to install) or a free-text task, with an
+  optional note, a link back to the chat it came from and a `done_at` tick. Snapshots, not
+  entity references, because re-runs replace entities.
 - **tag**, **collection**, **device**, **push_subscription**, **ig_account**, **ig_event**,
   **cost_ledger**, **settings**, and the `items_fts` FTS5 index.
 
@@ -312,7 +316,16 @@ Screens: **Library** tab (`pages/Library.tsx`): entity kinds and the map as tile
 (the counts come from the seeded `entity:<kind>` auto collections, so the page costs two
 requests), the owner's manual lists and saved searches then the non-empty category collections
 as tiles, a **New collection** form, and every tag in use as an alphabetical list with counts;
-each tile opens the filtered inbox (`/?collection=`, `/?tag=`) or the entity view. **Inbox**
+each tile opens the filtered inbox (`/?collection=`, `/?tag=`) or the entity view. Above the
+tiles sits the **To do** row (open count, the first few titles as a hint) that opens the
+**saved list** `/todo` (`pages/Todo.tsx`, [ADR 0031](adr/0031-todo-list.md)): one row per
+entry with a tick button, the kind glyph, the title linking out when the thing has a URL, the
+note in the prose face, the attributes that matter for the kind, a link back to the source
+chat, a Maps link for places and a remove button behind Confirm; done entries fold into a
+collapsible **Done** section, and a **Task** button adds a free-text task
+(`components/TaskForm.tsx`). Entries get onto the list from the answer page: every row in the
+**Things** tab and every recommendation carries a bookmark button ("Save … to your list"),
+and the header menu's **Add a task…** opens a sheet with the same form, linked to the chat. **Inbox**
 (`pages/Inbox.tsx`): a search field over the FTS index whose **Ask** button turns the text into
 a `library` question and opens its chat, a funnel button beside it that opens the **Filter**
 sheet (`components/Sheet.tsx`, a Base UI `Dialog` drawn as a bottom sheet on phones and a
@@ -447,6 +460,7 @@ connection recipe in [DEPLOYMENT.md](DEPLOYMENT.md#connect-an-agent-mcp)).
 | `GET collections?all=&hidden=`, `POST collections { name, query? }`, `POST collections/:id { name?, query?, hidden? }`, `DELETE collections/:id` | list with item counts (empty auto collections omitted unless `all=true`, hidden ones unless `hidden=true`; auto collections are seeded at boot, one per category and one per entity kind); create a manual list (no `query`) or a saved search (`query` = `category:<c>` · `entity:<kind>` · `tag:<name>` · FTS text); rename/retarget/hide (400 when giving an auto collection a query); delete (400 for auto — hide instead) |
 | `POST collections/:id/share`, `DELETE collections/:id/share`, `GET /s/:token` (no `/api` prefix, no token gate) | mint (idempotent) or revoke a read-only link for a manual list or saved search (400 for auto collections); `GET collections` carries `shareUrl` per collection; the page is self-contained HTML, `404` for unknown or revoked tokens and hidden collections ([ADR 0025](adr/0025-shareable-collection-pages.md)) |
 | `POST collections/:id/items { chatId }`, `DELETE collections/:id/items/:chatId`, `GET chats/:id/collections`, `GET collections/preview?query=` | add to / remove from a manual list (400 otherwise; emits `chat_updated`); the manual collections a chat is in; how many items a query would match |
+| `GET todos?done=open\|done\|all`, `POST todos { kind, title, url?, note?, attributes?, chatId? }`, `POST todos/:id { done?, title?, note? }`, `DELETE todos/:id` | the owner's saved list ([ADR 0031](adr/0031-todo-list.md)): open entries newest first (with the source chat's title), save an entity snapshot or a `task`, tick / untick / edit, remove; writes emit `chat_updated` for the linked chat |
 | `GET entities?kind=&limit=` | every entity of one kind across items, newest item first, each with `chatId`, `itemTitle`, `platform`, `createdAt` for the entity views; located places also carry `geo { lat, lon, label, source: brain \| geocoder }` |
 | `POST entities/geocode?retry=` | locate every `place` entity not yet in the `place_geo` cache through the configured geocoder (`retry=misses` forgets cached misses first); returns `{ places, located, unknown, retried }`; 409 when `GEOCODER=off` |
 | `POST chats/:id/messages` | follow-up turn (cheap path) |
@@ -461,7 +475,7 @@ connection recipe in [DEPLOYMENT.md](DEPLOYMENT.md#connect-an-agent-mcp)).
 | `POST ig/verify` | probe `subscribed_apps` and `/tags`, re-subscribe missing webhook fields, report `commentsOk` (Settings → Check comment access) |
 | `GET/POST /webhooks/instagram` | Meta handshake (`hub.challenge`) and signed deliveries; `401` on bad signature, `200` then async processing |
 | `GET export/karakeep`, `GET export/memos`, `POST import/karakeep?research=quick\|standard\|deep` | download the library as a Karakeep export file / as Memos `{ memos: [{ content, visibility, create_time }] }`; import a Karakeep file → `{ imported, skipped, collections, runs }` (32 MiB body limit; 400 when not that shape; [ADR 0024](adr/0024-karakeep-memos-interchange.md)) |
-| `POST /mcp` (`GET`/`DELETE` → 405) | Streamable HTTP MCP, stateless, JSON responses. Tools: `search_library { query, limit }`, `list_chats { collection?, tag?, limit }`, `get_chat { chat_id, include_extractions, wait_seconds ≤120 }`, `list_collections`, `list_tags`, `list_entities { kind, limit }` (read-only); `save { url?, text?, note?, mode }` → channel `mcp`, `ask_library { question, mode }` → channel `library` (enqueue only) |
+| `POST /mcp` (`GET`/`DELETE` → 405) | Streamable HTTP MCP, stateless, JSON responses. Tools: `search_library { query, limit }`, `list_chats { collection?, tag?, limit }`, `get_chat { chat_id, include_extractions, wait_seconds ≤120 }`, `list_collections`, `list_tags`, `list_entities { kind, limit }`, `list_todos { done }` (read-only); `save { url?, text?, note?, mode }` → channel `mcp`, `ask_library { question, mode }` → channel `library` (enqueue only) |
 
 CORS is enabled for `capacitor://localhost` (the iOS WebView origin), `https://localhost` and
 `http://localhost` (Android) so the Capacitor WebView can call the API on a different origin; every other origin is same-origin only.

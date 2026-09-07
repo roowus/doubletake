@@ -581,6 +581,73 @@ export class Repo {
       .all();
   }
 
+  // ---- todos (ADR 0031) ----
+  listTodos(filter: 'open' | 'done' | 'all' = 'open') {
+    const where =
+      filter === 'open'
+        ? isNull(s.todos.doneAt)
+        : filter === 'done'
+          ? sql`${s.todos.doneAt} is not null`
+          : undefined;
+    return this.db
+      .select({ todo: s.todos, chatTitle: s.items.title })
+      .from(s.todos)
+      .leftJoin(s.chats, eq(s.chats.id, s.todos.chatId))
+      .leftJoin(s.items, eq(s.items.id, s.chats.itemId))
+      .where(where)
+      .orderBy(desc(s.todos.createdAt))
+      .all();
+  }
+  getTodo(id: string) {
+    return this.db.select().from(s.todos).where(eq(s.todos.id, id)).get();
+  }
+  countOpenTodos() {
+    return (
+      this.db.select({ n: sql<number>`count(*)` }).from(s.todos).where(isNull(s.todos.doneAt)).get()
+        ?.n ?? 0
+    );
+  }
+  createTodo(input: {
+    kind: string;
+    title: string;
+    url?: string | null | undefined;
+    note?: string | null | undefined;
+    attributes?: Record<string, unknown> | undefined;
+    chatId?: string | null | undefined;
+  }) {
+    const row = {
+      id: newId(),
+      kind: input.kind,
+      title: input.title,
+      url: input.url ?? null,
+      note: input.note ?? null,
+      attributes: JSON.stringify(input.attributes ?? {}),
+      chatId: input.chatId ?? null,
+      doneAt: null,
+      createdAt: nowIso(),
+    };
+    this.db.insert(s.todos).values(row).run();
+    return row;
+  }
+  updateTodo(
+    id: string,
+    patch: {
+      done?: boolean | undefined;
+      title?: string | undefined;
+      note?: string | null | undefined;
+    },
+  ) {
+    const set: Partial<typeof s.todos.$inferInsert> = {};
+    if (patch.done !== undefined) set.doneAt = patch.done ? nowIso() : null;
+    if (patch.title !== undefined) set.title = patch.title;
+    if (patch.note !== undefined) set.note = patch.note;
+    if (Object.keys(set).length) this.db.update(s.todos).set(set).where(eq(s.todos.id, id)).run();
+    return this.getTodo(id);
+  }
+  deleteTodo(id: string) {
+    return this.db.delete(s.todos).where(eq(s.todos.id, id)).run().changes > 0;
+  }
+
   // ---- place geocache (ADR 0022) ----
   getPlaceGeo(query: string) {
     return this.db.select().from(s.placeGeo).where(eq(s.placeGeo.query, query)).get();

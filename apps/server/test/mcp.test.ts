@@ -77,11 +77,17 @@ describe('MCP server', () => {
       'list_collections',
       'list_entities',
       'list_tags',
+      'list_todos',
       'save',
       'search_library',
     ]);
     const get = tools.find((t) => t.name === 'get_chat');
     expect(get?.annotations?.readOnlyHint).toBe(true);
+    const todos = tools.find((t) => t.name === 'list_todos');
+    expect(todos?.annotations?.readOnlyHint).toBe(true);
+    expect(textOf(await client.callTool({ name: 'list_todos', arguments: {} }))).toBe(
+      'Nothing saved yet.',
+    );
     const save = tools.find((t) => t.name === 'save');
     expect(save?.annotations?.readOnlyHint).toBe(false);
     expect(save?.annotations?.destructiveHint).toBe(false);

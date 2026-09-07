@@ -1,4 +1,4 @@
-import type { CollectionDto, EntityKind, TagDto } from '@doubletake/shared';
+import type { CollectionDto, EntityKind, TagDto, TodoDto } from '@doubletake/shared';
 import { useEffect, useState } from 'react';
 import { ApiError, api } from '../api';
 import { Confirm } from '../components/Confirm';
@@ -30,6 +30,7 @@ const KIND_TILES: { kind: EntityKind; label: string; icon: IconName }[] = [
 export function Library() {
   const [cols, setCols] = useState<CollectionDto[] | null>(null);
   const [tags, setTags] = useState<TagDto[]>([]);
+  const [todos, setTodos] = useState<TodoDto[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [creating, setCreating] = useState<null | 'manual' | 'search'>(null);
   const [name, setName] = useState('');
@@ -48,6 +49,10 @@ export function Library() {
     api
       .tags()
       .then(setTags)
+      .catch(() => {});
+    api
+      .todos()
+      .then(setTodos)
       .catch(() => {});
   };
   useEffect(load, []);
@@ -194,6 +199,25 @@ export function Library() {
           <span>{err}</span>
         </div>
       )}
+
+      <Link to="/todo" className="todo-row">
+        <Icon name="check-square" size={22} />
+        <span className="todo-row-body">
+          <span className="todo-row-title">To do</span>
+          <span className="todo-row-hint">
+            {todos === null
+              ? 'Places to visit, tools to try, tasks you saved from answers.'
+              : todos.length === 0
+                ? 'Nothing saved yet. Use the bookmark on any answer.'
+                : todos
+                    .slice(0, 3)
+                    .map((t) => t.title)
+                    .join(' · ')}
+          </span>
+        </span>
+        {todos && todos.length > 0 && <span className="count-badge">{todos.length}</span>}
+        <Icon name="chevron-right" size={18} />
+      </Link>
 
       <section className="stack tight" aria-labelledby="lib-things">
         <h2 id="lib-things" className="section-title">

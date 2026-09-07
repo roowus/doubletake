@@ -346,6 +346,30 @@ export function buildMcpServer(deps: McpDeps, session: Session): McpServer {
     },
   );
 
+  server.registerTool(
+    'list_todos',
+    {
+      title: 'List the saved list',
+      description:
+        'Things the owner chose to keep from answers (places to visit, tools to try, tasks). Open entries by default.',
+      inputSchema: { done: z.enum(['open', 'done', 'all']).default('open') },
+      annotations: { readOnlyHint: true, openWorldHint: false },
+    },
+    async ({ done }) => {
+      const rows = repo.listTodos(done);
+      return text(
+        rows.length
+          ? rows
+              .map(
+                (r) =>
+                  `- [${r.todo.doneAt ? 'x' : ' '}] ${r.todo.title} (${r.todo.kind})${r.todo.url ? ` <${r.todo.url}>` : ''}${r.todo.note ? ` — ${r.todo.note}` : ''}${r.todo.chatId ? ` — from "${r.chatTitle ?? 'Untitled'}" (chat \`${r.todo.chatId}\`)` : ''}`,
+              )
+              .join('\n')
+          : 'Nothing saved yet.',
+      );
+    },
+  );
+
   const modeHint = z.enum(['auto', 'quick', 'standard', 'deep']).default('auto');
 
   server.registerTool(

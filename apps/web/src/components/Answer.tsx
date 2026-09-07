@@ -33,7 +33,16 @@ export function runMeta(run: RunDto | undefined): string[] {
  * UI face ("You asked"); the brain's answers are full-width prose in the reading face with
  * the run's meta set in the margin. No bubbles: the page is the answer.
  */
-export function Turn({ msg, run }: { msg: MessageDto; run?: RunDto | undefined }) {
+export function Turn({
+  msg,
+  run,
+  onSaveTask,
+}: {
+  msg: MessageDto;
+  run?: RunDto | undefined;
+  /** Keep one recommendation as a task on the saved list (ADR 0031). */
+  onSaveTask?: ((text: string) => void) | undefined;
+}) {
   if (msg.role === 'system')
     return (
       <div className={`turn system${msg.kind === 'error' ? ' error' : ''}`} role="status">
@@ -65,21 +74,40 @@ export function Turn({ msg, run }: { msg: MessageDto; run?: RunDto | undefined }
       <div className="prose">
         <Markdown>{msg.content}</Markdown>
         {msg.structured && msg.kind === 'answer' && (
-          <Recommendations items={msg.structured.recommendations} />
+          <Recommendations items={msg.structured.recommendations} onSave={onSaveTask} />
         )}
       </div>
     </article>
   );
 }
 
-function Recommendations({ items }: { items: string[] }) {
+function Recommendations({
+  items,
+  onSave,
+}: {
+  items: string[];
+  onSave?: ((text: string) => void) | undefined;
+}) {
   if (items.length === 0) return null;
   return (
     <aside className="recs">
       <h3>Recommendations</h3>
       <ul>
         {items.map((r) => (
-          <li key={r}>{r}</li>
+          <li key={r}>
+            <span>{r}</span>
+            {onSave && (
+              <button
+                type="button"
+                className="thing-save"
+                aria-label="Save this recommendation as a task"
+                title="Save as a task"
+                onClick={() => onSave(r)}
+              >
+                <Icon name="bookmark" size={16} />
+              </button>
+            )}
+          </li>
         ))}
       </ul>
     </aside>

@@ -76,6 +76,14 @@ Index `(kind, name)`. Re-runs replace the item's entities. Rendered as cards in 
 listed per kind in auto collections. Place attributes may carry brain-supplied `lat`/`lon`
 (numbers, only when the model is sure), which the map uses before asking the geocoder.
 
+### todos
+The owner's saved list ([ADR 0031](../docs/adr/0031-todo-list.md)): `id`, `kind` (an entity
+kind or `task`), `title`, `url`, `note`, `attributes` (JSON map copied from the entity at save
+time, `{}` for tasks), `chat_id` fk (`ON DELETE SET NULL`, so a removed chat leaves the entry
+with its snapshot), `done_at` (null while open), `created_at`. Index `(done_at, created_at)`.
+Entries are snapshots, never references to `entities` rows: re-runs replace entities, and a
+saved place must survive the re-run. Migration `0010_todos`.
+
 ### place_geo
 Geocoder cache ([ADR 0022](adr/0022-map-view-place-geocoding.md)). `query` primary key (place
 name + `address`/`city`/`town`/`region`/`state`/`country` attributes, deduplicated, ≤200

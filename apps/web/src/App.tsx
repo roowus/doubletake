@@ -16,6 +16,7 @@ import { ENTITY_KINDS, Entities } from './pages/Entities';
 import { Inbox } from './pages/Inbox';
 import { Library } from './pages/Library';
 import { Settings } from './pages/Settings';
+import { Todo } from './pages/Todo';
 import { Welcome } from './pages/Welcome';
 import { navigate, usePath } from './router';
 
@@ -77,6 +78,7 @@ export function App() {
       />
     );
   else if (url.pathname === '/library') page = <Library />;
+  else if (url.pathname === '/todo') page = <Todo />;
   else if (settingsMatch) page = <Settings section={settingsMatch[1]} />;
   else if (url.pathname === '/map')
     page = (

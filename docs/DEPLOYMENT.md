@@ -173,7 +173,8 @@ Claude Desktop, Cursor and most other clients take the same thing as JSON:
 
 Clients that only speak stdio can bridge with `npx mcp-remote https://<host>/mcp --header
 "Authorization: Bearer dt_…"`. The agent then has `search_library`, `list_chats`, `get_chat`,
-`list_collections`, `list_tags`, `list_entities` (read-only) plus `save` and `ask_library`,
+`list_collections`, `list_tags`, `list_entities`, `list_todos` (read-only) plus `save` and
+`ask_library`,
 which queue work exactly like the share sheet; the answer arrives in the app and the agent can
 wait for it with `get_chat { wait_seconds }`. The endpoint is refused on the tunnel hostname,
 so it is reachable over the tailnet only. Revoke the agent from Settings → Devices.

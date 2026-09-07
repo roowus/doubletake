@@ -492,6 +492,97 @@ describe('API', () => {
     expect(skipped.brains).toEqual([]);
   });
 
+  it('saved list: save a thing from a chat, tick it, list open/done, delete', async () => {
+    const chatId = (
+      await app.inject({ method: 'GET', url: '/api/chats', headers: auth() })
+    ).json()[0].id as string;
+    const unknown = await app.inject({
+      method: 'POST',
+      url: '/api/todos',
+      headers: auth(),
+      payload: { kind: 'place', title: 'Nowhere', chatId: 'nope' },
+    });
+    expect(unknown.statusCode).toBe(404);
+
+    const saved = await app.inject({
+      method: 'POST',
+      url: '/api/todos',
+      headers: auth(),
+      payload: {
+        kind: 'place',
+        title: 'Blue Bottle Coffee',
+        url: 'https://bluebottlecoffee.com',
+        attributes: { city: 'Oakland' },
+        chatId,
+      },
+    });
+    expect(saved.statusCode).toBe(201);
+    expect(saved.json()).toMatchObject({
+      kind: 'place',
+      title: 'Blue Bottle Coffee',
+      url: 'https://bluebottlecoffee.com',
+      attributes: { city: 'Oakland' },
+      chatId,
+      doneAt: null,
+    });
+    expect(typeof saved.json().chatTitle).toBe('string');
+    const todoId = saved.json().id as string;
+
+    const task = await app.inject({
+      method: 'POST',
+      url: '/api/todos',
+      headers: auth(),
+      payload: { kind: 'task', title: 'Try the pour-over recipe', note: 'this weekend' },
+    });
+    expect(task.statusCode).toBe(201);
+    expect(task.json()).toMatchObject({
+      kind: 'task',
+      chatId: null,
+      chatTitle: null,
+      note: 'this weekend',
+    });
+
+    const open = (await app.inject({ method: 'GET', url: '/api/todos', headers: auth() })).json();
+    expect(open.map((t: { id: string }) => t.id)).toEqual([task.json().id, todoId]);
+
+    const ticked = await app.inject({
+      method: 'POST',
+      url: `/api/todos/${todoId}`,
+      headers: auth(),
+      payload: { done: true },
+    });
+    expect(ticked.statusCode).toBe(200);
+    expect(typeof ticked.json().doneAt).toBe('string');
+    expect(
+      (await app.inject({ method: 'GET', url: '/api/todos', headers: auth() })).json(),
+    ).toHaveLength(1);
+    expect(
+      (await app.inject({ method: 'GET', url: '/api/todos?done=done', headers: auth() })).json(),
+    ).toHaveLength(1);
+    expect(
+      (await app.inject({ method: 'GET', url: '/api/todos?done=all', headers: auth() })).json(),
+    ).toHaveLength(2);
+
+    expect(
+      (await app.inject({ method: 'DELETE', url: `/api/todos/${todoId}`, headers: auth() }))
+        .statusCode,
+    ).toBe(204);
+    expect(
+      (await app.inject({ method: 'DELETE', url: `/api/todos/${todoId}`, headers: auth() }))
+        .statusCode,
+    ).toBe(404);
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: `/api/todos/${todoId}`,
+          headers: auth(),
+          payload: {},
+        })
+      ).statusCode,
+    ).toBe(404);
+  });
+
   it('validation errors are 400 with issues', async () => {
     const res = await app.inject({
       method: 'POST',

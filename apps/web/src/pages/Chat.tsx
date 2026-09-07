@@ -1,4 +1,4 @@
-import type { ChatDetail, Mode, RunEvent } from '@doubletake/shared';
+import type { ChatDetail, Entity, Mode, RunEvent } from '@doubletake/shared';
 import { useEffect, useRef, useState } from 'react';
 import { ApiError, api } from '../api';
 import { AnswerSkeleton, Turn } from '../components/Answer';
@@ -11,6 +11,8 @@ import type { MenuAction } from '../components/Menu';
 import { Sheet } from '../components/Sheet';
 import { ListSkeleton } from '../components/Skeleton';
 import { TagEditor } from '../components/TagEditor';
+import { TaskForm } from '../components/TaskForm';
+import { toast } from '../components/Toast';
 import { useLive } from '../live';
 import { navigate } from '../router';
 import { CollectionPicker } from './Entities';
@@ -33,7 +35,7 @@ export function Chat({ id }: { id: string }) {
   const [detail, setDetail] = useState<ChatDetail | null>(null);
   const [events, setEvents] = useState<Record<string, RunEvent[]>>({});
   const [err, setErr] = useState<string | null>(null);
-  const [sheet, setSheet] = useState<'tags' | 'collections' | null>(null);
+  const [sheet, setSheet] = useState<'tags' | 'collections' | 'task' | null>(null);
   const bottom = useRef<HTMLDivElement>(null);
 
   const loadEvents = (runId: string) => {
@@ -143,9 +145,35 @@ export function Chat({ id }: { id: string }) {
       fail(ex);
     }
   }
+  /** Saved list (ADR 0031): keep a thing or a task from this page, then confirm with a toast. */
+  const saved = () => toast('Saved to your list', 'Find it under Library, To do.');
+  async function saveThing(e: Entity) {
+    try {
+      await api.createTodo({
+        kind: e.kind,
+        title: e.name,
+        url: e.url ?? null,
+        attributes: e.attributes,
+        chatId: id,
+      });
+      saved();
+    } catch (ex) {
+      fail(ex);
+    }
+  }
+  async function saveTask(title: string, note: string | null) {
+    try {
+      await api.createTodo({ kind: 'task', title, note, chatId: id });
+      setSheet(null);
+      saved();
+    } catch (ex) {
+      fail(ex);
+    }
+  }
   const actions: (MenuAction | 'separator')[] = [
     { label: 'Tags…', icon: 'tag', onSelect: () => setSheet('tags') },
     { label: 'Collections…', icon: 'folder', onSelect: () => setSheet('collections') },
+    { label: 'Add a task…', icon: 'check-square', onSelect: () => setSheet('task') },
     'separator',
     {
       label: 'Research again, deeper',
@@ -195,7 +223,12 @@ export function Chat({ id }: { id: string }) {
 
       <div className="turns rail" data-rail-pct={Math.round(railPct / 10) * 10}>
         {messages.map((m) => (
-          <Turn msg={m} run={runOf(m.runId)} key={m.id} />
+          <Turn
+            msg={m}
+            run={runOf(m.runId)}
+            key={m.id}
+            onSaveTask={(t) => void saveTask(t, null)}
+          />
         ))}
         {liveRun && (
           <div className="turn answer live">
@@ -232,6 +265,7 @@ export function Chat({ id }: { id: string }) {
         events={events}
         onOpenRun={loadEvents}
         onCancel={(runId) => api.cancelRun(runId).then(load).catch(fail)}
+        onSave={(e) => void saveThing(e)}
       />
 
       <FollowUp onSend={send} onResearch={research} busy={active.length > 0} />
@@ -269,6 +303,14 @@ export function Chat({ id }: { id: string }) {
         description="Manual lists this page belongs to. Smart collections pick it up on their own."
       >
         <CollectionPicker chatId={id} />
+      </Sheet>
+      <Sheet
+        open={sheet === 'task'}
+        onOpenChange={(o) => setSheet(o ? 'task' : null)}
+        title="Add a task"
+        description="Something to do about this page. It lands on your list with a link back here."
+      >
+        <TaskForm onSave={saveTask} />
       </Sheet>
     </div>
   );

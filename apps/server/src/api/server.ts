@@ -4,7 +4,7 @@ import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import type { BrainAdapter } from '@doubletake/brain-sdk';
 import type { Mode, RunEvent } from '@doubletake/shared';
-import { Channel, IngestRequest, ModeRequested, newId } from '@doubletake/shared';
+import { Channel, IngestRequest, ModeRequested, newId, TodoCreate } from '@doubletake/shared';
 import fastifyCors from '@fastify/cors';
 import fastifyStatic from '@fastify/static';
 import fastifyWebsocket from '@fastify/websocket';
@@ -39,7 +39,7 @@ import { MCP_PATH, registerMcpRoutes } from '../mcp/index.js';
 import type { NotificationHub } from '../notify/hub.js';
 import { type DigestGate, parseHHMM, validTimeZone } from '../notify/quiet.js';
 import type { QueueWorker } from '../queue/worker.js';
-import { safeJson, toChatDetail, toChatSummary, toEntityHit, toRunDto } from './dto.js';
+import { safeJson, toChatDetail, toChatSummary, toEntityHit, toRunDto, toTodoDto } from './dto.js';
 import { ftsQuery } from './fts.js';
 import { hostAllowed, IG_PUBLIC_PATHS, registerInstagramRoutes } from './instagram.js';
 
@@ -551,6 +551,52 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
     const { chat, item } = loadChat(req, reply, repo) ?? {};
     if (!chat || !item) return;
     return { collectionIds: repo.collectionsForItem(item.id) };
+  });
+
+  // ---- saved list (ADR 0031) ----
+  /** The owner's saved list: open entries by default, `?done=done` for finished ones, `all` for both. */
+  app.get('/api/todos', async (req) => {
+    const q = z.object({ done: z.enum(['open', 'done', 'all']).default('open') }).parse(req.query);
+    return repo.listTodos(q.done).map((r) => toTodoDto(r.todo, r.chatTitle));
+  });
+
+  /** Save a thing from an answer (an entity snapshot) or a free-form task. */
+  app.post('/api/todos', async (req, reply) => {
+    const body = TodoCreate.parse(req.body);
+    if (body.chatId && !repo.getChat(body.chatId))
+      return reply.code(404).send({ error: 'chat not found' });
+    const row = repo.createTodo(body);
+    const chat = body.chatId ? repo.getChat(body.chatId) : undefined;
+    const item = chat ? repo.getItem(chat.itemId) : undefined;
+    if (chat) worker.emit('chat_updated', chat.id);
+    return reply.code(201).send(toTodoDto(row, item?.title));
+  });
+
+  /** Tick, untick, retitle or annotate one entry. */
+  app.post('/api/todos/:id', async (req, reply) => {
+    const { id } = z.object({ id: z.string() }).parse(req.params);
+    const patch = z
+      .object({
+        done: z.boolean().optional(),
+        title: z.string().trim().min(1).max(300).optional(),
+        note: z.string().max(2000).nullable().optional(),
+      })
+      .parse(req.body ?? {});
+    if (!repo.getTodo(id)) return reply.code(404).send({ error: 'not found' });
+    const row = repo.updateTodo(id, patch);
+    if (!row) return reply.code(404).send({ error: 'not found' });
+    const chat = row.chatId ? repo.getChat(row.chatId) : undefined;
+    const item = chat ? repo.getItem(chat.itemId) : undefined;
+    if (chat) worker.emit('chat_updated', chat.id);
+    return toTodoDto(row, item?.title);
+  });
+
+  app.delete('/api/todos/:id', async (req, reply) => {
+    const { id } = z.object({ id: z.string() }).parse(req.params);
+    const row = repo.getTodo(id);
+    if (!row || !repo.deleteTodo(id)) return reply.code(404).send({ error: 'not found' });
+    if (row.chatId) worker.emit('chat_updated', row.chatId);
+    return reply.code(204).send();
   });
 
   /** Every extracted entity of one kind across the library: places, recipes, products, tools… */

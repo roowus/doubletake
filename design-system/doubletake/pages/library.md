@@ -6,6 +6,8 @@ Overrides [MASTER](../MASTER.md) for browsing what the answers have produced.
 things you can open, not filters you have to remember.
 
 **Layout, top to bottom.**
+0. **To do** row — the owner's saved list, see [todo](todo.md). A full-width row with the
+   accent rule, open count and a hint of the first titles, opening `/todo`.
 1. **Things** — tiles for the entity kinds with counts (Places, Recipes, Products, Tools,
    Tips, Media, People, Events) and a **Map** tile. Counts come from the seeded
    `entity:<kind>` auto collections so the page costs two requests. Zero-count kinds are shown
