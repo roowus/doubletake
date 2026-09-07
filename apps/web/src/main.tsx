@@ -1,9 +1,13 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
+import { applyAppearance } from './appearance';
 import { isNative } from './native';
 import './fonts.css';
 import './styles.css';
+
+// Theme / prose size / motion from Settings → Appearance, before the first paint.
+applyAppearance();
 
 if ('serviceWorker' in navigator) {
   if (isNative()) {

@@ -1,3 +1,4 @@
+import { execSync } from 'node:child_process';
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
@@ -5,7 +6,20 @@ import { VitePWA } from 'vite-plugin-pwa';
 // Dev: the API lives on the server process (default port 7391); proxy so the app is same-origin.
 const API = process.env.DOUBLETAKE_API ?? 'http://127.0.0.1:7391';
 
+// Settings → About shows the build: short git sha plus the day, or "dev" outside a checkout.
+function buildVersion(): string {
+  try {
+    const sha = execSync('git rev-parse --short HEAD', { stdio: ['ignore', 'pipe', 'ignore'] })
+      .toString()
+      .trim();
+    return `${sha} · ${new Date().toISOString().slice(0, 10)}`;
+  } catch {
+    return 'dev';
+  }
+}
+
 export default defineConfig({
+  define: { __DT_VERSION__: JSON.stringify(buildVersion()) },
   plugins: [
     react(),
     VitePWA({

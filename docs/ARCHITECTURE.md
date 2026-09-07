@@ -263,7 +263,7 @@ in `router.tsx` wraps a navigation in the View Transitions API when the browser 
 motion is not reduced. Implementation
 conventions that follow from it: all styling lives in `src/styles.css` as CSS custom
 properties and small utility classes (`.page`, `.card`, `.stack`, `.row`, `.chips`, `.field`,
-`.banner`, `.list-row`, `.kv-row`), no inline `style=` in components; icons are an inline SVG
+`.banner`, `.srow` settings rows), no inline `style=` in components; icons are an inline SVG
 set (`components/Icon.tsx`, `platformIcon()` for platform marks), never emoji or arrow glyphs;
 every icon-only control has an `aria-label`; form inputs have visible labels and inline help;
 errors render as `.banner.error` with `role="alert"` and keep the user's input; chips never
@@ -359,10 +359,28 @@ below) and a **Default brain** menu that pins the run to one adapter (sent as `a
 `POST /api/ingest`) when several are configured; `/share` receives Web Share Target requests
 into the same page. The **entity view** (`pages/Entities.tsx`, `/entities/<kind>`) lists one
 kind with a count, a kind switcher and a filter field; cards show the attributes worth
-surfacing per kind as a mono-labelled definition list and link back to their chat;
-settings as titled sections (server status and spend vs cap, **Notifications** enable/disable
-+ send test + quiet hours, **Instagram** connect/disconnect/status, QR pairing, devices,
-import/export, sign out). The service worker
+surfacing per kind as a mono-labelled definition list and link back to their chat.
+**Settings** (`pages/Settings.tsx` dispatching on the route) is a grouped settings list in the
+iOS/Android idiom, not a column of cards: `pages/settings/SettingsIndex.tsx` shows a search
+field over every row's label and hint, then groups (*Account & devices*, *Research*,
+*Notifications*, *Channels*, *Data*, *Appearance*, *About*) whose rows carry an icon, a label, a
+hint, the current value on the right (paired device count, today's spend, push state, the
+Instagram username, the theme) and a chevron into `/settings/<section>`. Each section is one
+file under `pages/settings/` built from the primitives in `parts.tsx` (`SettingsPage`, `Group`,
+`Row`, `Switch`, `Choice`): **devices** (this device, pairing code + QR, revoke, sign out),
+**research** (adapter health and models, spend vs cap as a stat row with a meter, the three
+modes explained), **notifications** (push on this device + test, server transports and
+channels + test, quiet hours + digest flush), **instagram** (account state, poll / verify /
+refresh / disconnect, recent events; the OAuth callback returns to
+`/settings/instagram?ig=connected|error`), **data** (Karakeep and Memos export, Karakeep import
+with an optional research mode, the notes folder), **appearance** and **about** (build version
+from the `__DT_VERSION__` define in `vite.config.ts`, server URL, links to the docs and issues).
+Destructive rows are red and confirmed through `components/Confirm.tsx`. Appearance is client
+state only: `src/appearance.ts` stores `{ theme: system|paper|ink, prose: s|m|l, motion:
+system|reduce }` under `localStorage['doubletake.appearance']`, applies it at boot in `main.tsx`
+as `data-theme` / `data-prose` / `data-motion` attributes on `<html>` (the CSS tokens key off
+them and `[data-motion="reduce"]` disables transitions like `prefers-reduced-motion`) and swaps
+the `theme-color` meta so the browser chrome follows a forced theme. The service worker
 is a custom `src/sw.ts` (vite-plugin-pwa `injectManifest`): Workbox precache for the shell,
 never the API, plus `push` (shows the notification) and `notificationclick` (focuses an open
 window and navigates to `/chat/<id>`, else opens one) handlers. First run asks for the owner password; other devices redeem a pairing
@@ -400,7 +418,7 @@ connection recipe in [DEPLOYMENT.md](DEPLOYMENT.md#connect-an-agent-mcp)).
 | `POST push/subscribe { kind: webpush\|fcm, endpoint, keys? }`, `POST push/unsubscribe { endpoint }`, `GET push/subscriptions`, `POST push/test` | register this device's push endpoint (webpush needs `keys`; 409 when the kind is not configured on the server); list/remove; send a test notification to this device only |
 | `POST push/channels/test` | send a test message to the owner channels (ntfy, Telegram) only; 404 when none is configured. `GET status` lists them as `push.channels` |
 | `PUT push/quiet-hours { enabled, start, end, timeZone }`, `POST push/digest/flush` | set the quiet window (`HH:MM`, IANA zone; disabling flushes at once); send the parked digest now ([ADR 0020](adr/0020-quiet-hours-digest.md)) |
-| `GET ig/status`, `POST ig/connect`, `GET ig/callback`, `DELETE ig/account` | shadow-account state (username, expiry, polling); start OAuth (`{ url }`, 409 when unconfigured); OAuth redirect → `/settings?ig=connected\|error`; disconnect |
+| `GET ig/status`, `POST ig/connect`, `GET ig/callback`, `DELETE ig/account` | shadow-account state (username, expiry, polling); start OAuth (`{ url }`, 409 when unconfigured); OAuth redirect → `/settings/instagram?ig=connected\|error`; disconnect |
 | `POST ig/refresh`, `POST ig/poll`, `POST ig/test { recipientId, text? }`, `POST ig/simulate-mention { media_id?, comment_id? }` | force token refresh; run one mention poll; send a DM to yourself; replay a mention through the handler |
 | `POST ig/verify` | probe `subscribed_apps` and `/tags`, re-subscribe missing webhook fields, report `commentsOk` (Settings → Check comment access) |
 | `GET/POST /webhooks/instagram` | Meta handshake (`hub.challenge`) and signed deliveries; `401` on bad signature, `200` then async processing |

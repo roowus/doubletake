@@ -282,7 +282,7 @@ describe('account', () => {
       url: `/api/ig/callback?code=abc%23_&state=${state}`,
     });
     expect(cb.statusCode).toBe(302);
-    expect(cb.headers.location).toBe('/settings?ig=connected');
+    expect(cb.headers.location).toBe('/settings/instagram?ig=connected');
     expect(graph.calls).toEqual(
       expect.arrayContaining([
         'exchangeCode:abc',

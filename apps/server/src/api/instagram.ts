@@ -139,10 +139,10 @@ export async function registerInstagramRoutes(app: FastifyInstance, deps: IgRout
     } catch (e) {
       app.log.error(`instagram connect failed: ${(e as Error).message}`);
       return reply.redirect(
-        `/settings?ig=error&message=${encodeURIComponent((e as Error).message)}`,
+        `/settings/instagram?ig=error&message=${encodeURIComponent((e as Error).message)}`,
       );
     }
-    return reply.redirect('/settings?ig=connected');
+    return reply.redirect('/settings/instagram?ig=connected');
   });
 
   app.delete('/api/ig/account', async (_req, reply) => {
