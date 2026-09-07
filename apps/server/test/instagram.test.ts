@@ -628,7 +628,9 @@ describe('comment mention', () => {
     expect(kinds).toEqual(expect.arrayContaining(['caption', 'comments', 'thread']));
     expect(brief?.untrusted.find((b) => b.kind === 'thread')?.label).toBe('primary thread');
     expect(brief?.untrusted.every((b) => b.source === 'instagram')).toBe(true);
-  });
+    // The run is kicked off asynchronously by the mention handled in an earlier test; on a slow
+    // CI runner it can take longer than vitest's default 5 s test timeout, so allow the full wait.
+  }, 15_000);
 
   it('polling fallback turns newly tagged media into comments-focused items', async () => {
     graph.tags = [
