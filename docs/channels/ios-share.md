@@ -34,11 +34,18 @@ way. Both targets declare the group in their `.entitlements`.
   `{ url?, text?, note?, modeHint, channel: "ios_share" }`, 15 s timeout. The server's
   `error` field is shown in red on failure and the sheet stays open; on success it shows
   "Sent" and completes the request.
-- Media-only shares (a photo or video with no URL or text) are accepted by the activation rule
-  but the file is **not uploaded** from the iOS sheet yet; the note is sent as the text and the
-  card says so. The server route exists (`POST /api/ingest/upload`, [ADR 0029](../adr/0029-media-uploads.md))
-  and the Android sheet uses it; wiring the extension's `NSItemProvider` file to it is the next
-  iOS step once the extension is verified on a device.
+- Media-only shares (a photo or video with no URL or text) copy the provider's file into the
+  extension's temporary directory (`loadFileRepresentation` deletes its URL when the callback
+  returns) and stream it with `URLSession.uploadTask(fromFile:)` to
+  `POST {serverUrl}/api/ingest/upload` ([ADR 0029](../adr/0029-media-uploads.md)), 60 s
+  timeout. The body is the file, `Content-Type` is the concrete `UTType`'s MIME type, and the
+  note, mode, `ios_share` channel and a client-minted `share-<uuid>` id travel percent-encoded
+  in `X-Doubletake-Note/-Mode/-Channel/-Client-Id`, the same request the Android sheet sends.
+  The card says "Shared photo" / "Shared video"; several files send only the first. A type the
+  server does not accept, or a file that cannot be read, falls back to a text share of the note
+  with a visible warning. Unpaired media-only shares stash only the note (the file cannot
+  outlive the extension). Verified 2026-09-06 from Photos in the iOS 26.3 simulator (JPEG
+  uploaded, frame described, quick answer returned); **unverified** on a device.
 - **Unpaired**: the extension writes `doubletake.pendingShare` `{url,text,title}` into the App
   Group and asks the responder chain to open `doubletake://share` (the app registers that URL
   scheme in its `Info.plist`). On launch, `SceneDelegate.adoptPendingShare()` moves the value

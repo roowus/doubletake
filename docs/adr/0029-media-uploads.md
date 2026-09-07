@@ -44,8 +44,10 @@ to receive a file from the server.
   the server is unreachable the file is copied into app-private storage before the record is
   queued, because the content-URI grant ends with the sheet. Several files send only the first,
   with a visible note. The chat renders the photo, or a sampled frame of the video, as the
-  share card in place of the link preview. The iOS extension keeps its v1 behaviour (note as
-  text) until it is verified on a device.
+  share card in place of the link preview. The iOS extension copies the provider's file into
+  its temporary directory, uploads it with `URLSession.uploadTask(fromFile:)` and the same
+  headers, and falls back to a text share of the note (with a warning) for types the server
+  rejects; simulator-verified, **unverified** on a device.
 
 ## Alternatives considered
 - **Multipart form upload**: the conventional shape, but it needs a multipart parser on the
