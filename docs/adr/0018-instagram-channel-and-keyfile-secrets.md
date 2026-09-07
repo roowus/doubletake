@@ -45,7 +45,8 @@ a 24/7 laptop service.
 - **Mentions: webhook first, polling second.** Both `changes[]` and the flat `field`/`value`
   payload shapes are accepted for `mentions` and `comments`. Independently, when
   `IG_MENTION_POLLING` is not `off`, the channel polls `GET /<IG_ID>/tags` every 2 minutes and
-  feeds new media through the same handler. A comment that does not contain the shadow
+  feeds new media through the same handler (live check 2026-09-07: `/tags` covers photo tags
+  only, not comment mentions, so the webhook is the sole path for those). A comment that does not contain the shadow
   account's handle is ignored.
 - **Secrets at rest = machine keyfile only.** `SecretBox` (`apps/server/src/secrets/box.ts`)
   seals with ChaCha20-Poly1305 under a random 32-byte key in `<dataDir>/keyfile` (mode 0600,
@@ -69,9 +70,10 @@ a 24/7 laptop service.
 - Adding a channel = a module with `handle…()` methods that call `ingest()`, optional
   `mediaHints`/`onOutcome` hooks, and routes; nothing else changes.
 - Third-party facts still **unverified** against the live API (marked in the guide): whether
-  `mentions` fires under Standard Access, whether `/tags` covers comment mentions, the
-  `parent_id` field on `mentioned_comment`, the exact DM attachment shapes. The handler
-  accepts the documented variants; live testing in M4 acceptance removes the markers.
+  `mentions` fires under Standard Access (one live attempt on 2026-09-07 delivered nothing),
+  the `parent_id` field on `mentioned_comment`. Verified: `/tags` does *not* cover comment
+  mentions (2026-09-07); the DM attachment shapes (2026-09-06). The handler accepts the
+  documented variants; live testing removes the markers.
 - `keyfile` is now the root secret of the data directory: back it up with the database and keep
   `~/.doubletake` out of any sync folder. Rotating it means re-connecting Instagram.
 - ADR 0010's secrets-at-rest sentence is superseded by this ADR; its authentication parts stand.

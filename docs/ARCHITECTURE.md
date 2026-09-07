@@ -238,7 +238,8 @@ every configured adapter and Settings shows them ([guide](BRAIN-ADAPTERS.md#sele
   thread ⇒ `focus=thread:<parent_id>`). `InstagramChannel` verifies and deduplicates webhook
   deliveries, stores caption/comments/thread from the Graph API as `instagram-graph`
   extractions (merged into the brief as untrusted blocks), hands the CDN URL to the media stage
-  via `mediaHints`, polls `/tags` every 2 min as a mention fallback, refreshes the token every
+  via `mediaHints`, polls `/tags` every 2 min as a fallback for photo-tag mentions (comment
+  mentions arrive by webhook only, verified 2026-09-07), refreshes the token every
   30 days and reacts `love` to the originating DM as soon as the share is accepted (the
   `onOutcome` worker hook stays wired but sends nothing). The bot never posts publicly.
   Enabled only when `IG_APP_ID` + `IG_APP_SECRET` are set; boot log prints `instagram: …`.
