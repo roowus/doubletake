@@ -63,8 +63,10 @@ captions, 2 scene frames, RapidOCR, 2 cloud frame descriptions in 9 s, classify,
 claims table, Markdown export, $0.09) and on Instagram (public reel, page-level + media). The
 mlx-whisper path was exercised on the same clip's audio (`whisper-small-mlx`, 2 s warm, ~15 s
 first-time model download). The first live run timed out because one-shot brain calls did not
-pin the model (fixed in `94c26a1`). Remaining: a caption-less video through the full pipeline
-and a Reddit video.
+pin the model (fixed in `94c26a1`). Reddit video live-verified 2026-09-06 (r/oddlysatisfying
+resin turtle: v.redd.it download through yt-dlp on the remote worker, 4 frames, OCR, cloud
+frame descriptions, Atom-feed comments after a rate-limit wait, quick answer $0.08). Remaining: a
+caption-less video through the full pipeline.
 
 - Worker protocol (JSON-lines over stdio) implemented; server restarts a crashed worker.
 - Instagram reel / YouTube / Reddit video: download, transcript (mlx-whisper on Apple Silicon,

@@ -161,7 +161,7 @@ tool-less turn (batches of 6) and expects a JSON array; the result is stored as 
 ### Comments
 - Instagram (own media): `GET /<media_id>/comments?fields=id,text,username,timestamp,like_count,replies{id,text,username,timestamp,like_count}`.
 - Instagram (someone else's media, via mention): `GET /<IG_ID>?fields=mentioned_media.media_id(<id>){caption,permalink,media_url,media_type,comments{…}}` and for a focused thread `mentioned_comment.comment_id(<id>){text,username,timestamp,like_count,replies{…}}`. **Unverified** whether `replies` is expanded on `mentioned_comment` for non-owned media; fallback is to fetch the parent via `mentioned_comment.comment_id(<parent_id>)`.
-- Reddit: from the `.json` listing, top-level sorted by score; a focused thread is walked fully. Atom fallback (when `.json` is 403): flat, feed order, no scores.
+- Reddit: from the `.json` listing, top-level sorted by score; a focused thread is walked fully. Atom fallback (when `.json` is 403): flat, feed order, no scores. Anonymous Reddit allows roughly one request per 45 s per client and the refused `.json` call spends that slot, so a 429 on the feed is waited out once using `x-ratelimit-reset` / `retry-after` (capped at 75 s, cancelled with the run) before the extractor gives up with `Reddit answered HTTP 429.` Observed live 2026-09-06 from two networks: `.json` 403 (JS challenge page), feed 200 after the wait.
 - YouTube: `yt-dlp --write-comments` with `max_comments` from budget (top-sorted).
 - Instagram / TikTok / X comments are not fetched yet (Instagram arrives with M4).
 

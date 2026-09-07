@@ -19,11 +19,21 @@ export interface ExtractContext {
   mode: 'quick' | 'standard' | 'deep';
   focus: string;
   signal: AbortSignal;
-  /** Opaque helper for HTTP with SSRF guard + size cap. */
+  /**
+   * Opaque helper for HTTP with SSRF guard + size cap. `headers` carries only the
+   * rate-limit fields (`retry-after`, `x-ratelimit-reset`, `x-ratelimit-remaining`) when the
+   * origin sent them; extractors use them to wait out a 429 instead of giving up.
+   */
   fetchText(
     url: string,
     opts?: { maxBytes?: number; accept?: string },
-  ): Promise<{ status: number; body: string; finalUrl: string; contentType: string }>;
+  ): Promise<{
+    status: number;
+    body: string;
+    finalUrl: string;
+    contentType: string;
+    headers?: Record<string, string>;
+  }>;
 }
 
 /**

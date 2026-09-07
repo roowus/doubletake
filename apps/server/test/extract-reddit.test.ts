@@ -1,14 +1,15 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   parseRedditAtom,
   redditExtractor,
+  redditRetryDelayMs,
   redditShareLink,
 } from '../src/extract/platforms/reddit.js';
 import type { ExtractContext } from '../src/extract/types.js';
 
 const THREAD = 'https://www.reddit.com/r/skiing/comments/1w6g3j2/why_south_american_skiing/';
 const ATOM = `<?xml version="1.0"?><feed>
-<entry><author><name>/u/op</name></author><content type="html">&lt;table&gt;&lt;tr&gt;&lt;td&gt; submitted by &lt;a href="https://www.reddit.com/user/op"&gt;/u/op&lt;/a&gt; &lt;span&gt;&lt;a href="https://example.com/article"&gt;[link]&lt;/a&gt;&lt;/span&gt; &lt;span&gt;&lt;a href="${THREAD}"&gt;[comments]&lt;/a&gt;&lt;/span&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;</content><id>t3_1w6g3j2</id><title>Why South American Skiing Has Never Reached Its Full Potential</title></entry>
+<entry><author><name>/u/op</name></author><content type="html">&lt;table&gt;&lt;tr&gt;&lt;td&gt; Credit to the studio. &amp;#32; submitted by &amp;#32; &lt;a href="https://www.reddit.com/user/op"&gt;/u/op&lt;/a&gt; &lt;span&gt;&lt;a href="https://example.com/article"&gt;[link]&lt;/a&gt;&lt;/span&gt; &lt;span&gt;&lt;a href="${THREAD}"&gt;[comments]&lt;/a&gt;&lt;/span&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;</content><id>t3_1w6g3j2</id><title>Why South American Skiing Has Never Reached Its Full Potential</title></entry>
 <entry><author><name>/u/alice</name></author><content type="html">&lt;div class="md"&gt;&lt;p&gt;Money....&lt;/p&gt;&lt;/div&gt;</content><id>t1_a</id><title>/u/alice on Why</title></entry>
 <entry><author><name>/u/bob</name></author><content type="html">&lt;div class="md"&gt;&lt;p&gt;Weather &amp;amp; terrain&lt;/p&gt;&lt;/div&gt;</content><id>t1_b</id><title>/u/bob on Why</title></entry>
 </feed>`;
@@ -52,6 +53,7 @@ describe('reddit extractor', () => {
     expect(a.title).toBe('Why South American Skiing Has Never Reached Its Full Potential');
     expect(a.author).toBe('op');
     expect(a.link).toBe('https://example.com/article');
+    expect(a.body).toBe('Credit to the studio.');
     expect(a.comments).toEqual(['- u/alice: Money....', '- u/bob: Weather & terrain']);
     expect(parseRedditAtom(ATOM, 1).comments).toHaveLength(1);
   });
@@ -116,5 +118,71 @@ describe('reddit extractor', () => {
     expect(r.title).toBe('T');
     expect(r.blocks[1]?.label).toContain('score-ordered');
     expect(r.warnings).toEqual([]);
+  });
+
+  it('turns rate-limit headers into a bounded delay', () => {
+    expect(redditRetryDelayMs({ 'x-ratelimit-reset': '41' })).toBe(42_000);
+    expect(redditRetryDelayMs({ 'retry-after': '2', 'x-ratelimit-reset': '41' })).toBe(3_000);
+    expect(redditRetryDelayMs({ 'x-ratelimit-reset': '600' })).toBeUndefined();
+    expect(redditRetryDelayMs({ 'x-ratelimit-reset': 'soon' })).toBeUndefined();
+    expect(redditRetryDelayMs(undefined)).toBeUndefined();
+  });
+
+  it('waits out a 429 on the Atom feed and retries once', async () => {
+    vi.useFakeTimers();
+    try {
+      let feedHits = 0;
+      const c: ExtractContext = {
+        mode: 'quick',
+        focus: 'whole',
+        signal: new AbortController().signal,
+        async fetchText(url) {
+          if (url.includes('.json'))
+            return { status: 403, body: 'blocked', finalUrl: url, contentType: 'text/html' };
+          feedHits += 1;
+          if (feedHits === 1)
+            return {
+              status: 429,
+              body: '',
+              finalUrl: url,
+              contentType: 'text/html',
+              headers: { 'x-ratelimit-reset': '3' },
+            };
+          return { status: 200, body: ATOM, finalUrl: url, contentType: 'application/atom+xml' };
+        },
+      };
+      const pending = redditExtractor.extract(new URL(THREAD), c);
+      await vi.advanceTimersByTimeAsync(4_100);
+      const r = await pending;
+      expect(feedHits).toBe(2);
+      expect(r.title).toBe('Why South American Skiing Has Never Reached Its Full Potential');
+      expect(r.warnings.some((w) => w.includes('Atom feed'))).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('gives up on a 429 whose reset is too far away', async () => {
+    let feedHits = 0;
+    const c: ExtractContext = {
+      mode: 'quick',
+      focus: 'whole',
+      signal: new AbortController().signal,
+      async fetchText(url) {
+        if (url.includes('.json'))
+          return { status: 403, body: 'blocked', finalUrl: url, contentType: 'text/html' };
+        feedHits += 1;
+        return {
+          status: 429,
+          body: '',
+          finalUrl: url,
+          contentType: 'text/html',
+          headers: { 'x-ratelimit-reset': '900' },
+        };
+      },
+    };
+    const r = await redditExtractor.extract(new URL(THREAD), c);
+    expect(feedHits).toBe(1);
+    expect(r.warnings).toContain('Reddit answered HTTP 429.');
   });
 });

@@ -68,7 +68,7 @@ export function parseRedditAtom(
       const outbound = xmlDecode(raw).match(/href="(https?:\/\/(?!www\.reddit\.com)[^"]+)"/);
       link = outbound?.[1];
       body = content
-        .replace(/submitted by\s+\/u\/\S+/, '')
+        .replace(/submitted by\s+(\/u\/)?\S+/, '')
         .replace(/\[link\]|\[comments\]/g, '')
         .replace(/\s+/g, ' ')
         .trim();
@@ -102,6 +102,23 @@ function flatten(
     const r = c.data.replies;
     if (r && typeof r === 'object') flatten(r.data?.children, depth + 1, out, cap);
   }
+}
+
+/**
+ * Reddit's anonymous rate limit is one request per ~45 s per client on the feed endpoints and
+ * a 403 on `.json` still spends that slot, so the Atom fallback often meets a 429. The reset
+ * arrives in `x-ratelimit-reset` (seconds); wait it out once, within this cap.
+ */
+export const REDDIT_RETRY_MAX_MS = 75_000;
+
+export function redditRetryDelayMs(
+  headers: Record<string, string> | undefined,
+): number | undefined {
+  const raw = headers?.['retry-after'] ?? headers?.['x-ratelimit-reset'];
+  const secs = raw === undefined ? Number.NaN : Number(raw);
+  if (!Number.isFinite(secs) || secs < 0) return undefined;
+  const ms = Math.ceil(secs) * 1000 + 1000;
+  return ms <= REDDIT_RETRY_MAX_MS ? ms : undefined;
 }
 
 /** Reddit threads via the public `.json` view: title, self text and a capped comment tree. */
@@ -172,10 +189,25 @@ export const redditExtractor: PlatformExtractor = {
     // security") but still serves the Atom feed of the same thread.
     if (p && !gotJson) {
       try {
-        const res = await ctx.fetchText(`${base}/.rss?limit=200`, {
+        const feed = `${base}/.rss?limit=200`;
+        const opts = {
           accept: 'application/atom+xml,application/xml,text/xml',
           maxBytes: 4 * 1024 * 1024,
-        });
+        };
+        let res = await ctx.fetchText(feed, opts);
+        const delay = res.status === 429 ? redditRetryDelayMs(res.headers) : undefined;
+        if (delay !== undefined && !ctx.signal.aborted) {
+          await new Promise<void>((resolve) => {
+            const t = setTimeout(done, delay);
+            function done() {
+              ctx.signal.removeEventListener('abort', done);
+              clearTimeout(t);
+              resolve();
+            }
+            ctx.signal.addEventListener('abort', done, { once: true });
+          });
+          if (!ctx.signal.aborted) res = await ctx.fetchText(feed, opts);
+        }
         if (res.status === 200) {
           const atom = parseRedditAtom(res.body, cap);
           if (atom.title) post.title = atom.title;
