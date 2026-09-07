@@ -191,16 +191,22 @@ Settings → **Import and export** ([ADR 0024](adr/0024-karakeep-memos-interchan
   per item and the daily cap paces them.
 - **To Memos**: **Download Memos export** gives `{ memos: [ { content, visibility,
   create_time } ] }`, one Markdown memo per item with `#tags`. Post them with a token from
-  Memos Settings → Access tokens (**unverified** against a live Memos: field casing and token
-  header are taken from the proto):
+  Memos Settings → Access tokens (verified 2026-09-07 against Memos 0.30.0 in a container:
+  each memo object is the request body as-is, `create_time` is honoured and the `#tags`
+  come back in `tags[]`):
 
   ```sh
   jq -c '.memos[]' doubletake-memos-*.json | while read -r m; do
     curl -s -X POST https://memos.example/api/v1/memos \
       -H "Authorization: Bearer $MEMOS_TOKEN" -H 'content-type: application/json' \
-      -d "{\"memo\": $m}" >/dev/null
+      -d "$m" >/dev/null
   done
   ```
+
+  Do not wrap the object as `{"memo": …}`: Memos 0.30 answers `200` with an empty memo
+  instead of an error. A short-lived token also comes from
+  `POST /api/v1/auth/signin { "passwordCredentials": { "username", "password" } }`
+  (`accessToken` in the response) when you would rather not mint a personal access token.
 
 ### Instagram webhook (public, one path)
 Pick one:

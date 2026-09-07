@@ -24,7 +24,10 @@ reviewable:
   the interface; no API key is involved.
 - **Memos** has no file import. `POST /api/v1/memos` takes `{ content (Markdown), visibility,
   create_time }`, tags are `#tag` tokens inside the Markdown, auth is a Bearer access token.
-  The proto is verified; the JSON casing over HTTP and the token flow are **unverified**.
+  Verified live 2026-09-07 against Memos 0.30.0: the snake_case `create_time` is accepted over
+  HTTP (`createTime` too), `#tags` are parsed into `tags[]`, the Bearer token from
+  `POST /api/v1/auth/signin` works, and the memo object must be the whole request body (a
+  `{ "memo": … }` wrapper yields an empty memo, not an error).
 
 ## Decision
 Two exports and one import, all on the existing authenticated API, no new tables, no new
@@ -72,5 +75,5 @@ One module (`library/interchange.ts`), three routes, one new `Channel` value sho
 icon in the chat list, and imported items sitting at status `new` with no run until the owner
 asks (Chat's **Research this** works per item; the `?research=` option per import). Round trip
 export → import into an empty library → export is byte-equal for titles, tags, content, notes
-and dates (list ids differ, list names match), and a test pins that. Memos API details stay
-marked unverified until someone posts the file against a live Memos.
+and dates (list ids differ, list names match), and a test pins that. The Memos side was posted
+against a live Memos 0.30.0 on 2026-09-07 (three exported memos, content, dates and tags intact).
