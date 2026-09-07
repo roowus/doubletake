@@ -162,12 +162,17 @@ Full column-level detail in [DATA-MODEL.md](DATA-MODEL.md).
    structured `Answer { summary, category, entities[], claims[], recommendations[], tags[] }`.
    Entities are always extracted, even in `save_for_later`, so a run with no question still
    files the thing it saw into the right collection ([ADR 0014](adr/0014-structured-extraction-and-categories.md)).
+   The framing also asks for judgement, not just facts: when the shared thing proposes a method,
+   tool, purchase or decision, the answer carries a short "Worth it?" paragraph on practicality,
+   necessity, cost and named alternatives.
 5. **Finish.** Store the message, bump `unread_count`, export
    `~/Doubletake/<yyyy>/<yyyy-mm-dd> <slug>.md` with frontmatter, send Web Push + FCM (the
    IG DM was already hearted on receipt; the finished answer travels by push only), write
    `cost_ledger`.
 6. **Follow-up.** Default = cheap turn: same adapter, resume the session when the adapter can,
-   `maxTurns` 1–3, no extraction. Escalate to a full run (Standard or Deep) when the owner taps
+   `maxTurns` 1–3, no extraction, but two searches and two fetches so an unrecognised term is
+   looked up rather than declared unknown (the prompt forbids "I don't know what X is" while a
+   search tool is available, in runs and follow-ups alike). Escalate to a full run (Standard or Deep) when the owner taps
    **Research this** or the model returns `escalate: { mode, reason }`; the session is resumed
    so prior context carries. A model-suggested escalation is surfaced as a status message, never
    started automatically, and is dropped when it does not point at a strictly higher mode or its

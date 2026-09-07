@@ -67,7 +67,7 @@ export class ClaudeAgentSdkAdapter implements BrainAdapter {
     sink: EventSink,
   ): Promise<RunResult> {
     const canResume = Boolean(chat.sessionId ?? opts.sessionId);
-    const prompt = renderFollowUp(chat, userMessage, canResume);
+    const prompt = renderFollowUp(chat, userMessage, canResume, opts.tools);
     const sessionId = chat.sessionId ?? opts.sessionId;
     return this.execute(prompt, sessionId ? { ...opts, sessionId } : opts, sink, {
       fresh: !canResume,

@@ -174,7 +174,12 @@ export class HeadlessCliAdapter implements BrainAdapter {
   ): Promise<RunResult> {
     const canResume = this.capabilities().resume && !!chat.sessionId;
     if (canResume) {
-      return this.exec(renderFollowUp(chat, userMessage, true), opts, sink, chat.sessionId);
+      return this.exec(
+        renderFollowUp(chat, userMessage, true, opts.tools),
+        opts,
+        sink,
+        chat.sessionId,
+      );
     }
     // No native resume: replay the conversation with a zero-tool policy.
     const zero: RunOptions = {
@@ -182,7 +187,7 @@ export class HeadlessCliAdapter implements BrainAdapter {
       tools: { ...opts.tools, webSearch: false, webFetch: false, readRoots: [], writeRoot: null },
     };
     return this.exec(
-      `${SYSTEM_FRAMING}\n\n${renderFollowUp(chat, userMessage, false)}`,
+      `${SYSTEM_FRAMING}\n\n${renderFollowUp(chat, userMessage, false, opts.tools)}`,
       zero,
       sink,
     );

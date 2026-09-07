@@ -117,13 +117,13 @@ export class OpenAICompatibleAdapter implements BrainAdapter {
     const stored = chat.sessionId ? this.loadSession(chat.sessionId) : null;
     if (stored) {
       const messages = condense(stored.messages, this.cfg.maxHistoryMessages ?? 60);
-      messages.push({ role: 'user', content: renderFollowUp(chat, userMessage, true) });
+      messages.push({ role: 'user', content: renderFollowUp(chat, userMessage, true, opts.tools) });
       return this.loop(messages, opts, sink, chat.sessionId as string);
     }
     // No stored session: the rendered transcript promises zero tools, so run with none.
     const messages: ChatMessage[] = [
       { role: 'system', content: SYSTEM_FRAMING },
-      { role: 'user', content: renderFollowUp(chat, userMessage, false) },
+      { role: 'user', content: renderFollowUp(chat, userMessage, false, opts.tools) },
     ];
     const noTools: RunOptions = {
       ...opts,
