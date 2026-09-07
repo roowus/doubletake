@@ -72,8 +72,29 @@ def _ts(s: str) -> float:
     return int(h) * 3600 + int(mi) * 60 + int(se) + int(ms.ljust(3, "0")) / 1000
 
 
+# Cue texts that auto-captioners emit for non-speech audio (YouTube / v.redd.it ASR writes
+# "Music", "You", "[Music]", "[Applause]"…). A track made only of these carries no speech.
+_FILLER_CUE = re.compile(
+    r"^[\[\(]?(music|applause|laughter|you|thank you|foreign)[\]\)]?\.?$", re.I
+)
+
+
+def captions_have_speech(segs: list[Segment]) -> bool:
+    """False when every cue is a filler word, so the audio should be transcribed instead."""
+    return any(not _FILLER_CUE.match(s["text"].strip()) for s in segs)
+
+
 def parse_captions(path: Path) -> list[Segment]:
-    """WebVTT/SRT → segments, dropping tags and the rolling duplicates YouTube auto-subs emit."""
+    """WebVTT/SRT → segments, dropping tags and the rolling duplicates YouTube auto-subs emit.
+
+    Returns [] when the track has no real speech (see `captions_have_speech`) so the caller
+    falls through to whisper.
+    """
+    segs = _parse_captions(path)
+    return segs if captions_have_speech(segs) else []
+
+
+def _parse_captions(path: Path) -> list[Segment]:
     text = path.read_text(encoding="utf-8", errors="replace")
     segs: list[Segment] = []
     last = ""
