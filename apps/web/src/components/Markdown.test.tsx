@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { cleanSvg, Markdown } from './Markdown';
+
+vi.mock('mermaid', () => ({ default: { initialize: vi.fn(), render: vi.fn() } }));
 
 const render = (md: string) => renderToStaticMarkup(<Markdown>{md}</Markdown>);
 
@@ -47,5 +49,26 @@ describe('Markdown', () => {
       '<svg viewBox="0 0 1 1"><foreignObject><body onload="x"/></foreignObject><g onclick="x"><path d="M0 0"/></g></svg>',
     );
     expect(out).toBe('<svg viewBox="0 0 1 1"><g><path d="M0 0"></path></g></svg>');
+  });
+  it('draws a ```chart fence and leaves other fences as code', () => {
+    const md = [
+      'Prices:',
+      '```chart',
+      JSON.stringify({ type: 'bar', series: [{ name: 'a', values: [{ x: 'x', y: 1 }] }] }),
+      '```',
+      '```json',
+      '{"type":"bar"}',
+      '```',
+    ].join('\n');
+    const html = render(md);
+    expect(html).toContain('<figure class="chart bar">');
+    expect(html).toContain('<pre><code class="language-json">');
+    expect(render('```chart\nnope\n```')).toContain('<figure class="chart broken">');
+  });
+
+  it('mounts a ```mermaid fence as a pending figure holding the source', () => {
+    const html = render('```mermaid\ngraph TD; A-->B\n```');
+    expect(html).toContain('<figure class="mermaid pending" aria-busy="true">');
+    expect(html).toContain('<code class="language-mermaid">graph TD; A--&gt;B\n</code>');
   });
 });

@@ -1,51 +1,32 @@
-import DOMPurify from 'dompurify';
 import ReactMarkdown, { type ExtraProps } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { cleanSvg } from '../svg';
+import { ChartBlock } from './Chart';
+import { Mermaid } from './Mermaid';
 
 /**
  * Answer text is markdown with GitHub extensions (tables, task lists, strikethrough, autolinks).
- * Raw HTML is never rendered. The one exception is a fenced ```svg block: a small diagram the
- * brain drew, which is inlined after DOMPurify's SVG profile has run with scripts, foreign
- * objects, links, `<use>`/`<image>` references, stylesheets and event handlers stripped, so it
- * can only draw. Anything that is not a clean `<svg>` falls back to a plain code block.
+ * Raw HTML is never rendered. Three fenced blocks are drawn instead of shown as code:
+ * ```svg (a small diagram the brain drew, inlined after DOMPurify's SVG profile — `svg.ts`),
+ * ```chart (a JSON spec drawn by components/Chart.tsx) and ```mermaid (rendered lazily by
+ * components/Mermaid.tsx at securityLevel strict). Anything that fails to parse or sanitize
+ * falls back to a plain code block.
  */
-const SVG_CONFIG: Parameters<typeof DOMPurify.sanitize>[1] = {
-  USE_PROFILES: { svg: true, svgFilters: true },
-  FORBID_TAGS: ['script', 'foreignObject', 'use', 'image', 'a', 'style', 'set', 'animate'],
-  FORBID_ATTR: ['href', 'xlink:href', 'style'],
-  // A stray text node or a second root would break the layout; keep exactly one <svg>.
-  WHOLE_DOCUMENT: false,
-};
-const EXTERNAL_URL = /url\s*\(\s*['"]?\s*(?!#)/i;
-let hooked = false;
-
-/** Sanitize brain-drawn SVG source; returns null when nothing safe and drawable remains. */
-export function cleanSvg(src: string): string | null {
-  if (!DOMPurify.isSupported) return null;
-  if (!hooked) {
-    hooked = true;
-    // fill="url(https://…)" would fetch from a remote host; only same-document references stay.
-    DOMPurify.addHook('uponSanitizeAttribute', (_node, data) => {
-      if (EXTERNAL_URL.test(data.attrValue)) data.keepAttr = false;
-    });
-  }
-  const out = DOMPurify.sanitize(src.trim(), SVG_CONFIG).trim();
-  if (!/^<svg[\s>]/i.test(out) || !/<\/svg>\s*$/i.test(out)) return null;
-  if (out.indexOf('<svg') !== out.lastIndexOf('<svg')) return null;
-  return out;
-}
+export { cleanSvg } from '../svg';
 
 type HastNode = NonNullable<ExtraProps['node']>;
 
-function fencedSvg(node: HastNode | undefined): string | null {
+/** The fence language and text of a ```lang block, or null for anything else. */
+function fence(node: HastNode | undefined): { lang: string; text: string } | null {
   const code = node?.children.find(
     (c): c is HastNode => c.type === 'element' && (c as HastNode).tagName === 'code',
   );
   const cls = code?.properties?.className;
   const langs = Array.isArray(cls) ? cls.map(String) : typeof cls === 'string' ? [cls] : [];
-  if (!langs.includes('language-svg')) return null;
+  const lang = langs.find((l) => l.startsWith('language-'))?.slice('language-'.length);
+  if (!lang) return null;
   const text = (code?.children ?? []).map((c) => (c.type === 'text' ? c.value : '')).join('');
-  return cleanSvg(text);
+  return { lang: lang.toLowerCase(), text };
 }
 
 export function Markdown({ children }: { children: string }) {
@@ -60,17 +41,22 @@ export function Markdown({ children }: { children: string }) {
             </a>
           ),
           pre: ({ node, children: c, ...rest }) => {
-            const svg = fencedSvg(node);
-            if (svg)
-              return (
-                <figure
-                  className="svg"
-                  role="img"
-                  aria-label="Diagram"
-                  // biome-ignore lint/security/noDangerouslySetInnerHtml: DOMPurify SVG profile above
-                  dangerouslySetInnerHTML={{ __html: svg }}
-                />
-              );
+            const f = fence(node);
+            if (f?.lang === 'svg') {
+              const svg = cleanSvg(f.text);
+              if (svg)
+                return (
+                  <figure
+                    className="svg"
+                    role="img"
+                    aria-label="Diagram"
+                    // biome-ignore lint/security/noDangerouslySetInnerHtml: DOMPurify SVG profile (svg.ts)
+                    dangerouslySetInnerHTML={{ __html: svg }}
+                  />
+                );
+            }
+            if (f?.lang === 'chart') return <ChartBlock text={f.text} />;
+            if (f?.lang === 'mermaid') return <Mermaid text={f.text} />;
             return <pre {...rest}>{c}</pre>;
           },
         }}

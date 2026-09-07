@@ -17,7 +17,7 @@ Mode is picked per run. Budgets are configuration (`modes.*` in settings) with t
 | `read_file` | no | yes | yes |
 | `write_sandbox_file` | no | no | yes (report + assets) |
 | Model tier hint | fast (Haiku-class) | default (Sonnet-class) | best (Opus / reasoning) |
-| Output | 3–6 sentences + entities | answer + claims verdict + sources + entities | full report, tables, recommendations, entities |
+| Output | 3–6 sentences + entities | answer + claims verdict + sources + entities | full report, tables, charts / diagrams where they help, recommendations, entities |
 
 ## Picking a mode
 
@@ -38,7 +38,12 @@ Mode is picked per run. Budgets are configuration (`modes.*` in settings) with t
 ## Output templates by question type
 
 Every template ends with the structured `Answer` block (category, entities, tags; claims and
-recommendations where relevant). Entities are the SaveToList lesson: the place, recipe, product,
+recommendations where relevant). Besides GitHub-flavoured Markdown, the brain may use three
+drawn fences (the system prompt documents them, the web client renders them, see
+`docs/ARCHITECTURE.md` §9): ```` ```chart ```` for numbers to compare (a small JSON spec: bar /
+line / pie series or `stat` rows), ```` ```mermaid ```` for structure (flowchart, sequence,
+timeline) and ```` ```svg ```` for a spatial sketch. The text must always stand on its own; a
+picture is never the only carrier of a fact. Entities are the SaveToList lesson: the place, recipe, product,
 tool, or tip in the media is extracted with its attributes so it lands in the right auto
 collection even when the owner asked nothing.
 
