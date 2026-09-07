@@ -65,8 +65,12 @@ mlx-whisper path was exercised on the same clip's audio (`whisper-small-mlx`, 2 
 first-time model download). The first live run timed out because one-shot brain calls did not
 pin the model (fixed in `94c26a1`). Reddit video live-verified 2026-09-06 (r/oddlysatisfying
 resin turtle: v.redd.it download through yt-dlp on the remote worker, 4 frames, OCR, cloud
-frame descriptions, Atom-feed comments after a rate-limit wait, quick answer $0.08). Remaining: a
-caption-less video through the full pipeline.
+frame descriptions, Atom-feed comments after a rate-limit wait, quick answer $0.08). Caption-less
+video live-verified 2026-09-06: a narrated clip with no subtitle track uploaded through
+`POST /api/ingest/upload` was transcribed by `faster-whisper small` on the remote Fedora worker
+(transcript word-perfect, 2 frames, OCR, cloud frame descriptions, quick answer $0.008), and the
+music-only Reddit clip now ends in "No speech detected; transcription skipped." instead of a
+filler-only caption track. M3 acceptance is complete.
 
 - Worker protocol (JSON-lines over stdio) implemented; server restarts a crashed worker.
 - Instagram reel / YouTube / Reddit video: download, transcript (mlx-whisper on Apple Silicon,

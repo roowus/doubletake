@@ -106,7 +106,7 @@ On the worker machine:
 
 ```sh
 git clone https://github.com/roowus/doubletake && cd doubletake/workers/media
-uv sync --extra media --extra whisper-mlx        # or --extra whisper-cpu
+uv sync --extra media --extra whisper-mlx        # or --extra whisper-cpu on Linux / Intel
 export DOUBLETAKE_WORKER_TOKEN="$(openssl rand -base64 24)"   # keep it; the server needs the same value
 uv run doubletake-media serve --bind "$(tailscale ip -4)" --port 7392 --data-dir ~/.doubletake-worker
 ```
@@ -124,6 +124,9 @@ a GPU helps); `cloud` vision is still done by the server through the brain. Veri
 2026-09-06 with the server on a Mac and the worker on a Fedora machine over Tailscale; a
 `systemd --user` unit with `EnvironmentFile=%h/.config/doubletake/worker.env` holding the
 token is a good way to keep it running (`loginctl enable-linger <user>` so it survives logout).
+A run whose answer carries `Transcription unavailable: faster-whisper not installed` means the
+worker's environment lacks the whisper extra: rerun `uv sync` there with the same `--extra`
+flags as above (a bare `uv sync` removes extras it is not told about) and restart the unit.
 
 If both machines mount one filesystem at the same absolute path (a NAS share, a synced
 folder), start the worker with `--shared-paths` and set `DOUBLETAKE_WORKER_SHARED_PATHS=on` on
@@ -229,7 +232,9 @@ Copy `~/.doubletake` (stop the service first or use `sqlite3 .backup`) and `~/Do
 Restore = copy back. Secrets need the same owner password.
 
 ## Upgrades
-`git pull && pnpm install && (cd workers/media && uv sync) && pnpm build`, restart the service.
+`git pull && pnpm install && (cd workers/media && uv sync --extra media --extra whisper-…) && pnpm build`
+(repeat the `--extra` flags you installed with; `uv sync` drops the ones you leave out), then
+restart the service.
 Migrations run on start. Breaking changes are listed in `CHANGELOG.md` (from M1). The
 server registers the web bundle's hashed files at boot, so rebuilding `apps/web` without a
 restart leaves the new `index.html` pointing at files the running server does not know; they
