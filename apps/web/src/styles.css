@@ -1491,10 +1491,37 @@ button.danger.solid {
   margin-left: auto;
 }
 .chat-tags {
-  margin-top: calc(-1 * var(--space-2));
+  margin-top: calc(-1 * var(--space-1));
+  padding: 0 var(--space-1);
 }
+/* Tag chips on the page echo the inbox meta row (clay mono with a hash) rather than the 44 px
+   button default; the pseudo-element keeps a 44 px tap area around the small chip. */
 .chat-tags .tag {
+  position: relative;
+  min-height: 0;
+  height: 26px;
+  padding: 0 8px;
+  background: transparent;
+  border-color: color-mix(in srgb, var(--accent-2) 40%, transparent);
+  color: var(--accent-2);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 500;
   cursor: pointer;
+}
+.chat-tags .tag::before {
+  content: "#";
+  margin-right: -2px;
+  opacity: 0.7;
+}
+.chat-tags .tag::after {
+  content: "";
+  position: absolute;
+  inset: -9px 0;
+}
+.chat-tags .tag:hover {
+  background: color-mix(in srgb, var(--accent-2) 10%, transparent);
+  border-color: var(--accent-2);
 }
 
 /* The clip: the shared thing itself. */
@@ -1530,7 +1557,8 @@ a.clip:hover {
 }
 .clip.upload .clip-thumb {
   width: 100%;
-  max-height: 60vh;
+  /* A shared photo or frame is context, not the page: never taller than the reader's first fold. */
+  max-height: min(60vh, 400px);
   height: auto;
   object-fit: contain;
   background: var(--surface-2);
@@ -2876,8 +2904,9 @@ button.srow:hover {
   background: var(--err);
 }
 
-/* Switch: a checkbox drawn as a toggle. 44 px hit area via the enclosing row. */
-.switch {
+/* Switch: a checkbox drawn as a toggle. 44 px hit area via the enclosing row. `input.switch`
+   so the size wins over the generic `input[type="checkbox"]` rule above. */
+input.switch {
   appearance: none;
   -webkit-appearance: none;
   width: 44px;
