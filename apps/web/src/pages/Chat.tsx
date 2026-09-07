@@ -1,56 +1,46 @@
 import type { ChatDetail, Mode, RunEvent } from '@doubletake/shared';
 import { useEffect, useRef, useState } from 'react';
 import { ApiError, api } from '../api';
-import { Claims, EntityCards, Recommendations } from '../components/AnswerCards';
+import { AnswerSkeleton, Turn } from '../components/Answer';
+import { ACTIVE, AnswerTabs } from '../components/AnswerTabs';
+import { ChatHeader } from '../components/ChatHeader';
+import { ClipCard } from '../components/ClipCard';
+import { FollowUp } from '../components/FollowUp';
 import { Icon } from '../components/Icon';
-import { Markdown } from '../components/Markdown';
-import { RunTimeline } from '../components/RunTimeline';
-import { ShareCard } from '../components/ShareCard';
-import { Sources, TagEditor } from '../components/Sources';
+import type { MenuAction } from '../components/Menu';
+import { Sheet } from '../components/Sheet';
+import { TagEditor } from '../components/TagEditor';
 import { useLive } from '../live';
 import { navigate } from '../router';
 import { CollectionPicker } from './Entities';
 
-const ACTIVE = new Set(['queued', 'extracting', 'classifying', 'researching']);
+/** Phases a run passes through, for the margin rail's fill while it is live. */
+const PHASE_PCT: Record<string, number> = {
+  queued: 5,
+  extracting: 25,
+  classifying: 45,
+  researching: 70,
+};
 
+/**
+ * The answer page: a notebook page about one shared thing. Clip on top, the owner's note,
+ * then the brain's answer as full-width prose beside the margin rail (the accent rule that
+ * marks where the answer starts and fills while a run is live), the four detail tabs, and
+ * the follow-up composer stuck to the bottom.
+ */
 export function Chat({ id }: { id: string }) {
   const [detail, setDetail] = useState<ChatDetail | null>(null);
   const [events, setEvents] = useState<Record<string, RunEvent[]>>({});
-  const [draft, setDraft] = useState('');
   const [err, setErr] = useState<string | null>(null);
-  const [menu, setMenu] = useState(false);
-  /** Ids of the configured brains; the Research menu offers a per-adapter pin when there are several. */
-  const [brains, setBrains] = useState<string[]>([]);
-  const [pin, setPin] = useState<string | null>(null);
+  const [sheet, setSheet] = useState<'tags' | 'collections' | null>(null);
   const bottom = useRef<HTMLDivElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
 
-  // The adapter list only matters once the menu opens; healthchecks are skipped (cheap call).
-  useEffect(() => {
-    if (!menu || brains.length) return;
+  const loadEvents = (runId: string) => {
     api
-      .status('skip')
-      .then((s) => setBrains(s.brainIds ?? []))
+      .runEvents(id, runId)
+      .then((ev) => setEvents((m) => ({ ...m, [runId]: ev.events })))
       .catch(() => {});
-  }, [menu, brains.length]);
-
-  // Close the research menu on Escape or a click outside it.
-  useEffect(() => {
-    if (!menu) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setMenu(false);
-    };
-    const onClick = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenu(false);
-    };
-    window.addEventListener('keydown', onKey);
-    window.addEventListener('mousedown', onClick);
-    return () => {
-      window.removeEventListener('keydown', onKey);
-      window.removeEventListener('mousedown', onClick);
-    };
-  }, [menu]);
-
+  };
   const load = async () => {
     try {
       const d = await api.chat(id);
@@ -58,12 +48,7 @@ export function Chat({ id }: { id: string }) {
       setErr(null);
       if (d.chat.unreadCount > 0) api.markRead(id).catch(() => {});
       // Backfill the timeline of any still-active run so a reload shows what happened so far.
-      for (const r of d.runs.filter((r) => ACTIVE.has(r.status))) {
-        api
-          .runEvents(id, r.id)
-          .then((ev) => setEvents((m) => ({ ...m, [r.id]: ev.events })))
-          .catch(() => {});
-      }
+      for (const r of d.runs.filter((r) => ACTIVE.has(r.status))) loadEvents(r.id);
     } catch (e) {
       setErr(e instanceof ApiError ? e.message : String(e));
     }
@@ -86,12 +71,12 @@ export function Chat({ id }: { id: string }) {
     } else if (e.kind === 'chat_updated' && e.chatId === id) load();
   });
 
+  // A new turn scrolls into view; live run events do not (the Run tab has its own scroll).
   const msgCount = detail?.messages.length ?? 0;
-  const eventCount = events.length;
-  // biome-ignore lint/correctness/useExhaustiveDependencies: scroll on any new message/event
+  // biome-ignore lint/correctness/useExhaustiveDependencies: scroll on any new message
   useEffect(() => {
-    bottom.current?.scrollIntoView({ block: 'end' });
-  }, [msgCount, eventCount]);
+    if (msgCount > 1) bottom.current?.scrollIntoView({ block: 'end' });
+  }, [msgCount]);
 
   if (err && !detail)
     return (
@@ -129,63 +114,54 @@ export function Chat({ id }: { id: string }) {
   const lastAnswer = [...messages].reverse().find((m) => m.kind === 'answer')?.structured ?? null;
   const capped = runs.some((r) => r.status === 'capped') && active.length === 0;
   const runOf = (runId: string | null | undefined) => runs.find((r) => r.id === runId);
-  const host = chat.sourceUrl ? new URL(chat.sourceUrl).hostname.replace(/^www\./, '') : null;
+  const liveRun = active[0];
+  // Rail fill: the phase gives a floor, tool events nudge it towards the top of the phase.
+  const railPct = liveRun
+    ? Math.min(
+        95,
+        (PHASE_PCT[liveRun.status] ?? 10) + Math.min(20, (events[liveRun.id]?.length ?? 0) * 2),
+      )
+    : 100;
+  const hasAnswer = messages.some((m) => m.role === 'assistant');
 
-  async function send(e: React.FormEvent) {
-    e.preventDefault();
-    const content = draft.trim();
-    if (!content) return;
-    setDraft('');
+  const fail = (ex: unknown) => setErr(ex instanceof ApiError ? ex.message : String(ex));
+  async function send(content: string) {
     try {
       await api.sendMessage(id, content);
       load();
     } catch (ex) {
-      setErr(ex instanceof ApiError ? ex.message : String(ex));
+      fail(ex);
     }
   }
-  async function research(mode?: Mode) {
-    setMenu(false);
+  async function research(mode: Mode, adapter: string | null) {
     try {
-      await api.research(id, mode, undefined, pin ?? undefined);
+      await api.research(id, mode, undefined, adapter ?? undefined);
       load();
     } catch (ex) {
-      setErr(ex instanceof ApiError ? ex.message : String(ex));
+      fail(ex);
     }
   }
+  const actions: (MenuAction | 'separator')[] = [
+    { label: 'Tags…', icon: 'tag', onSelect: () => setSheet('tags') },
+    { label: 'Collections…', icon: 'folder', onSelect: () => setSheet('collections') },
+    'separator',
+    {
+      label: 'Research again, deeper',
+      icon: 'compass',
+      disabled: active.length > 0,
+      onSelect: () => void research(item.modeEffective === 'deep' ? 'deep' : 'standard', null),
+    },
+  ];
 
   return (
-    <div className="page narrow stack">
-      <header className="chat-head stack tight">
-        <div className="title-row">
-          <button
-            type="button"
-            className="ghost icon"
-            onClick={() => navigate('/')}
-            aria-label="Back"
-          >
-            <Icon name="arrow-left" />
-          </button>
-          <h2 className="clamp-2">{chat.title}</h2>
-          <span className={`status ${chat.status}`}>{chat.status}</span>
-        </div>
-        <div className="meta">
-          {host && chat.sourceUrl && (
-            <a
-              href={item.canonicalUrl ?? chat.sourceUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="row"
-            >
-              <Icon name="external-link" size={14} />
-              {host}
-            </a>
-          )}
-          {item.modeEffective && <span>{item.modeEffective}</span>}
-          {item.questionType && <span>{item.questionType.replace(/_/g, ' ')}</span>}
-          {totalCost > 0 && <span className="mono">${totalCost.toFixed(3)}</span>}
-          {chat.category && <span className="tag">{chat.category}</span>}
-        </div>
-      </header>
+    <div className="page narrow notebook" data-live={liveRun ? '' : undefined}>
+      <ChatHeader
+        chat={chat}
+        item={item}
+        totalCost={totalCost}
+        onBack={() => navigate('/')}
+        actions={actions}
+      />
 
       {err && (
         <div className="banner error" role="alert">
@@ -202,166 +178,96 @@ export function Chat({ id }: { id: string }) {
         </div>
       )}
 
-      <div className="messages">
-        <ShareCard chat={chat} item={item} />
-        {messages.map((m) => {
-          if (m.role === 'system')
-            return (
-              <div className={`msg system ${m.kind === 'error' ? 'error' : ''}`} key={m.id}>
-                {m.content}
-              </div>
-            );
-          if (m.role === 'user')
-            return (
-              <div className="msg user" key={m.id}>
-                {m.content}
-              </div>
-            );
-          const run = runOf(m.runId);
-          return (
-            <article className="msg assistant stack" key={m.id}>
-              <Markdown>{m.content}</Markdown>
-              {m.structured && m.kind === 'answer' && (
-                <>
-                  <Claims claims={m.structured.claims} />
-                  <Recommendations items={m.structured.recommendations} />
-                </>
-              )}
-              {run && (
-                <div className="foot">
-                  {run.mode}
-                  {run.pinned && ` · ${run.adapter}${run.model ? `@${run.model}` : ''}`} ·{' '}
-                  {run.costUsd != null ? `$${run.costUsd.toFixed(3)}` : 'cost n/a'}
-                </div>
-              )}
-            </article>
-          );
-        })}
-        {lastAnswer && <EntityCards entities={entities} />}
-        {active.map((r) => (
-          <div className="card quiet stack tight" key={r.id}>
-            <div className="row small">
-              <span className={`status ${r.status}`}>{r.status}</span>
-              <span className="muted grow">
-                {r.kind} · {r.mode}
-              </span>
+      <ClipCard chat={chat} item={item} />
+      {chat.tags.length > 0 && (
+        <ul className="chips chat-tags" aria-label="Tags">
+          {chat.tags.map((t) => (
+            <li key={t}>
+              <button type="button" className="tag" onClick={() => setSheet('tags')}>
+                {t}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <div className="turns rail" data-rail-pct={Math.round(railPct / 10) * 10}>
+        {messages.map((m) => (
+          <Turn msg={m} run={runOf(m.runId)} key={m.id} />
+        ))}
+        {liveRun && (
+          <div className="turn answer live">
+            <div className="turn-label">
+              <span className={`status ${liveRun.status}`}>{liveRun.status}</span>
+              <span>{liveRun.mode}</span>
+              {liveRun.pinned && <span>{liveRun.adapter}</span>}
+              <span className="grow" />
               <button
                 type="button"
                 className="ghost small"
-                onClick={() => api.cancelRun(r.id).then(load)}
+                onClick={() => api.cancelRun(liveRun.id).then(load).catch(fail)}
               >
                 Cancel
               </button>
             </div>
-            <RunTimeline events={events[r.id] ?? []} />
+            <AnswerSkeleton />
           </div>
-        ))}
+        )}
+        {!hasAnswer && !liveRun && (
+          <div className="turn system">
+            <Icon name="info" size={14} />
+            <span>No answer yet. Research this from the compass below.</span>
+          </div>
+        )}
         <div ref={bottom} />
       </div>
 
-      <details className="card">
-        <summary>
-          <Icon name="bookmark-search" />
-          <span className="grow">Tags, collections and sources</span>
-          <Icon name="chevron-down" className="chev" />
-        </summary>
-        <div className="stack">
-          <div className="field">
-            <span className="label">Tags</span>
-            <TagEditor
-              tags={chat.tags}
-              onAdd={async (name) => {
-                try {
-                  await api.addTag(id, name);
-                  load();
-                } catch (ex) {
-                  setErr(ex instanceof ApiError ? ex.message : String(ex));
-                }
-              }}
-              onRemove={async (name) => {
-                try {
-                  await api.removeTag(id, name);
-                  load();
-                } catch (ex) {
-                  setErr(ex instanceof ApiError ? ex.message : String(ex));
-                }
-              }}
-            />
-          </div>
-          <div className="field">
-            <span className="label">Collections</span>
-            <CollectionPicker chatId={id} />
-          </div>
-          <Sources extractions={extractions} />
-        </div>
-      </details>
+      <AnswerTabs
+        claims={lastAnswer?.claims ?? []}
+        entities={entities}
+        extractions={extractions}
+        runs={runs}
+        events={events}
+        onOpenRun={loadEvents}
+        onCancel={(runId) => api.cancelRun(runId).then(load).catch(fail)}
+      />
 
-      <form className="composer" onSubmit={send}>
-        <div className="bar">
-          <textarea
-            aria-label="Follow-up question"
-            placeholder="Ask a follow-up…"
-            rows={1}
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                e.currentTarget.form?.requestSubmit();
-              }
-            }}
-          />
-          <div className="popover-anchor" ref={menuRef}>
-            <button
-              type="button"
-              className="ghost icon"
-              onClick={() => setMenu(!menu)}
-              aria-haspopup="menu"
-              aria-expanded={menu}
-              aria-label="Run a full research pass"
-              title="Research this"
-            >
-              <Icon name="compass" />
-            </button>
-            {menu && (
-              <div className="popover" role="menu" aria-label="Research this">
-                <div className="head">Research this</div>
-                <button type="button" role="menuitem" onClick={() => research('quick')}>
-                  Quick <span className="help muted small">&lt; 90 s</span>
-                </button>
-                <button type="button" role="menuitem" onClick={() => research('standard')}>
-                  Standard <span className="help muted small">~5 min</span>
-                </button>
-                <button type="button" role="menuitem" onClick={() => research('deep')}>
-                  Deep <span className="help muted small">~20 min</span>
-                </button>
-                {brains.length > 1 && (
-                  <>
-                    <div className="head">Brain</div>
-                    <label className="popover-row">
-                      <select
-                        aria-label="Brain for this run"
-                        value={pin ?? ''}
-                        onChange={(e) => setPin(e.target.value || null)}
-                      >
-                        <option value="">Mode default</option>
-                        {brains.map((b) => (
-                          <option key={b} value={b}>
-                            {b}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  </>
-                )}
-              </div>
-            )}
-          </div>
-          <button type="submit" className="primary icon" disabled={!draft.trim()} aria-label="Send">
-            <Icon name="send" />
-          </button>
-        </div>
-      </form>
+      <FollowUp onSend={send} onResearch={research} busy={active.length > 0} />
+
+      <Sheet
+        open={sheet === 'tags'}
+        onOpenChange={(o) => setSheet(o ? 'tags' : null)}
+        title="Tags"
+        description="Tags from the brain are plain; ones you add are dashed and never overwritten."
+      >
+        <TagEditor
+          tags={chat.tags}
+          onAdd={async (name) => {
+            try {
+              await api.addTag(id, name);
+              load();
+            } catch (ex) {
+              fail(ex);
+            }
+          }}
+          onRemove={async (name) => {
+            try {
+              await api.removeTag(id, name);
+              load();
+            } catch (ex) {
+              fail(ex);
+            }
+          }}
+        />
+      </Sheet>
+      <Sheet
+        open={sheet === 'collections'}
+        onOpenChange={(o) => setSheet(o ? 'collections' : null)}
+        title="Collections"
+        description="Manual lists this page belongs to. Smart collections pick it up on their own."
+      >
+        <CollectionPicker chatId={id} />
+      </Sheet>
     </div>
   );
 }
