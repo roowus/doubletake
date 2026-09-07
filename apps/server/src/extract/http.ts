@@ -31,7 +31,13 @@ export function isPrivateAddress(addr: string): boolean {
 export async function fetchText(
   url: string,
   opts: { maxBytes?: number; accept?: string; signal?: AbortSignal; timeoutMs?: number } = {},
-): Promise<{ status: number; body: string; finalUrl: string; contentType: string }> {
+): Promise<{
+  status: number;
+  body: string;
+  finalUrl: string;
+  contentType: string;
+  headers: Record<string, string>;
+}> {
   const maxBytes = opts.maxBytes ?? 2 * 1024 * 1024;
   let current = new URL(url);
   for (let hop = 0; hop < 6; hop++) {
@@ -84,11 +90,17 @@ export async function fetchText(
           chunks.push(value);
         }
       }
+      const headers: Record<string, string> = {};
+      for (const name of ['retry-after', 'x-ratelimit-reset', 'x-ratelimit-remaining']) {
+        const v = res.headers.get(name);
+        if (v !== null) headers[name] = v;
+      }
       return {
         status: res.status,
         body: Buffer.concat(chunks).toString('utf8'),
         finalUrl: current.toString(),
         contentType,
+        headers,
       };
     } finally {
       clearTimeout(timer);

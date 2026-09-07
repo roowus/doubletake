@@ -49,6 +49,10 @@ export function stripHtml(html: string): string {
     .replace(/&quot;/g, '"')
     .replace(/&#39;|&apos;/g, "'")
     .replace(/&nbsp;/g, ' ')
+    .replace(/&#(\d+|x[0-9a-f]+);/gi, (m, n: string) => {
+      const cp = n[0]?.toLowerCase() === 'x' ? Number.parseInt(n.slice(1), 16) : Number(n);
+      return cp > 0 && cp <= 0x10ffff ? String.fromCodePoint(cp) : m;
+    })
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 }
