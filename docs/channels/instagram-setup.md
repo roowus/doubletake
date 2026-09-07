@@ -74,11 +74,18 @@ API host: `https://graph.instagram.com/v25.0`.
    for deduplication (Meta retries).
 
 Field availability: `messages` works under Standard Access. `comments` officially requires
-Advanced Access (**unverified** whether it fires for app-role accounts anyway). `mentions`
-under Standard Access is **unverified**. If mentions do not arrive, Doubletake polls
+Advanced Access. `mentions` under Standard Access is **unverified** (see the 2026-09-07 note
+below: the one live attempt produced no delivery). If mentions do not arrive, Doubletake polls
 `GET /<IG_ID>/tags` every 2 minutes as a fallback (`IG_MENTION_POLLING`, default on;
-`POST /api/ig/poll` runs one poll by hand) — also
-**unverified** that `tags` covers comment mentions for this API flavour. DM share is the
+`POST /api/ig/poll` runs one poll by hand). **Observed 2026-09-07: `/tags` does not cover
+comment mentions.** After a real `@dt.save …` comment under a public post, `GET /<IG_ID>/tags`
+kept answering `{"data":[]}`, no `mentions`/`comments` webhook delivery reached
+`/webhooks/instagram` (Funnel route confirmed alive), `ig_events` gained only `dm_share`/`dm_note`
+rows and `POST /api/ig/poll` returned `{"ingested":0}`. `/tags` lists media the account is
+photo-tagged in, not comments that mention it, so polling only helps for tag-style mentions.
+For comment mentions the webhook is the only path, which means the Meta app must be in **Live
+mode** and `mentions`/`comments` must be delivered for this app (Standard Access did not deliver
+here; whether App Review / Advanced Access fixes it is still **unverified**). DM share is the
 guaranteed path either way.
 
 What *is* verified (2026-09-06, `dt.save` connected under Standard Access): the app
@@ -174,6 +181,8 @@ yet; call them with `curl` and a device token.
    CDN URL, `love` reaction appears on the DM within a second or two, answer pushed later.
 4. Comment `@<shadow> is this true?` under a public post: item with `focus=comments`; reply
    inside a thread: `focus=thread:<parent_id>`. If nothing arrives within 3 minutes the
-   polling fallback should have picked it up (`ig_events.id = poll:<media_id>`); if it did
-   not, `/tags` does not cover comment mentions and this guide must say so.
+   polling fallback would only help if `/tags` listed the media; it does not for comment
+   mentions (observed 2026-09-07, see §3), so a missing item means the webhook did not fire:
+   check Meta dashboard → App Mode = Live, Webhooks → Instagram → `mentions` and `comments`
+   subscribed with a successful **Test**, and the post owner being a public account.
 Remove the **unverified** markers above in the same commit as the observed behaviour.
