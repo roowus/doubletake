@@ -208,7 +208,8 @@ every configured adapter and Settings shows them ([guide](BRAIN-ADAPTERS.md#sele
 - **iOS share extension** ([guide](channels/ios-share.md),
   [ADR 0027](adr/0027-ios-share-extension.md); simulator-verified, **unverified** on a device): native
   `ShareExtension` target with the same card (URL or text preview, note, mode chips) posting to
-  `/api/ingest` as `channel=ios_share`. The extension cannot read Capacitor Preferences, so
+  `/api/ingest` as `channel=ios_share`; media-only shares stream the file to
+  `/api/ingest/upload` with the same `X-Doubletake-*` headers as Android. The extension cannot read Capacitor Preferences, so
   `SceneDelegate` mirrors the server URL and token into the App Group
   `group.com.roowus.doubletake`; when unpaired the extension stashes the share there and opens
   `doubletake://share`, which the app replays into `/share` after pairing. No push on iOS in
