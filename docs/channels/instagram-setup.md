@@ -79,14 +79,22 @@ below: the one live attempt produced no delivery). If mentions do not arrive, Do
 `GET /<IG_ID>/tags` every 2 minutes as a fallback (`IG_MENTION_POLLING`, default on;
 `POST /api/ig/poll` runs one poll by hand). **Observed 2026-09-07: `/tags` does not cover
 comment mentions.** After a real `@dt.save …` comment under a public post, `GET /<IG_ID>/tags`
-kept answering `{"data":[]}`, no `mentions`/`comments` webhook delivery reached
-`/webhooks/instagram` (Funnel route confirmed alive), `ig_events` gained only `dm_share`/`dm_note`
-rows and `POST /api/ig/poll` returned `{"ingested":0}`. `/tags` lists media the account is
-photo-tagged in, not comments that mention it, so polling only helps for tag-style mentions.
-For comment mentions the webhook is the only path, which means the Meta app must be in **Live
-mode** and `mentions`/`comments` must be delivered for this app (Standard Access did not deliver
-here; whether App Review / Advanced Access fixes it is still **unverified**). DM share is the
-guaranteed path either way.
+kept answering `{"data":[]}`, no `comments` webhook delivery reached `/webhooks/instagram`
+(Funnel route confirmed alive), `ig_events` gained only `dm_share`/`dm_note` rows and
+`POST /api/ig/poll` returned `{"ingested":0}`. `/tags` lists media the account is photo-tagged
+in, not comments that mention it, so polling only helps for tag-style mentions. **For comment
+mentions the `comments` webhook is the only path.**
+
+Dashboard-verified the same day (app `1866999274466938`, Instagram business login setup page):
+App Mode was **Live**, the webhook fields table lists **no `mentions` field at all** in this API
+flavour (`comments` and `live_comments` are the comment rows, both Subscribed), and Meta's
+**Test → Send to My Server** for `comments` delivered a sample to `/webhooks/instagram` that the
+server verified and recorded as an `ig_events` `comment` row — plumbing is good end to end. So
+the missed real mention was either Meta-side nondelivery on that specific post (non-public
+account) or the still-incomplete "Complete app review" checklist item gating live data; a retry
+on a public post is the first thing to try. `instagram_business_manage_comments` shows
+**Standard access** (auto-granted; Meta notes Advanced Access is only required for Tech
+Providers). DM share is the guaranteed path either way.
 
 What *is* verified (2026-09-06, `dt.save` connected under Standard Access): the app
 subscription on the account (`GET /<IG_ID>/subscribed_apps`) lists `messages`, `mentions` and
@@ -182,7 +190,12 @@ yet; call them with `curl` and a device token.
 4. Comment `@<shadow> is this true?` under a public post: item with `focus=comments`; reply
    inside a thread: `focus=thread:<parent_id>`. If nothing arrives within 3 minutes the
    polling fallback would only help if `/tags` listed the media; it does not for comment
-   mentions (observed 2026-09-07, see §3), so a missing item means the webhook did not fire:
-   check Meta dashboard → App Mode = Live, Webhooks → Instagram → `mentions` and `comments`
-   subscribed with a successful **Test**, and the post owner being a public account.
+   mentions (observed 2026-09-07, see §3), so a missing item means the webhook did not fire.
+   Check in the dashboard: app → **Instagram → API setup with Instagram login → "2. Configure
+   webhooks"**: Callback URL points at the Funnel host, and the **Webhook fields** table shows
+   `comments` (and `live_comments`) Subscribed — there is no `mentions` field in this flavour.
+   Press **Test** on the `comments` row and **Send to My Server**; a green delivery reaches the
+   server log and `ig_events` gains a `comment` row (verified 2026-09-07). Also confirm App Mode
+   = Live, the post owner being a public account, and (unresolved) the "Complete app review"
+   checklist item.
 Remove the **unverified** markers above in the same commit as the observed behaviour.

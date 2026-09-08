@@ -46,7 +46,9 @@ a 24/7 laptop service.
   payload shapes are accepted for `mentions` and `comments`. Independently, when
   `IG_MENTION_POLLING` is not `off`, the channel polls `GET /<IG_ID>/tags` every 2 minutes and
   feeds new media through the same handler (live check 2026-09-07: `/tags` covers photo tags
-  only, not comment mentions, so the webhook is the sole path for those). A comment that does not contain the shadow
+  only, not comment mentions, so the webhook is the sole path for those; the business-login
+  webhook field list has no `mentions` field — `comments` is the row that matters, and its
+  dashboard **Test** delivery verified working). A comment that does not contain the shadow
   account's handle is ignored.
 - **Secrets at rest = machine keyfile only.** `SecretBox` (`apps/server/src/secrets/box.ts`)
   seals with ChaCha20-Poly1305 under a random 32-byte key in `<dataDir>/keyfile` (mode 0600,
@@ -72,7 +74,8 @@ a 24/7 laptop service.
 - Third-party facts still **unverified** against the live API (marked in the guide): whether
   `mentions` fires under Standard Access (one live attempt on 2026-09-07 delivered nothing),
   the `parent_id` field on `mentioned_comment`. Verified: `/tags` does *not* cover comment
-  mentions (2026-09-07); the DM attachment shapes (2026-09-06). The handler accepts the
+  mentions (2026-09-07); the DM attachment shapes (2026-09-06); `comments`-webhook Test delivery
+  and App Mode Live (2026-09-07). The handler accepts the
   documented variants; live testing removes the markers.
 - `keyfile` is now the root secret of the data directory: back it up with the database and keep
   `~/.doubletake` out of any sync folder. Rotating it means re-connecting Instagram.
