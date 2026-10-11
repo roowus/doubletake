@@ -35,9 +35,10 @@ export type MessageRow = typeof s.messages.$inferSelect;
  */
 export type TenantCtx = { userId: string };
 
-/** Read the tenant context off a row that carries `user_id` (Postgres rows only). */
-export function ctxOf(row: { userId?: string | null } | null | undefined): TenantCtx | undefined {
-  return row?.userId ? { userId: row.userId } : undefined;
+/** Read the tenant context off a row that carries `user_id` (Postgres rows only; see `lazy`). */
+export function ctxOf(row: object | null | undefined): TenantCtx | undefined {
+  const userId = (row as { userId?: string | null } | null | undefined)?.userId;
+  return userId ? { userId } : undefined;
 }
 
 /**
@@ -1442,6 +1443,17 @@ export class Repo {
         ...(this.isPg && credentialId ? { credentialId } : {}),
       } as Insert<typeof s.costLedger.$inferInsert>),
     );
+  }
+
+  /** Sum of ledger rows recorded against one run (hosted per-run cap enforcement, ADR 0032). */
+  spentOnRun(runId: string, ctx?: TenantCtx): number {
+    const r = this.one<{ total: number }>(
+      this.db
+        .select({ total: sql<number>`coalesce(sum(${this.t.costLedger.costUsd}), 0)` })
+        .from(this.t.costLedger)
+        .where(and(eq(this.t.costLedger.runId, runId), ...this.scope('cost_ledger', ctx))),
+    );
+    return r?.total ?? 0;
   }
 
   spentToday(ctx?: TenantCtx): number {

@@ -57,6 +57,15 @@ export class ClaudeAgentSdkAdapter implements BrainAdapter {
     return { resume: true, vision: true, streaming: true, costReporting: true, tools: 'native' };
   }
 
+  /**
+   * Per-run env override (hosted BYOK, ADR 0032): returns a configured copy whose child CLI
+   * gets the caller's key. Only the adapter env ever sees the plaintext — never logs, the db,
+   * or run events.
+   */
+  withEnv(env: Record<string, string>): ClaudeAgentSdkAdapter {
+    return new ClaudeAgentSdkAdapter({ ...this.cfg, env: { ...(this.cfg.env ?? {}), ...env } });
+  }
+
   async run(brief: ResearchBrief, opts: RunOptions, sink: EventSink): Promise<RunResult> {
     const prompt = renderBrief(brief, opts.tools, opts.mode, Boolean(opts.suggestTodo));
     return this.execute(prompt, opts, sink, { fresh: true });

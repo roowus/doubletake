@@ -3,11 +3,13 @@ import path from 'node:path';
 import type { BrainAdapter, ResearchBrief, RunOptions, ToolPolicy } from '@doubletake/brain-sdk';
 import type { Answer, Mode, QuestionType, RunEvent, UntrustedBlock } from '@doubletake/shared';
 import { FOLLOWUP_BUDGET, MODE_BUDGETS, pickModeByKeywords } from '@doubletake/shared';
+import type { RunCredential } from '../auth/hosted.js';
 import { LIBRARY_TEMPLATE, OUTPUT_TEMPLATES, SYSTEM_FRAMING } from '../brains/prompts.js';
 import { BrainSet, type ModeBinding } from '../brains/registry.js';
 import { TODO_KINDS } from '../brains/tools/index.js';
 import type { Config } from '../config/index.js';
-import type { ItemRow, Repo, RunRow } from '../db/repo.js';
+import type { ItemRow, Repo, RunRow, TenantCtx } from '../db/repo.js';
+import { ctxOf } from '../db/repo.js';
 import { exportItemMarkdown } from '../export/markdown.js';
 import { extractionText, parseExtraction } from '../extract/flatten.js';
 import { fetchText } from '../extract/http.js';
@@ -77,6 +79,55 @@ export function buildNotification(
 /** Small reserve kept under the daily cap so follow-ups still work after research is capped. */
 const FOLLOWUP_RESERVE_USD = 0.5;
 
+/** User-facing wording for the hosted cap failures (ADR 0032). */
+const CAP_MESSAGES: Record<'no_credential' | 'cap_reached' | 'per_run_cap', string> = {
+  no_credential:
+    'Research stopped: no API credential is connected to your account. Add one in Account settings and re-run.',
+  cap_reached:
+    "Research stopped: this month's spend reached your credential's monthly cap. Raise the cap or wait for the month to roll over.",
+  per_run_cap:
+    'Research stopped: this run reached your credential’s per-run spend cap. Re-run to continue or raise the per-run cap.',
+};
+
+/**
+ * Hosted BYOK gate (ADR 0032), satisfied structurally by `HostedAuth`. The worker only ever
+ * sees credential metadata and an `envFor` mapping; the sealed key is opened straight into the
+ * adapter env and never logged, stored or emitted.
+ */
+export interface HostedRunGate {
+  resolveRunCredential(userId: string): Promise<RunCredential | null>;
+  monthSpend(userId: string): Promise<number>;
+  openKey(sealedKey: string): string;
+}
+
+/** Thrown when a hosted cap aborts a run mid-flight; `reason` becomes the run's error. */
+export class RunCapAbort extends Error {
+  constructor(readonly reason: 'per_run_cap') {
+    super(reason);
+  }
+}
+
+/** The pre-run hosted gate: resolve a credential, then compare month-to-date spend. */
+export async function hostedRunGate(
+  gate: HostedRunGate,
+  ctx: TenantCtx,
+): Promise<
+  { ok: true; credential: RunCredential } | { ok: false; reason: 'no_credential' | 'cap_reached' }
+> {
+  const credential = await gate.resolveRunCredential(ctx.userId);
+  if (!credential) return { ok: false, reason: 'no_credential' };
+  if (credential.monthlyCapUsd != null) {
+    const spent = await gate.monthSpend(ctx.userId);
+    if (spent >= credential.monthlyCapUsd) return { ok: false, reason: 'cap_reached' };
+  }
+  return { ok: true, credential };
+}
+
+/** Adapter budget for a run: the mode's budget clamped by the credential's per-run cap. */
+export function clampBudget(baseBudgetUsd: number, perRunCapUsd: number | null): number {
+  return perRunCapUsd != null ? Math.min(baseBudgetUsd, perRunCapUsd) : baseBudgetUsd;
+}
+
 /**
  * Single-consumer queue: one run at a time, straight from SQLite (`runs.status='queued'`).
  * Survives restarts because state lives in the DB; `requeueInterrupted()` runs at boot.
@@ -94,6 +145,16 @@ export class QueueWorker extends EventEmitter {
 
   /** Default adapter plus per-mode bindings; a bare adapter is wrapped as a one-member set. */
   readonly brains: BrainSet;
+
+  /**
+   * Hosted BYOK gate (ADR 0032); set by the boot sequence when DOUBLETAKE_HOSTED=1. Null on
+   * self-hosted, where no run is ever capped by a credential.
+   */
+  hosted: HostedRunGate | null = null;
+  /** Credential resolved for the run in flight (null outside `process`). */
+  private runCredential: RunCredential | null = null;
+  /** Tenant context of the run in flight. */
+  private runCtx: TenantCtx | undefined;
 
   constructor(
     private readonly repo: Repo,
@@ -120,6 +181,41 @@ export class QueueWorker extends EventEmitter {
     if (!this.notifier) return;
     const n = buildNotification(item, chatId, outcome, this.cfg.publicUrl);
     this.notifier.notify(n).catch(() => {});
+  }
+
+  /** Mark a run failed for a hosted-gate reason and tell the user why in the chat. */
+  private failRun(
+    run: RunRow,
+    item: ItemRow,
+    chatId: string,
+    reason: 'no_credential' | 'cap_reached' | 'per_run_cap',
+    message: string,
+  ): void {
+    this.repo.updateRun(run.id, {
+      status: 'failed',
+      finishedAt: new Date().toISOString(),
+      error: reason,
+    });
+    this.repo.updateItem(item.id, { status: 'failed' });
+    this.repo.addMessage(
+      { chatId, role: 'system', kind: 'error', content: message, runId: run.id, unread: true },
+      this.runCtx,
+    );
+    let seq = 1;
+    const emit = (type: RunEvent['type'], payload: Record<string, unknown>) => {
+      this.emit('run_event', {
+        runId: run.id,
+        chatId,
+        seq: seq++,
+        type,
+        payload,
+        at: new Date().toISOString(),
+      } satisfies RunEvent);
+    };
+    emit('error', { message: reason });
+    emit('done', { stopReason: reason });
+    this.emit('chat_updated', chatId);
+    this.push(item, chatId, 'failed');
   }
 
   start(): void {
@@ -180,6 +276,19 @@ export class QueueWorker extends EventEmitter {
       this.current = null;
       return;
     }
+    // Hosted caps (ADR 0032): before any brain work, resolve the user's BYOK credential and
+    // compare month-to-date spend. Self-hosted (no gate, no user on the row) skips all of this.
+    this.runCredential = null;
+    this.runCtx = ctxOf(item) ?? ctxOf(chat);
+    if (this.hosted && this.runCtx) {
+      const gate = await hostedRunGate(this.hosted, this.runCtx);
+      if (!gate.ok) {
+        this.failRun(run, item, chat.id, gate.reason, CAP_MESSAGES[gate.reason]);
+        this.current = null;
+        return;
+      }
+      this.runCredential = gate.credential;
+    }
     let seq = 0;
     const emit = (type: RunEvent['type'], payload: Record<string, unknown>) => {
       seq += 1;
@@ -233,6 +342,13 @@ export class QueueWorker extends EventEmitter {
           : await this.research(run, item, chat.id, emit, ac.signal);
       this.finish(run, item, chat.id, result, emit);
     } catch (e) {
+      if (e instanceof RunCapAbort) {
+        this.failRun(run, item, chat.id, e.reason, CAP_MESSAGES[e.reason]);
+        clearTimeout(timer);
+        this.current = null;
+        this.emit('chat_updated', chat.id);
+        return;
+      }
       const msg = ac.signal.aborted ? 'Run cancelled or timed out.' : (e as Error).message;
       this.repo.updateRun(run.id, {
         status: 'failed',
@@ -240,14 +356,17 @@ export class QueueWorker extends EventEmitter {
         error: msg,
       });
       this.repo.updateItem(item.id, { status: 'failed' });
-      this.repo.addMessage({
-        chatId: chat.id,
-        role: 'system',
-        kind: 'error',
-        content: `Run failed: ${msg}`,
-        runId: run.id,
-        unread: true,
-      });
+      this.repo.addMessage(
+        {
+          chatId: chat.id,
+          role: 'system',
+          kind: 'error',
+          content: `Run failed: ${msg}`,
+          runId: run.id,
+          unread: true,
+        },
+        this.runCtx,
+      );
       emit('error', { message: msg });
       emit('done', { stopReason: 'error' });
       this.push(item, chat.id, 'failed');
@@ -256,6 +375,31 @@ export class QueueWorker extends EventEmitter {
       this.current = null;
       this.emit('chat_updated', chat.id);
     }
+  }
+
+  /**
+   * Adapter for this run's model calls. With a hosted credential, key material is opened from
+   * the vault straight into a copy of the adapter's env (adapters that support `withEnv`);
+   * plaintext is never logged, stored or emitted.
+   */
+  private boundAdapter(adapter: BrainAdapter): BrainAdapter {
+    if (!this.runCredential) return adapter;
+    const withEnv = (
+      adapter as Partial<{ withEnv?: (env: Record<string, string>) => BrainAdapter }>
+    ).withEnv;
+    if (!withEnv) return adapter;
+    const key = (this.hosted as NonNullable<QueueWorker['hosted']>).openKey(
+      this.runCredential.sealedKey,
+    );
+    return withEnv.call(adapter, this.runCredential.envFor(key));
+  }
+
+  /** Ledger check before each model call (ADR 0032): over the per-run cap means abort. */
+  private checkPerRunCap(runId: string): void {
+    const cap = this.runCredential?.perRunCapUsd;
+    if (cap == null) return;
+    const spent = this.repo.spentOnRun(runId, this.runCtx);
+    if (spent >= cap) throw new RunCapAbort('per_run_cap');
   }
 
   private policyFor(mode: Mode, kind: 'research' | 'followup'): ToolPolicy {
@@ -319,7 +463,12 @@ export class QueueWorker extends EventEmitter {
     return {
       mode,
       maxTurns: kind === 'followup' ? FOLLOWUP_BUDGET.maxTurns : b.maxTurns,
-      maxBudgetUsd: kind === 'followup' ? FOLLOWUP_BUDGET.maxBudgetUsd : b.maxBudgetUsd,
+      // Hosted per-run cap (ADR 0032): the adapter sees the clamped budget, so the brain itself
+      // stops before the cap is breached, not just the ledger afterwards.
+      maxBudgetUsd: clampBudget(
+        kind === 'followup' ? FOLLOWUP_BUDGET.maxBudgetUsd : b.maxBudgetUsd,
+        this.runCredential?.perRunCapUsd ?? null,
+      ),
       ...(m ? { model: m } : {}),
       ...(sessionId ? { sessionId } : {}),
       tools: this.policyFor(mode, kind),
@@ -412,7 +561,10 @@ export class QueueWorker extends EventEmitter {
 
     const brief = this.buildBrief(item, ctx.blocks, questionType, ctx.hints);
     const opts = this.runOptions(mode, 'research', signal, null, bound.model, chatId);
-    const result = await bound.adapter.run(brief, opts, { emit: (e) => emit(e.type, e.payload) });
+    this.checkPerRunCap(run.id);
+    const result = await this.boundAdapter(bound.adapter).run(brief, opts, {
+      emit: (e) => emit(e.type, e.payload),
+    });
     return { ...result, mode, run: current, kind: 'research' as const };
   }
 
@@ -551,7 +703,10 @@ export class QueueWorker extends EventEmitter {
     // 3. Research.
     const brief = this.buildBrief(item, blocks, questionType);
     const opts = this.runOptions(mode, 'research', signal, null, bound.model, chatId);
-    const result = await bound.adapter.run(brief, opts, { emit: (e) => emit(e.type, e.payload) });
+    this.checkPerRunCap(run.id);
+    const result = await this.boundAdapter(bound.adapter).run(brief, opts, {
+      emit: (e) => emit(e.type, e.payload),
+    });
     if (extraction?.warnings.length) {
       result.text = `${result.text}\n\n> Extraction notes: ${extraction.warnings.join('; ')}`;
     }
@@ -580,7 +735,8 @@ export class QueueWorker extends EventEmitter {
     const bound = this.brains.forMode(mode);
     const model = bound.adapter === adapter ? bound.model : null;
     emit('status', { phase: 'followup', resume: Boolean(sessionId), adapter: adapter.id });
-    const result = await adapter.followUp(
+    this.checkPerRunCap(run.id);
+    const result = await this.boundAdapter(adapter).followUp(
       {
         chatId,
         ...(sessionId ? { sessionId } : {}),
@@ -630,20 +786,31 @@ export class QueueWorker extends EventEmitter {
       costUsd: cost,
       ...(r.usage ? { tokensIn: r.usage.inputTokens, tokensOut: r.usage.outputTokens } : {}),
     });
-    if (cost != null) this.repo.addCost(run.adapter, run.model ?? null, cost, run.id);
+    if (cost != null)
+      this.repo.addCost(
+        run.adapter,
+        run.model ?? null,
+        cost,
+        run.id,
+        this.runCtx,
+        this.runCredential?.id ?? null,
+      );
     if (r.sessionId)
       this.repo.updateChat(chatId, { brainSessionId: r.sessionId, brainAdapter: run.adapter });
 
     const structured: Answer | null = r.structured ?? null;
-    this.repo.addMessage({
-      chatId,
-      role: 'assistant',
-      kind: r.kind === 'followup' ? 'followup' : 'answer',
-      content: text,
-      structured,
-      runId: run.id,
-      unread: true,
-    });
+    this.repo.addMessage(
+      {
+        chatId,
+        role: 'assistant',
+        kind: r.kind === 'followup' ? 'followup' : 'answer',
+        content: text,
+        structured,
+        runId: run.id,
+        unread: true,
+      },
+      this.runCtx,
+    );
     if (structured) {
       if (r.kind === 'research') {
         this.repo.replaceEntities(item.id, run.id, structured.entities);
@@ -662,13 +829,16 @@ export class QueueWorker extends EventEmitter {
     // Escalation offer: surfaced as a status message; the user (or UI) decides.
     const esc = r.escalate ?? structured?.escalate;
     if (esc && escalationIsMeaningful(esc, run.mode as Mode)) {
-      this.repo.addMessage({
-        chatId,
-        role: 'system',
-        kind: 'status',
-        content: `The assistant suggests a ${esc.mode} research run: ${esc.reason}`,
-        runId: run.id,
-      });
+      this.repo.addMessage(
+        {
+          chatId,
+          role: 'system',
+          kind: 'status',
+          content: `The assistant suggests a ${esc.mode} research run: ${esc.reason}`,
+          runId: run.id,
+        },
+        this.runCtx,
+      );
     }
 
     // FTS + Markdown export.
