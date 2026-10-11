@@ -243,13 +243,17 @@ export class HostedAuth {
 
   // ---- oauth flow state (Google / OpenRouter PKCE; flows land in a follow-up) ----
 
-  async createOauthState(purpose: string, opts?: { userId?: string; returnTo?: string }) {
+  async createOauthState(
+    purpose: string,
+    opts?: { userId?: string; returnTo?: string; codeVerifier?: string },
+  ) {
     const state = randomBytes(32).toString('base64url');
     await this.db.insert(oauthStates).values({
       state,
       purpose,
       userId: opts?.userId ?? null,
       returnTo: opts?.returnTo ?? null,
+      codeVerifier: opts?.codeVerifier ?? null,
       createdAt: new Date().toISOString(),
     });
     return state;
@@ -268,6 +272,60 @@ export class HostedAuth {
       .delete(oauthStates)
       .where(lt(oauthStates.createdAt, new Date(Date.now() - OAUTH_STATE_SWEEP_MS).toISOString()));
     return row;
+  }
+
+  /**
+   * Google sign-in upsert (ADR 0032): login an existing `google_sub`, else link the Google
+   * identity onto an existing email account, else create the user. `email_verified_at` is set
+   * from Google's `email_verified` claim; disabled accounts never sign in.
+   */
+  async resolveGoogleUser(claims: {
+    sub: string;
+    email: string;
+    emailVerified: boolean;
+  }): Promise<HostedUser> {
+    const email = normalizeEmail(claims.email);
+    const bySub = await this.db.query.users.findFirst({
+      where: (t, { eq }) => eq(t.googleSub, claims.sub),
+    });
+    if (bySub) {
+      if (bySub.disabledAt) throw new HostedAuthError('account disabled');
+      return toUser(bySub);
+    }
+    const byEmail = await this.findUserByEmail(email);
+    if (byEmail) {
+      if (byEmail.disabledAt) throw new HostedAuthError('account disabled');
+      const updated = await this.db
+        .update(users)
+        .set({
+          googleSub: claims.sub,
+          emailVerifiedAt:
+            byEmail.emailVerifiedAt ?? (claims.emailVerified ? new Date().toISOString() : null),
+        })
+        .where(eq(users.id, byEmail.id))
+        .returning();
+      return toUser(updated[0] ?? byEmail);
+    }
+    const id = ulid();
+    const created = {
+      id,
+      email,
+      googleSub: claims.sub,
+      emailVerifiedAt: claims.emailVerified ? new Date().toISOString() : null,
+      createdAt: new Date().toISOString(),
+    };
+    try {
+      await this.db.insert(users).values({
+        ...created,
+        passwordHash: null,
+        displayName: null,
+      });
+    } catch (e) {
+      // A concurrent Google sign-in or email register created the address first.
+      if (isUniqueViolation(e)) throw new HostedAuthError('email already registered');
+      throw e;
+    }
+    return toUser({ ...created, displayName: null, disabledAt: null });
   }
 
   private findUserByEmail(email: string) {
