@@ -13,7 +13,8 @@
       "!apps/mobile/android",
       "!apps/mobile/ios",
       "!workers",
-      "!apps/server/drizzle/meta"
+      "!apps/server/drizzle/meta",
+      "!apps/server/drizzle-pg/meta"
     ]
   },
   "formatter": {
