@@ -301,6 +301,31 @@ export const api = {
   igRefresh: () => call<IgStatus>('POST', '/api/ig/refresh'),
   igPoll: () =>
     call<{ handled: unknown[]; duplicates: number; ignored: number }>('POST', '/api/ig/poll'),
+  hostedRegister: (email: string, password: string, inviteCode?: string) =>
+    call<{ token: string; user: HostedUser }>(
+      'POST',
+      '/api/auth/register',
+      { email, password, ...(inviteCode ? { invite_code: inviteCode } : {}) },
+      false,
+    ),
+  hostedLogin: (email: string, password: string) =>
+    call<{ token: string; user: HostedUser }>(
+      'POST',
+      '/api/auth/login',
+      { email, password },
+      false,
+    ),
+  hostedLogout: () => call<void>('POST', '/api/auth/logout'),
+  account: () => call<AccountInfo>('GET', '/api/account'),
+  addCredential: (c: NewCredential) => call<CredentialRow>('POST', '/api/account/credentials', c),
+  revokeCredential: (id: string) => call<void>('DELETE', `/api/account/credentials/${id}`),
+  revokeAccountSession: (id: string) =>
+    call<void>('POST', `/api/account/sessions/${id}/revoke`),
+  /** The agent token is shown exactly once, in the response. */
+  createMcpToken: (label: string) =>
+    call<{ id: string; token: string; label: string }>('POST', '/api/account/mcp-tokens', {
+      label,
+    }),
   /** Asks Graph which webhook fields are live and whether comments can be read; re-subscribes. */
   igVerify: () =>
     call<{
@@ -312,6 +337,52 @@ export const api = {
       errors: Record<string, string>;
     }>('POST', '/api/ig/verify'),
 };
+
+// ---- Hosted mode (ADR 0032): e-mail accounts, OAuth, provider credentials, MCP tokens ----
+
+export interface HostedUser {
+  id: string;
+  email: string;
+}
+
+export interface CredentialRow {
+  id: string;
+  kind: 'openrouter' | 'api_key' | 'harness';
+  provider: string | null;
+  label: string | null;
+  baseUrl: string | null;
+  monthlyCapUsd: number | null;
+  perRunCapUsd: number | null;
+  lastUsedAt: string | null;
+  revokedAt: string | null;
+  createdAt: string;
+}
+
+export interface AccountSession {
+  id: string;
+  kind: 'browser' | 'device' | 'mcp';
+  label: string | null;
+  createdAt: string;
+  lastUsedAt: string | null;
+  revokedAt: string | null;
+}
+
+export interface AccountInfo {
+  user: HostedUser;
+  credentials: CredentialRow[];
+  sessions: AccountSession[];
+  spend: { month_usd: number };
+}
+
+export interface NewCredential {
+  kind: 'openrouter' | 'api_key' | 'harness';
+  provider?: string;
+  label?: string;
+  key: string;
+  base_url?: string;
+  monthly_cap_usd?: number;
+  per_run_cap_usd?: number;
+}
 
 export type LiveEvent =
   | ({ kind: 'run_event' } & RunEvent)
