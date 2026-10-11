@@ -1502,21 +1502,26 @@ export class Repo {
    */
   searchFts(query: string, limit = 50, ctx?: TenantCtx): string[] {
     if (this.isPg) {
-      const like = `%${query.replace(/[*"()%_]/g, ' ')}%`;
+      // Hosted FTS stopgap (ADR 0032 addendum): ILIKE over title/note/text. Input arrives either
+      // raw ('alpha') or as ftsQuery output ('"ski wax"*'); the FTS syntax characters become
+      // separators and the remaining terms are OR-ed per column, so a prefix query and a raw
+      // term behave the same on both dialects.
+      const terms = query
+        .replace(/[*"()%_]/g, ' ')
+        .split(/\s+/)
+        .filter((t) => t.length > 0)
+        .slice(0, 8);
+      if (terms.length === 0) return [];
+      const matchers = terms.flatMap((term) => [
+        ilike(this.t.items.title, `%${term}%`),
+        ilike(this.t.items.note, `%${term}%`),
+        ilike(this.t.items.text, `%${term}%`),
+      ]);
       return this.manyMap<{ id: string }, string>(
         this.db
           .select({ id: this.t.items.id })
           .from(this.t.items)
-          .where(
-            and(
-              or(
-                ilike(this.t.items.title, like),
-                ilike(this.t.items.note, like),
-                ilike(this.t.items.text, like),
-              ),
-              ...this.scope('items', ctx),
-            ),
-          )
+          .where(and(or(...matchers), ...this.scope('items', ctx)))
           .limit(limit),
         (r) => r.id,
       );
