@@ -3592,7 +3592,7 @@ input.switch {
 }
 .or-rule::before,
 .or-rule::after {
-  content: '';
+  content: "";
   flex: 1;
   height: 1px;
   background: var(--line, #ddd8cc);

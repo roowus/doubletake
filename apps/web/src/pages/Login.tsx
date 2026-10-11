@@ -70,7 +70,9 @@ export function Login({
           </li>
           <li className="welcome-step">
             <strong className="welcome-step-title">Come back</strong>
-            <span>A well-set page is waiting: the answer, its sources and everything it found.</span>
+            <span>
+              A well-set page is waiting: the answer, its sources and everything it found.
+            </span>
           </li>
         </ol>
       </aside>

@@ -1,11 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  detectHosted,
-  failureCopy,
-  hostedGate,
-  HOSTED_OFF,
-  parseAuthHash,
-} from './hosted';
+import { detectHosted, failureCopy, HOSTED_OFF, hostedGate, parseAuthHash } from './hosted';
 
 const json = (body: unknown, status = 200) =>
   Promise.resolve(new Response(JSON.stringify(body), { status }));

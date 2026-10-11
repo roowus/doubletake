@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ApiError, api, type Device, type IgStatus, setToken, type Status } from '../../api';
+import { ApiError, api, type Device, type IgStatus, type Status, setToken } from '../../api';
 import { readAppearance } from '../../appearance';
 import { Confirm } from '../../components/Confirm';
 import { Icon } from '../../components/Icon';
@@ -201,9 +201,7 @@ export function SettingsIndex() {
             label="Account"
             hint="Brains, caps, sessions, agent tokens"
             to="/settings/account"
-            value={
-              status ? `$${status.spentTodayUsd.toFixed(2)} today` : undefined
-            }
+            value={status ? `$${status.spentTodayUsd.toFixed(2)} today` : undefined}
           />
           <Row
             icon="log-out"
