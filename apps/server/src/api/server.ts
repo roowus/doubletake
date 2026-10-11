@@ -202,7 +202,14 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
     brain: deps.brain.id,
     hasOwner: auth.hasOwner(),
   }));
-  app.get('/api/setup/status', async () => ({ hasOwner: auth.hasOwner() }));
+  app.get('/api/setup/status', async () => ({
+    hasOwner: auth.hasOwner(),
+    // Hosted-mode markers (ADR 0032, non-sensitive, public): the PWA's boot probe is
+    // anonymous, so hosted/inviteRequired must live on the PUBLIC status route or the
+    // hosted login page would never appear.
+    hosted: isHostedMode(),
+    ...(isHostedMode() ? { inviteRequired: Boolean(process.env.DOUBLETAKE_INVITE_CODE) } : {}),
+  }));
 
   app.post('/api/setup', async (req, reply) => {
     if (auth.hasOwner()) return reply.code(409).send({ error: 'owner already set' });

@@ -4,7 +4,7 @@ import { apiBase } from '../native';
 /**
  * Hosted mode (ADR 0032): the PWA can be served by the hosted backend, where accounts sign in
  * with e-mail + password (or Google) instead of pairing against an owner password. Detected
- * once at boot from `GET /api/status`; while the answer is pending (or the server never says
+ * once at boot from `GET /api/setup/status` (public); while the answer is pending (or the server never says
  * so) the app behaves exactly as the self-hosted PWA always has.
  */
 export interface HostedStatus {
@@ -49,7 +49,7 @@ export function isHostedSnapshot(): boolean {
  */
 export async function detectHosted(fetchImpl: typeof fetch = fetch): Promise<HostedStatus> {
   try {
-    const res = await fetchImpl(`${apiBase()}/api/status`, { method: 'GET' });
+    const res = await fetchImpl(`${apiBase()}/api/setup/status`, { method: 'GET' });
     if (!res.ok) return HOSTED_OFF;
     const j = (await res.json()) as { hosted?: unknown; inviteRequired?: unknown };
     return {
