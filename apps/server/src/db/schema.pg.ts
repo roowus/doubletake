@@ -5,6 +5,8 @@
  * `id` stays text (ULIDs); timestamps stay text (ISO strings, app-owned); JSON-in-text
  * columns (`content`, `structured`, `raw`, `attributes`, `keys`, `payload`) stay text.
  */
+
+import { sql } from 'drizzle-orm';
 import { doublePrecision, index, integer, pgTable, text, uniqueIndex } from 'drizzle-orm/pg-core';
 
 export const items = pgTable(
@@ -26,12 +28,18 @@ export const items = pgTable(
     title: text('title'),
     /** Idempotency key sent by a retrying client (`IngestRequest.clientId`); unique when present. */
     clientId: text('client_id'),
+    /** Tenant owner (ADR 0032); null on the self-hosted SQLite equivalent. */
+    userId: text('user_id'),
     createdAt: text('created_at').notNull(),
     updatedAt: text('updated_at').notNull(),
   },
   (t) => [
     index('items_dedupe').on(t.canonicalUrl, t.focus, t.createdAt),
-    uniqueIndex('items_client_id_idx').on(t.clientId),
+    // Idempotency (ADR 0032): globally unique for legacy (user_id IS NULL) rows, unique per
+    // tenant for hosted rows. Nullable-safe: Postgres treats NULLs as distinct in the composite index.
+    uniqueIndex('items_client_id_null_idx').on(t.clientId).where(sql`user_id is null`),
+    uniqueIndex('items_user_client_idx').on(t.userId, t.clientId),
+    index('items_user_created_idx').on(t.userId, t.createdAt.desc()),
   ],
 );
 
@@ -46,6 +54,8 @@ export const extractions = pgTable('extractions', {
   model: text('model'),
   costUsd: doublePrecision('cost_usd'),
   durationMs: integer('duration_ms'),
+  /** Tenant owner (ADR 0032); null on legacy/self-hosted rows. */
+  userId: text('user_id'),
   createdAt: text('created_at').notNull(),
 });
 
@@ -65,24 +75,32 @@ export const mediaAssets = pgTable(
     width: integer('width'),
     height: integer('height'),
     frameTsS: doublePrecision('frame_ts_s'),
+    /** Tenant owner (ADR 0032); null on legacy/self-hosted rows. */
+    userId: text('user_id'),
     source: text('source').notNull(), // cdn | ytdlp | direct | ffmpeg | upload (owner-shared file)
     createdAt: text('created_at').notNull(),
   },
   (t) => [index('media_assets_item_idx').on(t.itemId)],
 );
 
-export const chats = pgTable('chats', {
-  id: text('id').primaryKey(),
-  itemId: text('item_id')
-    .notNull()
-    .unique()
-    .references(() => items.id, { onDelete: 'cascade' }),
-  unreadCount: integer('unread_count').notNull().default(0),
-  lastMessageAt: text('last_message_at'),
-  brainSessionId: text('brain_session_id'),
-  brainAdapter: text('brain_adapter'),
-  createdAt: text('created_at').notNull(),
-});
+export const chats = pgTable(
+  'chats',
+  {
+    id: text('id').primaryKey(),
+    itemId: text('item_id')
+      .notNull()
+      .unique()
+      .references(() => items.id, { onDelete: 'cascade' }),
+    unreadCount: integer('unread_count').notNull().default(0),
+    lastMessageAt: text('last_message_at'),
+    brainSessionId: text('brain_session_id'),
+    brainAdapter: text('brain_adapter'),
+    /** Tenant owner (ADR 0032); null on legacy/self-hosted rows. */
+    userId: text('user_id'),
+    createdAt: text('created_at').notNull(),
+  },
+  (t) => [index('chats_user_created_idx').on(t.userId, t.createdAt.desc())],
+);
 
 export const messages = pgTable(
   'messages',
@@ -97,6 +115,8 @@ export const messages = pgTable(
     structured: text('structured'), // JSON Answer
     runId: text('run_id'),
     createdAt: text('created_at').notNull(),
+    /** Tenant owner (ADR 0032); null on legacy/self-hosted rows. */
+    userId: text('user_id'),
     readAt: text('read_at'),
   },
   (t) => [index('messages_chat').on(t.chatId, t.createdAt)],
@@ -125,6 +145,8 @@ export const runs = pgTable(
     costUsd: doublePrecision('cost_usd'),
     tokensIn: integer('tokens_in'),
     tokensOut: integer('tokens_out'),
+    /** Tenant owner (ADR 0032); null on legacy/self-hosted rows. */
+    userId: text('user_id'),
     error: text('error'),
     createdAt: text('created_at').notNull(),
   },
@@ -142,6 +164,8 @@ export const runEvents = pgTable(
     seq: integer('seq').notNull(),
     type: text('type').notNull(),
     payload: text('payload').notNull(),
+    /** Tenant owner (ADR 0032); null on legacy/self-hosted rows. */
+    userId: text('user_id'),
     at: text('at').notNull(),
   },
   (t) => [index('run_events_run').on(t.runId, t.seq)],
@@ -172,6 +196,8 @@ export const entities = pgTable(
     confidence: doublePrecision('confidence'),
     /** Owner-starred thing; re-runs replace entities, so a star lives on the current row only. */
     starred: integer('starred').notNull().default(0),
+    /** Tenant owner (ADR 0032); null on legacy/self-hosted rows. */
+    userId: text('user_id'),
     createdAt: text('created_at').notNull(),
   },
   (t) => [index('entities_kind_name').on(t.kind, t.name)],
@@ -180,6 +206,8 @@ export const entities = pgTable(
 export const tags = pgTable('tags', {
   id: text('id').primaryKey(),
   name: text('name').notNull().unique(),
+  /** Tenant owner (ADR 0032); null on legacy/self-hosted rows. */
+  userId: text('user_id'),
   kind: text('kind').notNull().default('auto'),
 });
 
@@ -192,6 +220,8 @@ export const itemTags = pgTable(
     tagId: text('tag_id')
       .notNull()
       .references(() => tags.id, { onDelete: 'cascade' }),
+    /** Tenant owner (ADR 0032); null on legacy/self-hosted rows. */
+    userId: text('user_id'),
     confidence: doublePrecision('confidence'),
   },
   (t) => [uniqueIndex('item_tags_pk').on(t.itemId, t.tagId)],
@@ -207,6 +237,8 @@ export const collections = pgTable(
     auto: integer('auto').notNull().default(0),
     hidden: integer('hidden').notNull().default(0),
     /** Random secret in the public read-only URL `/s/<token>` (ADR 0025); null = not shared. */
+    /** Tenant owner (ADR 0032); null on legacy/self-hosted rows. */
+    userId: text('user_id'),
     shareToken: text('share_token'),
   },
   (t) => [uniqueIndex('collections_share_token_idx').on(t.shareToken)],
@@ -221,6 +253,8 @@ export const collectionItems = pgTable(
     itemId: text('item_id')
       .notNull()
       .references(() => items.id, { onDelete: 'cascade' }),
+    /** Tenant owner (ADR 0032); null on legacy/self-hosted rows. */
+    userId: text('user_id'),
     addedAt: text('added_at').notNull(),
   },
   (t) => [
@@ -236,6 +270,8 @@ export const devices = pgTable('devices', {
   tokenHash: text('token_hash').notNull().unique(),
   lastSeenAt: text('last_seen_at'),
   revokedAt: text('revoked_at'),
+  /** Tenant owner (ADR 0032); null on legacy/self-hosted rows. */
+  userId: text('user_id'),
   createdAt: text('created_at').notNull(),
 });
 
@@ -247,6 +283,8 @@ export const pushSubscriptions = pgTable('push_subscriptions', {
   kind: text('kind').notNull(),
   endpoint: text('endpoint').notNull(),
   keys: text('keys'),
+  /** Tenant owner (ADR 0032); null on legacy/self-hosted rows. */
+  userId: text('user_id'),
   failedCount: integer('failed_count').notNull().default(0),
   createdAt: text('created_at').notNull(),
 });
@@ -269,6 +307,8 @@ export const placeGeo = pgTable('place_geo', {
   lon: doublePrecision('lon'),
   label: text('label'),
   provider: text('provider').notNull(),
+  /** Tenant owner (ADR 0032); null on legacy/self-hosted rows. */
+  userId: text('user_id'),
   resolvedAt: text('resolved_at').notNull(),
 });
 
@@ -281,10 +321,17 @@ export const costLedger = pgTable(
     adapter: text('adapter').notNull(),
     model: text('model'),
     costUsd: doublePrecision('cost_usd').notNull(),
+    /** Tenant owner (ADR 0032); null on legacy/self-hosted rows. */
+    userId: text('user_id'),
     runId: text('run_id'),
+    /** Which BYOK credential paid for this spend (ADR 0032 cap enforcement). */
+    credentialId: text('credential_id'),
     createdAt: text('created_at').notNull(),
   },
-  (t) => [index('cost_ledger_day').on(t.day)],
+  (t) => [
+    index('cost_ledger_day').on(t.day),
+    index('cost_ledger_user_created_idx').on(t.userId, t.createdAt),
+  ],
 );
 
 export const settings = pgTable('settings', {
@@ -336,6 +383,8 @@ export const todos = pgTable(
     /** `open` (the owner's list, `done_at` set once ticked) or `suggested` (brain proposal, ADR 0031). */
     status: text('status').notNull().default('open'),
     doneAt: text('done_at'),
+    /** Tenant owner (ADR 0032); null on legacy/self-hosted rows. */
+    userId: text('user_id'),
     createdAt: text('created_at').notNull(),
   },
   (t) => [index('todos_done_created_idx').on(t.doneAt, t.createdAt)],

@@ -1972,7 +1972,7 @@
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
-					"default": "browser"
+					"default": "'browser'"
 				},
 				"label": {
 					"name": "label",
@@ -2003,7 +2003,12 @@
 				"sessions_user_idx": {
 					"name": "sessions_user_idx",
 					"columns": [
-						"user_id"
+						{
+							"expression": "user_id",
+							"isExpression": false,
+							"asc": true,
+							"nulls": "last"
+						}
 					],
 					"isUnique": false
 				}
@@ -2118,7 +2123,12 @@
 				"credentials_user_idx": {
 					"name": "credentials_user_idx",
 					"columns": [
-						"user_id"
+						{
+							"expression": "user_id",
+							"isExpression": false,
+							"asc": true,
+							"nulls": "last"
+						}
 					],
 					"isUnique": false
 				}
@@ -2189,7 +2199,12 @@
 				"oauth_states_created_idx": {
 					"name": "oauth_states_created_idx",
 					"columns": [
-						"created_at"
+						{
+							"expression": "created_at",
+							"isExpression": false,
+							"asc": true,
+							"nulls": "last"
+						}
 					],
 					"isUnique": false
 				}
