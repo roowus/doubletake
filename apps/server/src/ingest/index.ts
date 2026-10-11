@@ -1,6 +1,6 @@
 import type { IngestRequest, Mode, Platform } from '@doubletake/shared';
 import { resolveRequestedMode } from '@doubletake/shared';
-import type { ChatRow, ItemRow, Repo, RunRow } from '../db/repo.js';
+import type { ChatRow, ItemRow, Repo, RunRow, TenantCtx } from '../db/repo.js';
 import { detectPlatform, firstUrlIn } from '../extract/registry.js';
 
 export interface IngestOutcome {
@@ -16,7 +16,11 @@ export interface IngestOutcome {
 /** Which adapter (and model) a new research run is recorded with, given its provisional mode. */
 export type AdapterPick = (mode: Mode) => { adapter: { id: string }; model: string | null };
 
-export type IngestDeps = { repo: Repo } & ({ adapterId: string } | { adapterFor: AdapterPick });
+export type IngestDeps = {
+  repo: Repo;
+  /** Tenant owner in hosted mode (ADR 0032); undefined self-hosted. Stamped onto items/chats. */
+  ctx?: TenantCtx | undefined;
+} & ({ adapterId: string } | { adapterFor: AdapterPick });
 
 function pickAdapter(deps: IngestDeps): AdapterPick {
   return 'adapterFor' in deps
@@ -44,7 +48,7 @@ export function ingest(req: IngestRequest, deps: IngestDeps): IngestOutcome {
   if (req.clientId) {
     // A retrying client (offline share queue) re-posts the same body until it gets a 2xx. The
     // first attempt may have reached us while the response was lost, so replay its outcome.
-    const prior = repo.findByClientId(req.clientId);
+    const prior = repo.findByClientId(req.clientId, deps.ctx);
     if (prior) {
       const chat = repo.getChatByItem(prior.id);
       const run = chat ? repo.listRuns(chat.id).at(-1) : undefined;
@@ -68,22 +72,28 @@ export function ingest(req: IngestRequest, deps: IngestDeps): IngestOutcome {
   };
 
   if (canonicalUrl) {
-    const dup = repo.findRecentDuplicate(canonicalUrl, req.focus, DEDUPE_HOURS);
+    const dup = repo.findRecentDuplicate(canonicalUrl, req.focus, DEDUPE_HOURS, deps.ctx);
     if (dup) {
       const chat = repo.getChatByItem(dup.id);
       if (chat) {
         // Re-share within the window: new research run on the existing chat, note appended.
         if (req.note?.trim()) {
-          repo.addMessage({ chatId: chat.id, role: 'user', kind: 'question', content: req.note });
+          repo.addMessage(
+            { chatId: chat.id, role: 'user', kind: 'question', content: req.note },
+            deps.ctx,
+          );
         }
         const mode = forcedMode ?? (dup.modeEffective as Mode | null) ?? 'standard';
-        const run = repo.createRun({
-          itemId: dup.id,
-          chatId: chat.id,
-          kind: 'research',
-          mode,
-          ...runBinding(req, deps, mode),
-        });
+        const run = repo.createRun(
+          {
+            itemId: dup.id,
+            chatId: chat.id,
+            kind: 'research',
+            mode,
+            ...runBinding(req, deps, mode),
+          },
+          deps.ctx,
+        );
         repo.updateItem(dup.id, {
           status: 'new',
           ...(req.note ? { note: [dup.note, req.note].filter(Boolean).join('\n\n') } : {}),
@@ -96,19 +106,32 @@ export function ingest(req: IngestRequest, deps: IngestDeps): IngestOutcome {
   }
 
   const title = canonicalUrl ? titleFromUrl(canonicalUrl, platform) : titleFromText(req.text ?? '');
-  const { item, chat } = repo.createItemWithChat(normalised, platform, canonicalUrl, title);
+  const { item, chat } = repo.createItemWithChat(
+    normalised,
+    platform,
+    canonicalUrl,
+    title,
+    undefined,
+    deps.ctx,
+  );
   // Placeholder until the worker classifies; forced modes are final. The worker rebinds the
   // adapter if classification lands on a mode with a different binding.
   const mode = forcedMode ?? 'standard';
-  const run = repo.createRun({
-    itemId: item.id,
-    chatId: chat.id,
-    kind: 'research',
-    mode,
-    ...runBinding(req, deps, mode),
-  });
+  const run = repo.createRun(
+    {
+      itemId: item.id,
+      chatId: chat.id,
+      kind: 'research',
+      mode,
+      ...runBinding(req, deps, mode),
+    },
+    deps.ctx,
+  );
   if (req.note?.trim()) {
-    repo.addMessage({ chatId: chat.id, role: 'user', kind: 'question', content: req.note });
+    repo.addMessage(
+      { chatId: chat.id, role: 'user', kind: 'question', content: req.note },
+      deps.ctx,
+    );
   }
   return { item, chat, run, deduplicated: false };
 }
@@ -132,16 +155,26 @@ function ingestLibraryQuestion(req: IngestRequest, deps: IngestDeps): IngestOutc
     modeHint: req.modeHint,
     note: question,
   };
-  const { item, chat } = repo.createItemWithChat(normalised, 'text', null, titleFromText(question));
+  const { item, chat } = repo.createItemWithChat(
+    normalised,
+    'text',
+    null,
+    titleFromText(question),
+    undefined,
+    deps.ctx,
+  );
   const mode = forcedMode ?? 'quick';
-  const run = repo.createRun({
-    itemId: item.id,
-    chatId: chat.id,
-    kind: 'research',
-    mode,
-    ...runBinding(req, deps, mode),
-  });
-  repo.addMessage({ chatId: chat.id, role: 'user', kind: 'question', content: question });
+  const run = repo.createRun(
+    {
+      itemId: item.id,
+      chatId: chat.id,
+      kind: 'research',
+      mode,
+      ...runBinding(req, deps, mode),
+    },
+    deps.ctx,
+  );
+  repo.addMessage({ chatId: chat.id, role: 'user', kind: 'question', content: question }, deps.ctx);
   return { item, chat, run, deduplicated: false };
 }
 
@@ -188,27 +221,43 @@ export function ingestUpload(
     : kind === 'video'
       ? 'Shared video'
       : 'Shared photo';
-  const { item, chat } = repo.createItemWithChat(normalised, 'text', null, title, deps.itemId);
-  repo.addMediaAsset({
-    itemId: item.id,
-    kind,
-    path: req.relPath,
-    sha256: req.sha256,
-    bytes: req.bytes,
-    width: req.width ?? null,
-    height: req.height ?? null,
-    source: 'upload',
-  });
+  const { item, chat } = repo.createItemWithChat(
+    normalised,
+    'text',
+    null,
+    title,
+    deps.itemId,
+    deps.ctx,
+  );
+  repo.addMediaAsset(
+    {
+      itemId: item.id,
+      kind,
+      path: req.relPath,
+      sha256: req.sha256,
+      bytes: req.bytes,
+      width: req.width ?? null,
+      height: req.height ?? null,
+      source: 'upload',
+    },
+    deps.ctx,
+  );
   const mode = forcedMode ?? 'standard';
-  const run = repo.createRun({
-    itemId: item.id,
-    chatId: chat.id,
-    kind: 'research',
-    mode,
-    ...runBinding(req, deps, mode),
-  });
+  const run = repo.createRun(
+    {
+      itemId: item.id,
+      chatId: chat.id,
+      kind: 'research',
+      mode,
+      ...runBinding(req, deps, mode),
+    },
+    deps.ctx,
+  );
   if (req.note?.trim()) {
-    repo.addMessage({ chatId: chat.id, role: 'user', kind: 'question', content: req.note });
+    repo.addMessage(
+      { chatId: chat.id, role: 'user', kind: 'question', content: req.note },
+      deps.ctx,
+    );
   }
   return { item, chat, run, deduplicated: false };
 }
