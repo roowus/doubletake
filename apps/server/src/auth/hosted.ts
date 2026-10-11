@@ -1,10 +1,10 @@
 import { createHash, randomBytes } from 'node:crypto';
 import fs from 'node:fs';
 import { hash as argonHash, verify as argonVerify } from '@node-rs/argon2';
-import { and, eq, isNull, lt } from 'drizzle-orm';
+import { and, eq, gte, isNull, lt } from 'drizzle-orm';
 import { ulid } from 'ulid';
 import type { PgDb } from '../db/pg.js';
-import { credentials, oauthStates, sessions, users } from '../db/schema.pg.js';
+import { costLedger, credentials, oauthStates, sessions, users } from '../db/schema.pg.js';
 import { SecretBox } from '../secrets/box.js';
 
 /** `kind` for `sessions` rows (ADR 0032). */
@@ -50,6 +50,35 @@ function isUniqueViolation(e: unknown): boolean {
  * row is scoped to a `users` row and lives in Postgres. Only enabled when `DOUBLETAKE_HOSTED=1`;
  * the SQLite path never touches any of this.
  */
+/** What the run loop needs from a credential — never the plaintext key itself. */
+export interface RunCredential {
+  id: string;
+  monthlyCapUsd: number | null;
+  perRunCapUsd: number | null;
+  /** SecretBox envelope; open only via HostedAuth.openKey straight into the adapter env. */
+  sealedKey: string;
+  /** Adapter env for an opened key (kind-appropriate variable names, base_url for harness). */
+  envFor(plaintextKey: string): Record<string, string>;
+}
+
+function credentialEnv(kind: string, key: string, meta: string | null): Record<string, string> {
+  let baseUrl: string | null = null;
+  if (meta) {
+    try {
+      baseUrl = (JSON.parse(meta) as { base_url?: string }).base_url ?? null;
+    } catch {
+      baseUrl = null;
+    }
+  }
+  if (kind === 'openrouter') return { OPENROUTER_API_KEY: key };
+  if (kind === 'harness')
+    return {
+      ANTHROPIC_API_KEY: key,
+      ...(baseUrl ? { ANTHROPIC_BASE_URL: baseUrl } : {}),
+    };
+  return { ANTHROPIC_API_KEY: key };
+}
+
 export class HostedAuth {
   constructor(
     private readonly db: PgDb,
@@ -231,6 +260,46 @@ export class HostedAuth {
         createdAt: r.createdAt,
       };
     });
+  }
+
+  /**
+   * The credential a hosted run executes on (ADR 0032): the user's most recent active
+   * credential, else null. (There is no default flag yet — "default" means the only active
+   * credential; revisit when multi-credential selection lands.)
+   */
+  async resolveRunCredential(userId: string): Promise<RunCredential | null> {
+    const row = await this.db.query.credentials.findFirst({
+      where: (t, { and, eq, isNull, ne }) =>
+        and(eq(t.userId, userId), isNull(t.revokedAt), ne(t.sealedKey, '')),
+      orderBy: (t, { desc }) => desc(t.createdAt),
+    });
+    if (!row) return null;
+    return {
+      id: row.id,
+      monthlyCapUsd: row.monthlyCapUsd,
+      perRunCapUsd: row.perRunCapUsd,
+      sealedKey: row.sealedKey,
+      envFor: (plaintextKey: string) => credentialEnv(row.kind, plaintextKey, row.meta),
+    };
+  }
+
+  /** Month-to-date spend for one user from cost_ledger (monthly cap enforcement). */
+  async monthSpend(userId: string): Promise<number> {
+    const monthStart = new Date();
+    monthStart.setUTCDate(1);
+    monthStart.setUTCHours(0, 0, 0, 0);
+    const rows = await this.db
+      .select({ total: costLedger.costUsd })
+      .from(costLedger)
+      .where(
+        and(eq(costLedger.userId, userId), gte(costLedger.createdAt, monthStart.toISOString())),
+      );
+    return rows.reduce((a, r) => a + r.total, 0);
+  }
+
+  /** Open sealed key material; the plaintext is meant only for the adapter env. */
+  openKey(sealedKey: string): string {
+    return this.box.open(sealedKey);
   }
 
   async getCredential(credentialId: string, userId: string) {
