@@ -47,3 +47,20 @@ Self-hosted behavior is frozen byte-for-byte behind the flag; every existing tes
 passing. Postgres full-text search replaces FTS5 only in hosted mode. Hosted deploys publish
 nothing new (AGPL already covers the core); deploy glue stays in the private repo. Revisit
 the flag boundary if hosted settings grow beyond what `config` can multiplex.
+
+## Addendum (2026-10-11, tenancy + caps implementation)
+
+- **Dialect contract in `Repo`**: method signatures stay synchronous (SQLite callers and all
+  existing tests untouched). On the pg dialect, statements fire eagerly and resolve behind a
+  documented `lazy()` wrapper — pg callers must `await`. A full hosted-PG runtime requires an
+  eventual async sweep of all call sites; tracked as out of scope for H1 and impossible to
+  miss (contract block at the top of `repo.ts`).
+- **pg FTS stopgap**: hosted search is tenant-scoped `ILIKE` until the tsvector + GIN port
+  (TODO in `schema.pg.ts`).
+- **`tags.name` stays globally unique on pg** — cross-user tag-name collisions are possible
+  at hosted cutover; the fix (per-user tag ids) is part of the cutover pass.
+- **Spend caps** are enforced twice: ledger checks (`no_credential` / `cap_reached` /
+  `per_run_cap`) and `RunOptions.maxBudgetUsd` clamped to the credential's per-run cap.
+  Hosted credential resolution is most-recent-active; an explicit "default credential" flag
+  is future work.
+- **Registration** behind `DOUBLETAKE_INVITE_CODE` (first user bootstraps without it).
