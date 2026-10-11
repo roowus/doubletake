@@ -1,6 +1,6 @@
 import type { EntityKind } from '@doubletake/shared';
 import { lazy, Suspense, useEffect, useState } from 'react';
-import { getToken } from './api';
+import { getToken, setToken } from './api';
 import { Shell } from './components/Shell';
 import { Toaster } from './components/Toast';
 import { resetLive } from './live';
@@ -15,10 +15,12 @@ import { Compose } from './pages/Compose';
 import { ENTITY_KINDS, Entities } from './pages/Entities';
 import { Inbox } from './pages/Inbox';
 import { Library } from './pages/Library';
+import { Login } from './pages/Login';
 import { Settings } from './pages/Settings';
 import { Todo } from './pages/Todo';
 import { Welcome } from './pages/Welcome';
 import { navigate, usePath } from './router';
+import { detectHostedOnce, parseAuthHash, useHosted } from './lib/hosted';
 
 // Leaflet is only needed on the map, so it ships as its own chunk.
 const MapView = lazy(() => import('./pages/MapView').then((m) => ({ default: m.MapView })));
@@ -28,6 +30,8 @@ const GraphMap = lazy(() => import('./components/GraphMap').then((m) => ({ defau
 export function App() {
   const path = usePath();
   const [authed, setAuthed] = useState(!!getToken());
+  const hosted = useHosted();
+  const [oauthError, setOauthError] = useState<string | null>(null);
 
   useEffect(() => {
     const onUnauth = () => setAuthed(false);
@@ -35,6 +39,34 @@ export function App() {
     installNativeListeners();
     return () => window.removeEventListener('doubletake:unauthorized', onUnauth);
   }, []);
+
+  // Hosted mode (ADR 0032) is probed once at boot; until it answers the app stays self-hosted.
+  useEffect(() => {
+    void detectHostedOnce();
+  }, []);
+
+  // A Google OAuth round trip lands back with `#dth_token=<bearer>` or `#error=<msg>` in the
+  // hash. Store the bearer exactly like a paired device token, surface errors on the login.
+  useEffect(() => {
+    const h = parseAuthHash(location.hash);
+    if (!h.token && !h.error) return;
+    if (h.token) setToken(h.token);
+    setOauthError(h.error ?? null);
+    history.replaceState(null, '', location.pathname + location.search + (h.rest ? `#${h.rest}` : ''));
+    window.dispatchEvent(new Event('doubletake:navigate'));
+    if (h.token) {
+      setAuthed(true);
+      resetLive();
+      navigate('/', true);
+    }
+  }, []);
+
+  // Hosted and anonymous: every view is the login page. Hosted and signed in: never the login.
+  useEffect(() => {
+    if (hosted?.hosted !== true) return;
+    if (!authed && !location.pathname.startsWith('/login')) navigate('/login', true);
+    if (authed && location.pathname === '/login') navigate('/', true);
+  }, [hosted, authed, path]);
 
   // A share received by the native sheet while unpaired is replayed once we are signed in.
   useEffect(() => {
@@ -45,6 +77,22 @@ export function App() {
     // A re-paired device keeps its FCM token but the server forgot it; re-post when allowed.
     void resumeNativePush();
   }, [authed]);
+
+  if (hosted?.hosted === true && !authed) {
+    return (
+      <Login
+        hosted={hosted}
+        oauthError={oauthError}
+        returnTo={location.pathname + location.search}
+        onAuthed={() => {
+          setAuthed(true);
+          setOauthError(null);
+          resetLive();
+          navigate('/', true);
+        }}
+      />
+    );
+  }
 
   if (!authed) {
     return (
