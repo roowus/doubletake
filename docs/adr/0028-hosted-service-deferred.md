@@ -1,7 +1,8 @@
 # 0028 — Hosted bring-your-own-key service: designed, deferred
 
 ## Status
-accepted (deferral)
+superseded by [0032](0032-hosted-mode.md) (the deferral itself; the seams and research below
+remain accurate and were the starting point for the revival)
 
 ## Date
 2026-09-04
