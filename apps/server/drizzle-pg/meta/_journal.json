@@ -19,13 +19,6 @@
     {
       "idx": 2,
       "version": "7",
-      "when": 1791691568441,
-      "tag": "0002_fat_cammi",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "7",
       "when": 1791691682531,
       "tag": "0002_tenant_user_id",
       "breakpoints": true
