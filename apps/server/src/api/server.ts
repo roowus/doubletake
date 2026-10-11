@@ -44,7 +44,13 @@ import { type DigestGate, parseHHMM, validTimeZone } from '../notify/quiet.js';
 import type { QueueWorker } from '../queue/worker.js';
 import { safeJson, toChatDetail, toChatSummary, toEntityHit, toRunDto, toTodoDto } from './dto.js';
 import { ftsQuery } from './fts.js';
-import { HOSTED_PUBLIC_PATHS, isHostedMode, registerHostedRoutes } from './hosted.js';
+import {
+  cookieValue,
+  HOSTED_PUBLIC_PATHS,
+  HOSTED_SESSION_COOKIE,
+  isHostedMode,
+  registerHostedRoutes,
+} from './hosted.js';
 import { hostAllowed, IG_PUBLIC_PATHS, registerInstagramRoutes } from './instagram.js';
 
 export interface ServerDeps {
@@ -154,6 +160,17 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
       if (!hosted) return reply.code(401).send({ error: 'unauthorized' });
       (req as FastifyRequest & { hosted?: typeof hosted }).hosted = hosted;
       return;
+    }
+    // Hosted mode, cookie transport: the OAuth callbacks set `dt_session` (HttpOnly) so browser
+    // navigations authenticate without a bearer header. Hosted-only; flag off leaves this inert.
+    if (hostedAuth && !bearer) {
+      const cookie = cookieValue(req.headers.cookie, HOSTED_SESSION_COOKIE);
+      if (cookie !== undefined) {
+        const hosted = await hostedAuth.authenticate(cookie);
+        if (!hosted) return reply.code(401).send({ error: 'unauthorized' });
+        (req as FastifyRequest & { hosted?: typeof hosted }).hosted = hosted;
+        return;
+      }
     }
     const session = auth.authenticate(bearer);
     if (!session) return reply.code(401).send({ error: 'unauthorized' });
