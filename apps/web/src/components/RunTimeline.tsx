@@ -1,4 +1,5 @@
 import type { RunEvent } from '@doubletake/shared';
+import { failureCopy } from '../lib/hosted';
 
 function line(e: RunEvent): string {
   const p = e.payload;
@@ -12,7 +13,8 @@ function line(e: RunEvent): string {
     case 'text':
       return String(p.text ?? '').slice(0, 300);
     case 'error':
-      return `error ${String(p.message ?? p.error ?? JSON.stringify(p))}`;
+      // Hosted run failures carry a reason (ADR 0032); map it to owner-readable copy.
+      return `error ${failureCopy(String(p.message ?? p.error ?? JSON.stringify(p)))}`;
     case 'done':
       return `done (${String(p.stopReason ?? '')}${p.costUsd != null ? `, $${Number(p.costUsd).toFixed(3)}` : ''})`;
   }
