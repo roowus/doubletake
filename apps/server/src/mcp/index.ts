@@ -11,6 +11,7 @@
  * ourselves. Write tools only enqueue work (`save`, `ask_library`); nothing deletes or edits.
  */
 
+import { createHash } from 'node:crypto';
 import type { Answer, IngestRequest, UntrustedBlock, UntrustedKind } from '@doubletake/shared';
 import { renderUntrustedAll, UNTRUSTED_PREAMBLE } from '@doubletake/shared';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -20,6 +21,7 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { toChatDetail, toChatSummary } from '../api/dto.js';
 import { ftsQuery } from '../api/fts.js';
+import { isHostedMode } from '../api/hosted.js';
 import type { Session } from '../auth/index.js';
 import type { ChatRow, ItemRow, Repo, TenantCtx } from '../db/repo.js';
 import { ingest } from '../ingest/index.js';
@@ -53,8 +55,8 @@ function text(s: string) {
   return { content: [{ type: 'text' as const, text: s }] };
 }
 
-function summaryLine(repo: Repo, chat: ChatRow, item: ItemRow): string {
-  const s = toChatSummary(repo, chat, item);
+function summaryLine(repo: Repo, chat: ChatRow, item: ItemRow, ctx?: TenantCtx): string {
+  const s = toChatSummary(repo, chat, item, ctx);
   const bits = [
     `- **${s.title}** (chat \`${s.id}\`, ${s.platform}${s.category ? `, ${s.category}` : ''}, ${s.status})`,
   ];
@@ -64,21 +66,26 @@ function summaryLine(repo: Repo, chat: ChatRow, item: ItemRow): string {
   return bits.join('\n');
 }
 
-function latestAnswer(repo: Repo, chatId: string) {
+function latestAnswer(repo: Repo, chatId: string, ctx?: TenantCtx) {
   return repo
-    .listMessages(chatId)
+    .listMessages(chatId, ctx)
     .filter((m) => m.role === 'assistant' && m.kind === 'answer')
     .at(-1);
 }
 
-/** Markdown rendering of one chat: the owner's question, our answer, structure, sources, extractions. */
+/**
+ * Markdown rendering of one chat: the owner's question, our answer, structure, sources,
+ * extractions. (Sync like the Repo contract; on the pg dialect the callers await the scoped
+ * reads that gate this call — see the dialect contract at the top of `db/repo.ts`.)
+ */
 export function renderChat(
   repo: Repo,
   chat: ChatRow,
   item: ItemRow,
   opts: { extractions: boolean },
+  ctx?: TenantCtx,
 ): string {
-  const d = toChatDetail(repo, chat, item);
+  const d = toChatDetail(repo, chat, item, ctx);
   const out: string[] = [`# ${d.chat.title}`, ''];
   out.push(`- chat: \`${d.chat.id}\``);
   out.push(`- status: ${d.chat.status}${d.item.modeEffective ? ` (${d.item.modeEffective})` : ''}`);
@@ -93,7 +100,7 @@ export function renderChat(
   if (run && run.status !== 'done')
     out.push(`- latest run: ${run.status}${run.error ? ` (${run.error})` : ''}`);
 
-  const answer = latestAnswer(repo, chat.id);
+  const answer = latestAnswer(repo, chat.id, ctx);
   if (answer) {
     out.push('', '## Answer (written by the Doubletake brain from the content below)', '');
     out.push(answer.content.trim());
@@ -173,8 +180,12 @@ function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-/** Build a per-request MCP server bound to the calling device's session. */
-export function buildMcpServer(deps: McpDeps, session: Session, ctx?: TenantCtx): McpServer {
+/** Build a per-request MCP server bound to the calling session (device token or hosted `dth_`). */
+export function buildMcpServer(
+  deps: McpDeps,
+  session: Session | undefined,
+  ctx?: TenantCtx,
+): McpServer {
   const { repo, worker } = deps;
   const server = new McpServer({ name: SERVER_NAME, version: SERVER_VERSION });
 
@@ -199,10 +210,10 @@ export function buildMcpServer(deps: McpDeps, session: Session, ctx?: TenantCtx)
       const q = ftsQuery(query);
       if (!q) return text('No searchable terms in the query.');
       const rows: string[] = [];
-      for (const itemId of repo.searchFts(q, limit, ctx)) {
-        const item = repo.getItem(itemId, ctx);
-        const chat = repo.getChatByItem(itemId, ctx);
-        if (item && chat) rows.push(summaryLine(repo, chat, item));
+      for (const itemId of await repo.searchFts(q, limit, ctx)) {
+        const item = await repo.getItem(itemId, ctx);
+        const chat = await repo.getChatByItem(itemId, ctx);
+        if (item && chat) rows.push(summaryLine(repo, chat, item, ctx));
       }
       return text(rows.length ? rows.join('\n') : 'No matches.');
     },
@@ -222,19 +233,21 @@ export function buildMcpServer(deps: McpDeps, session: Session, ctx?: TenantCtx)
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     async ({ collection, tag, limit }) => {
-      let rows = repo.listChats(limit, ctx);
+      let rows = await repo.listChats(limit, ctx);
       if (collection) {
-        const c = repo.getCollection(collection);
+        const c = await repo.getCollection(collection, ctx);
         if (!c) return { ...text(`Collection ${collection} not found.`), isError: true };
-        const ids = resolveCollection(repo, c);
+        const ids = resolveCollection(repo, c, ctx);
         rows = rows.filter((r) => ids.has(r.item.id));
       }
       if (tag?.trim()) {
-        const ids = new Set(repo.itemIdsByTag(tag));
+        const ids = new Set(await repo.itemIdsByTag(tag, ctx));
         rows = rows.filter((r) => ids.has(r.item.id));
       }
       return text(
-        rows.length ? rows.map((r) => summaryLine(repo, r.chat, r.item)).join('\n') : 'No chats.',
+        rows.length
+          ? rows.map((r) => summaryLine(repo, r.chat, r.item, ctx)).join('\n')
+          : 'No chats.',
       );
     },
   );
@@ -255,17 +268,17 @@ export function buildMcpServer(deps: McpDeps, session: Session, ctx?: TenantCtx)
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     async ({ chat_id, include_extractions, wait_seconds }, extra) => {
-      const chat = repo.getChat(chat_id, ctx);
+      const chat = await repo.getChat(chat_id, ctx);
       if (!chat) return { ...text(`Chat ${chat_id} not found.`), isError: true };
       const deadline = Date.now() + wait_seconds * 1000;
       while (Date.now() < deadline && !extra.signal.aborted) {
-        const run = repo.listRuns(chat.id, ctx).at(-1);
+        const run = (await repo.listRuns(chat.id, ctx)).at(-1);
         if (!run || !['queued', 'extracting', 'researching'].includes(run.status)) break;
         await sleep(500);
       }
-      const item = repo.getItem(chat.itemId, ctx);
+      const item = await repo.getItem(chat.itemId, ctx);
       if (!item) return { ...text(`Chat ${chat_id} not found.`), isError: true };
-      return text(renderChat(repo, chat, item, { extractions: include_extractions }));
+      return text(renderChat(repo, chat, item, { extractions: include_extractions }, ctx));
     },
   );
 
@@ -278,7 +291,7 @@ export function buildMcpServer(deps: McpDeps, session: Session, ctx?: TenantCtx)
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     async () => {
-      const cols = listCollections(repo, false, true);
+      const cols = listCollections(repo, false, true, undefined, ctx);
       return text(
         cols.length
           ? cols
@@ -300,7 +313,7 @@ export function buildMcpServer(deps: McpDeps, session: Session, ctx?: TenantCtx)
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     async () => {
-      const tags = repo.listAllTags(ctx);
+      const tags = await repo.listAllTags(ctx);
       return text(
         tags.length
           ? tags.map((t) => `- ${t.name} (${t.count}, ${t.kind})`).join('\n')
@@ -332,7 +345,7 @@ export function buildMcpServer(deps: McpDeps, session: Session, ctx?: TenantCtx)
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     async ({ kind, limit }) => {
-      const rows = repo.listEntitiesByKind(kind, limit, undefined, ctx);
+      const rows = await repo.listEntitiesByKind(kind, limit, undefined, ctx);
       return text(
         rows.length
           ? rows
@@ -356,7 +369,7 @@ export function buildMcpServer(deps: McpDeps, session: Session, ctx?: TenantCtx)
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     async ({ done }) => {
-      const rows = repo.listTodos(done, ctx);
+      const rows = await repo.listTodos(done, ctx);
       return text(
         rows.length
           ? rows
@@ -402,7 +415,7 @@ export function buildMcpServer(deps: McpDeps, session: Session, ctx?: TenantCtx)
       const out = ingest(req, { repo, ctx, adapterFor: (m) => worker.brains.forMode(m) });
       worker.kick();
       return text(
-        `${out.deduplicated ? 'Already saved recently; re-running on the existing chat' : 'Queued'} as chat \`${out.chat.id}\` (run \`${out.run.id}\`, requested by device "${session.deviceName}").`,
+        `${out.deduplicated ? 'Already saved recently; re-running on the existing chat' : 'Queued'} as chat \`${out.chat.id}\` (run \`${out.run.id}\`${session ? `, requested by device "${session.deviceName}"` : ''}).`,
       );
     },
   );
@@ -430,15 +443,83 @@ export function buildMcpServer(deps: McpDeps, session: Session, ctx?: TenantCtx)
   return server;
 }
 
+/** Default /mcp budget in hosted mode (ADR 0032): 60 requests per minute per session. */
+export const MCP_RATE_LIMIT = { max: 60, windowMs: 60_000 };
+
+export interface McpRateLimiterOptions {
+  max?: number;
+  windowMs?: number;
+  /** Injectable clock so tests can run a fake timeline (defaults to `Date.now`). */
+  now?: () => number;
+}
+
+/**
+ * Per-key token bucket for /mcp (ADR 0032, hosted mode): refills continuously at
+ * `max / windowMs` tokens per ms. Keys are the hosted session id, falling back to a hash of the
+ * device bearer token. Deliberately in-memory: a hosted MCP flood costs a bucket per pod, not
+ * an outage.
+ */
+export class McpRateLimiter {
+  private readonly buckets = new Map<string, { tokens: number; ts: number }>();
+  private readonly max: number;
+  private readonly windowMs: number;
+  private readonly now: () => number;
+
+  constructor(opts: McpRateLimiterOptions = {}) {
+    this.max = opts.max ?? MCP_RATE_LIMIT.max;
+    this.windowMs = opts.windowMs ?? MCP_RATE_LIMIT.windowMs;
+    this.now = opts.now ?? (() => Date.now());
+  }
+
+  /** Consume one token; when refused, `retryAfterS` is the seconds until one refills. */
+  take(key: string): { ok: boolean; retryAfterS: number } {
+    const t = this.now();
+    const perMs = this.max / this.windowMs;
+    if (this.buckets.size > 4096) {
+      // Drop idle buckets so a rotating-key flood cannot grow the map without bound.
+      for (const [k, b] of this.buckets) if (t - b.ts > 2 * this.windowMs) this.buckets.delete(k);
+    }
+    const prev = this.buckets.get(key);
+    const tokens = Math.min(this.max, (prev?.tokens ?? this.max) + (t - (prev?.ts ?? t)) * perMs);
+    if (tokens < 1) {
+      this.buckets.set(key, { tokens, ts: t });
+      return { ok: false, retryAfterS: Math.max(1, Math.ceil((1 - tokens) / perMs / 1000)) };
+    }
+    this.buckets.set(key, { tokens: tokens - 1, ts: t });
+    return { ok: true, retryAfterS: 0 };
+  }
+}
+
 /**
  * Mount the stateless Streamable HTTP endpoint. The auth hook in `server.ts` has already
- * populated `req.session`; requests without one never reach these handlers.
+ * populated `req.session` (device token) or `req.hosted` (hosted `dth_` token, ADR 0032);
+ * requests with neither never reach these handlers.
  */
 export function registerMcpRoutes(app: FastifyInstance, deps: McpDeps): void {
+  // Hosted only: self-hosted single-owner deployments keep the exact pre-flag request path.
+  const limiter = new McpRateLimiter();
   app.post(MCP_PATH, async (req, reply) => {
     const session = req.session;
-    if (!session) return reply.code(401).send({ error: 'unauthorized' });
-    const hosted = (req as FastifyRequest & { hosted?: { userId?: string } }).hosted;
+    const hosted = (req as FastifyRequest & { hosted?: { userId?: string; sessionId?: string } })
+      .hosted;
+    if (!session && !hosted?.userId) return reply.code(401).send({ error: 'unauthorized' });
+    if (isHostedMode()) {
+      const bearer = req.headers.authorization?.startsWith('Bearer ')
+        ? req.headers.authorization.slice(7)
+        : undefined;
+      const key =
+        hosted?.sessionId ??
+        (bearer ? createHash('sha256').update(bearer).digest('hex') : 'anonymous');
+      const { ok, retryAfterS } = limiter.take(key);
+      if (!ok) {
+        reply.header('retry-after', String(retryAfterS));
+        return reply.code(429).send({
+          jsonrpc: '2.0',
+          error: { code: -32000, message: 'rate limited; retry later' },
+          id: null,
+        });
+      }
+    }
     const ctx = hosted?.userId ? { userId: hosted.userId } : undefined;
     const server = buildMcpServer(deps, session, ctx);
     // No `sessionIdGenerator` = stateless mode. The SDK's option types are not written for
