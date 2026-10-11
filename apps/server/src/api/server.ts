@@ -15,7 +15,7 @@ import { Auth, AuthError } from '../auth/index.js';
 import type { InstagramChannel } from '../channels/instagram/index.js';
 import type { Config } from '../config/index.js';
 import { openPgDb } from '../db/pg.js';
-import type { Repo } from '../db/repo.js';
+import type { Repo, TenantCtx } from '../db/repo.js';
 import { brainCoords, type Geocoder, geocodeQuery } from '../geo/index.js';
 import { IngestError, ingest, ingestUpload } from '../ingest/index.js';
 import {
@@ -24,7 +24,7 @@ import {
   resolveQuery,
   seedAutoCollections,
 } from '../library/collections.js';
-import { buildLibraryGraph } from '../library/graph.js';
+import { buildLibraryGraph, GRAPH_CAPS } from '../library/graph.js';
 import {
   exportKarakeep,
   exportMemos,
@@ -112,6 +112,12 @@ const PUBLIC_PATHS = new Set([
  */
 export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
   const { cfg, repo, worker } = deps;
+  // Tenant context (ADR 0032): present only for hosted `dth_` sessions; passing it
+  // unconditionally is safe because Repo.scope() applies it on the pg dialect only.
+  const tenantCtx = (req: FastifyRequest): TenantCtx | undefined => {
+    const userId = (req as FastifyRequest & { hosted?: { userId?: string } }).hosted?.userId;
+    return userId ? { userId } : undefined;
+  };
   seedAutoCollections(repo);
   const auth = deps.auth ?? new Auth(repo);
   // Hosted mode (ADR 0032): Postgres accounts + sessions. Null (and no hosted routes) unless
@@ -259,7 +265,11 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
     const body = IngestRequest.parse(req.body);
     if (body.adapter && !worker.brains.all().some((b) => b.id === body.adapter))
       return reply.code(400).send({ error: `unknown adapter "${body.adapter}"` });
-    const out = ingest(body, { repo, adapterFor: (m) => worker.brains.forMode(m) });
+    const out = ingest(body, {
+      repo,
+      ctx: tenantCtx(req),
+      adapterFor: (m) => worker.brains.forMode(m),
+    });
     worker.kick();
     return reply.code(202).send({
       itemId: out.item.id,
@@ -305,9 +315,10 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
           clientId: hdr('x-doubletake-client-id'),
         });
       if (meta.clientId) {
-        const prior = repo.findByClientId(meta.clientId);
-        const chat = prior ? repo.getChatByItem(prior.id) : undefined;
-        const run = chat ? repo.listRuns(chat.id).at(-1) : undefined;
+        const ctx = tenantCtx(req);
+        const prior = repo.findByClientId(meta.clientId, ctx);
+        const chat = prior ? repo.getChatByItem(prior.id, ctx) : undefined;
+        const run = chat ? repo.listRuns(chat.id, ctx).at(-1) : undefined;
         if (prior && chat && run) {
           // Replay (offline queue re-post): drain the body, answer as the first attempt did.
           for await (const _chunk of req.body as NodeJS.ReadableStream) {
@@ -371,7 +382,7 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
           modeHint: meta.modeHint,
           ...(meta.clientId ? { clientId: meta.clientId } : {}),
         },
-        { repo, itemId, adapterFor: (m) => worker.brains.forMode(m) },
+        { repo, ctx: tenantCtx(req), itemId, adapterFor: (m) => worker.brains.forMode(m) },
       );
       worker.kick();
       return reply.code(202).send({
@@ -395,7 +406,7 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
       .parse(req.body);
     const out = ingest(
       { text: body.question, channel: 'library', focus: 'whole', modeHint: body.modeHint },
-      { repo, adapterFor: (m) => worker.brains.forMode(m) },
+      { repo, ctx: tenantCtx(req), adapterFor: (m) => worker.brains.forMode(m) },
     );
     worker.kick();
     return reply.code(202).send({ itemId: out.item.id, chatId: out.chat.id, runId: out.run.id });
@@ -411,28 +422,29 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
         limit: z.coerce.number().int().min(1).max(500).default(200),
       })
       .parse(req.query);
-    let rows = repo.listChats(q.limit);
+    const ctx = tenantCtx(req);
+    let rows = repo.listChats(q.limit, ctx);
     if (q.collection) {
-      const c = repo.getCollection(q.collection);
+      const c = repo.getCollection(q.collection, ctx);
       if (!c) return reply.code(404).send({ error: 'collection not found' });
-      const ids = resolveCollection(repo, c);
+      const ids = resolveCollection(repo, c, ctx);
       rows = rows.filter((r) => ids.has(r.item.id));
     }
     if (q.q?.trim()) {
-      const ids = new Set(repo.searchFts(ftsQuery(q.q), q.limit));
+      const ids = new Set(repo.searchFts(ftsQuery(q.q), q.limit, ctx));
       rows = rows.filter((r) => ids.has(r.item.id));
     }
     if (q.tag?.trim()) {
-      const ids = new Set(repo.itemIdsByTag(q.tag));
+      const ids = new Set(repo.itemIdsByTag(q.tag, ctx));
       rows = rows.filter((r) => ids.has(r.item.id));
     }
-    return rows.map((r) => toChatSummary(repo, r.chat, r.item));
+    return rows.map((r) => toChatSummary(repo, r.chat, r.item, ctx));
   });
 
-  app.get('/api/tags', async () => repo.listAllTags());
+  app.get('/api/tags', async (req) => repo.listAllTags(tenantCtx(req)));
 
   /** Map of everything: read-only graph over chats, things and tags (Library → Graph). */
-  app.get('/api/library/graph', async () => buildLibraryGraph(repo));
+  app.get('/api/library/graph', async (req) => buildLibraryGraph(repo, GRAPH_CAPS, tenantCtx(req)));
 
   // ---- collections + entity views (M6) ----
   const toShareUrl = (token: string) => shareUrl(cfg, token);
@@ -441,18 +453,20 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
   // the whole credential; the page carries no script and no owner note.
   app.post('/api/collections/:id/share', async (req, reply) => {
     const { id } = z.object({ id: z.string() }).parse(req.params);
-    const c = repo.getCollection(id);
+    const ctx = tenantCtx(req);
+    const c = repo.getCollection(id, ctx);
     if (!c) return reply.code(404).send({ error: 'no such collection' });
     if (c.auto) return reply.code(400).send({ error: 'auto collections cannot be shared' });
     const token = c.shareToken ?? newShareToken();
-    if (!c.shareToken) repo.updateCollection(id, { shareToken: token });
+    if (!c.shareToken) repo.updateCollection(id, { shareToken: token }, ctx);
     return { shareUrl: toShareUrl(token) };
   });
   app.delete('/api/collections/:id/share', async (req, reply) => {
     const { id } = z.object({ id: z.string() }).parse(req.params);
-    const c = repo.getCollection(id);
+    const ctx = tenantCtx(req);
+    const c = repo.getCollection(id, ctx);
     if (!c) return reply.code(404).send({ error: 'no such collection' });
-    repo.updateCollection(id, { shareToken: null });
+    repo.updateCollection(id, { shareToken: null }, ctx);
     return { shareUrl: null };
   });
   app.get(`${SHARE_PATH_PREFIX}:token`, async (req, reply) => {
@@ -475,7 +489,7 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
         all: z.coerce.boolean().default(false),
       })
       .parse(req.query);
-    return listCollections(repo, q.hidden, !q.all, toShareUrl);
+    return listCollections(repo, q.hidden, !q.all, toShareUrl, tenantCtx(req));
   });
 
   app.post('/api/collections', async (req, reply) => {
@@ -487,20 +501,25 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
       })
       .parse(req.body);
     const manual = !body.query;
-    const id = repo.createCollection({
-      name: body.name,
-      query: body.query ?? '',
-      manual,
-      auto: false,
-    });
+    const ctx = tenantCtx(req);
+    const id = repo.createCollection(
+      {
+        name: body.name,
+        query: body.query ?? '',
+        manual,
+        auto: false,
+      },
+      ctx,
+    );
     return reply
       .code(201)
-      .send(listCollections(repo, true, false, toShareUrl).find((c) => c.id === id));
+      .send(listCollections(repo, true, false, toShareUrl, ctx).find((c) => c.id === id));
   });
 
   app.post('/api/collections/:id', async (req, reply) => {
     const { id } = z.object({ id: z.string() }).parse(req.params);
-    const c = repo.getCollection(id);
+    const ctx = tenantCtx(req);
+    const c = repo.getCollection(id, ctx);
     if (!c) return reply.code(404).send({ error: 'collection not found' });
     const body = z
       .object({
@@ -511,45 +530,52 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
       .parse(req.body);
     if (c.auto && body.query !== undefined)
       return reply.code(400).send({ error: 'auto collections keep their query' });
-    repo.updateCollection(id, {
-      ...(body.name !== undefined ? { name: body.name } : {}),
-      ...(body.query !== undefined && !c.manual ? { query: body.query } : {}),
-      ...(body.hidden !== undefined ? { hidden: body.hidden } : {}),
-    });
-    return listCollections(repo, true, false, toShareUrl).find((x) => x.id === id);
+    repo.updateCollection(
+      id,
+      {
+        ...(body.name !== undefined ? { name: body.name } : {}),
+        ...(body.query !== undefined && !c.manual ? { query: body.query } : {}),
+        ...(body.hidden !== undefined ? { hidden: body.hidden } : {}),
+      },
+      ctx,
+    );
+    return listCollections(repo, true, false, toShareUrl, ctx).find((x) => x.id === id);
   });
 
   app.delete('/api/collections/:id', async (req, reply) => {
     const { id } = z.object({ id: z.string() }).parse(req.params);
-    const c = repo.getCollection(id);
+    const ctx = tenantCtx(req);
+    const c = repo.getCollection(id, ctx);
     if (!c) return reply.code(404).send({ error: 'collection not found' });
     if (c.auto) return reply.code(400).send({ error: 'auto collections can only be hidden' });
-    repo.deleteCollection(id);
+    repo.deleteCollection(id, ctx);
     return { ok: true };
   });
 
   app.post('/api/collections/:id/items', async (req, reply) => {
     const { id } = z.object({ id: z.string() }).parse(req.params);
-    const c = repo.getCollection(id);
+    const ctx = tenantCtx(req);
+    const c = repo.getCollection(id, ctx);
     if (!c) return reply.code(404).send({ error: 'collection not found' });
     if (!c.manual) return reply.code(400).send({ error: 'only manual collections take items' });
     const body = z.object({ chatId: z.string() }).parse(req.body);
-    const chat = repo.getChat(body.chatId);
+    const chat = repo.getChat(body.chatId, ctx);
     if (!chat) return reply.code(404).send({ error: 'chat not found' });
-    repo.addCollectionItem(id, chat.itemId);
+    repo.addCollectionItem(id, chat.itemId, ctx);
     worker.emit('chat_updated', chat.id);
-    return { count: repo.collectionItemIds(id).length };
+    return { count: repo.collectionItemIds(id, ctx).length };
   });
 
   app.delete('/api/collections/:id/items/:chatId', async (req, reply) => {
     const { id, chatId } = z.object({ id: z.string(), chatId: z.string() }).parse(req.params);
-    const c = repo.getCollection(id);
+    const ctx = tenantCtx(req);
+    const c = repo.getCollection(id, ctx);
     if (!c) return reply.code(404).send({ error: 'collection not found' });
-    const chat = repo.getChat(chatId);
+    const chat = repo.getChat(chatId, ctx);
     if (!chat) return reply.code(404).send({ error: 'chat not found' });
-    repo.removeCollectionItem(id, chat.itemId);
+    repo.removeCollectionItem(id, chat.itemId, ctx);
     worker.emit('chat_updated', chat.id);
-    return { count: repo.collectionItemIds(id).length };
+    return { count: repo.collectionItemIds(id, ctx).length };
   });
 
   // ---- Karakeep / Memos interchange (ADR 0024) ----
@@ -589,33 +615,34 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
 
   /** Which manual collections hold this chat (for the chat header picker). */
   app.get('/api/chats/:id/collections', async (req, reply) => {
-    const { chat, item } = loadChat(req, reply, repo) ?? {};
+    const { chat, item } = loadChat(req, reply, repo, tenantCtx(req)) ?? {};
     if (!chat || !item) return;
-    return { collectionIds: repo.collectionsForItem(item.id) };
+    return { collectionIds: repo.collectionsForItem(item.id, tenantCtx(req)) };
   });
 
   // ---- saved list (ADR 0031) ----
   /** The owner's saved list: open entries by default, `?done=done` for finished ones, `all` for both. */
   app.get('/api/todos', async (req) => {
     const q = z.object({ done: z.enum(['open', 'done', 'all']).default('open') }).parse(req.query);
-    return repo.listTodos(q.done).map((r) => toTodoDto(r.todo, r.chatTitle));
+    return repo.listTodos(q.done, tenantCtx(req)).map((r) => toTodoDto(r.todo, r.chatTitle));
   });
 
   /** Save a thing from an answer (an entity snapshot) or a free-form task. */
   app.post('/api/todos', async (req, reply) => {
     const body = TodoCreate.parse(req.body);
-    if (body.chatId && !repo.getChat(body.chatId))
+    const ctx = tenantCtx(req);
+    if (body.chatId && !repo.getChat(body.chatId, ctx))
       return reply.code(404).send({ error: 'chat not found' });
-    const row = repo.createTodo(body);
-    const chat = body.chatId ? repo.getChat(body.chatId) : undefined;
-    const item = chat ? repo.getItem(chat.itemId) : undefined;
+    const row = repo.createTodo(body, 'open', ctx);
+    const chat = body.chatId ? repo.getChat(body.chatId, ctx) : undefined;
+    const item = chat ? repo.getItem(chat.itemId, ctx) : undefined;
     if (chat) worker.emit('chat_updated', chat.id);
     return reply.code(201).send(toTodoDto(row, item?.title));
   });
 
   /** Brain suggestions waiting for the owner (ADR 0031); approve or dismiss each one. */
-  app.get('/api/todos/suggestions', async () => {
-    return repo.listTodos('suggested').map((r) => toTodoDto(r.todo, r.chatTitle));
+  app.get('/api/todos/suggestions', async (req) => {
+    return repo.listTodos('suggested', tenantCtx(req)).map((r) => toTodoDto(r.todo, r.chatTitle));
   });
 
   /** Tick, untick, retitle or annotate one entry. */
@@ -628,14 +655,15 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
         note: z.string().max(2000).nullable().optional(),
       })
       .parse(req.body ?? {});
-    const existing = repo.getTodo(id);
+    const ctx = tenantCtx(req);
+    const existing = repo.getTodo(id, ctx);
     if (!existing) return reply.code(404).send({ error: 'not found' });
     if (existing.status === 'suggested')
       return reply.code(409).send({ error: 'still a suggestion; approve or dismiss it first' });
-    const row = repo.updateTodo(id, patch);
+    const row = repo.updateTodo(id, patch, ctx);
     if (!row) return reply.code(404).send({ error: 'not found' });
-    const chat = row.chatId ? repo.getChat(row.chatId) : undefined;
-    const item = chat ? repo.getItem(chat.itemId) : undefined;
+    const chat = row.chatId ? repo.getChat(row.chatId, ctx) : undefined;
+    const item = chat ? repo.getItem(chat.itemId, ctx) : undefined;
     if (chat) worker.emit('chat_updated', chat.id);
     return toTodoDto(row, item?.title);
   });
@@ -643,13 +671,14 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
   /** Move a suggestion onto the list. */
   app.post('/api/todos/:id/approve', async (req, reply) => {
     const { id } = z.object({ id: z.string() }).parse(req.params);
-    const row = repo.getTodo(id);
+    const ctx = tenantCtx(req);
+    const row = repo.getTodo(id, ctx);
     if (!row) return reply.code(404).send({ error: 'not found' });
     if (row.status !== 'suggested') return reply.code(409).send({ error: 'not a suggestion' });
-    const approved = repo.approveTodo(id);
+    const approved = repo.approveTodo(id, ctx);
     if (!approved) return reply.code(409).send({ error: 'not a suggestion' });
-    const chat = approved.chatId ? repo.getChat(approved.chatId) : undefined;
-    const item = chat ? repo.getItem(chat.itemId) : undefined;
+    const chat = approved.chatId ? repo.getChat(approved.chatId, ctx) : undefined;
+    const item = chat ? repo.getItem(chat.itemId, ctx) : undefined;
     if (chat) worker.emit('chat_updated', chat.id);
     return toTodoDto(approved, item?.title);
   });
@@ -657,18 +686,20 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
   /** Throw a suggestion away without adding it to the list. */
   app.post('/api/todos/:id/dismiss', async (req, reply) => {
     const { id } = z.object({ id: z.string() }).parse(req.params);
-    const row = repo.getTodo(id);
+    const ctx = tenantCtx(req);
+    const row = repo.getTodo(id, ctx);
     if (!row) return reply.code(404).send({ error: 'not found' });
     if (row.status !== 'suggested') return reply.code(409).send({ error: 'not a suggestion' });
-    if (!repo.deleteTodo(id)) return reply.code(404).send({ error: 'not found' });
+    if (!repo.deleteTodo(id, ctx)) return reply.code(404).send({ error: 'not found' });
     if (row.chatId) worker.emit('chat_updated', row.chatId);
     return reply.code(204).send();
   });
 
   app.delete('/api/todos/:id', async (req, reply) => {
     const { id } = z.object({ id: z.string() }).parse(req.params);
-    const row = repo.getTodo(id);
-    if (!row || !repo.deleteTodo(id)) return reply.code(404).send({ error: 'not found' });
+    const ctx = tenantCtx(req);
+    const row = repo.getTodo(id, ctx);
+    if (!row || !repo.deleteTodo(id, ctx)) return reply.code(404).send({ error: 'not found' });
     if (row.chatId) worker.emit('chat_updated', row.chatId);
     return reply.code(204).send();
   });
@@ -683,14 +714,16 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
       })
       .parse(req.query);
     const kind = q.kind.toLowerCase();
+    const ctx = tenantCtx(req);
     const rows = repo.listEntitiesByKind(
       kind,
       q.limit,
       q.starred === undefined ? undefined : q.starred === '1',
+      ctx,
     );
     if (kind !== 'place') return rows.map((r) => toEntityHit(r));
     // Places carry coordinates when known: the brain's own lat/lon, else the geocoder cache (ADR 0022).
-    const cache = new Map(repo.listPlaceGeo().map((g) => [g.query, g]));
+    const cache = new Map(repo.listPlaceGeo(ctx).map((g) => [g.query, g]));
     return rows.map((r) => {
       const attrs = safeJson(r.entity.attributes);
       const own = brainCoords(attrs);
@@ -708,7 +741,7 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
   app.post('/api/entities/:id/star', async (req, reply) => {
     const { id } = z.object({ id: z.string() }).parse(req.params);
     const body = z.object({ starred: z.boolean() }).parse(req.body);
-    const row = repo.setEntityStarred(id, body.starred);
+    const row = repo.setEntityStarred(id, body.starred, tenantCtx(req));
     if (!row) return reply.code(404).send({ error: 'not found' });
     return { id: row.id, starred: row.starred };
   });
@@ -717,9 +750,10 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
   app.post('/api/entities/geocode', async (req, reply) => {
     if (!deps.geocoder?.enabled) return reply.code(409).send({ error: 'geocoder is off' });
     const q = req.query as { retry?: string };
+    const ctx = tenantCtx(req);
     // `?retry=misses` forgets cached misses first, for a better geocoder or a fixed OSM entry.
     const retried = q.retry === 'misses' ? repo.clearPlaceGeoMisses() : 0;
-    const rows = repo.listEntitiesByKind('place', 1000);
+    const rows = repo.listEntitiesByKind('place', 1000, undefined, ctx);
     const seen = new Set<string>();
     let located = 0;
     let unknown = 0;
@@ -728,7 +762,7 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
       seen.add(r.item.id);
       await deps.geocoder.locateItem(r.item.id);
     }
-    const cache = new Map(repo.listPlaceGeo().map((g) => [g.query, g]));
+    const cache = new Map(repo.listPlaceGeo(ctx).map((g) => [g.query, g]));
     for (const r of rows) {
       const attrs = safeJson(r.entity.attributes);
       if (brainCoords(attrs)) {
@@ -746,34 +780,37 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
   /** Preview what a query would match without saving it. */
   app.get('/api/collections/preview', async (req) => {
     const q = z.object({ query: z.string() }).parse(req.query);
-    return { count: resolveQuery(repo, q.query).length };
+    return { count: resolveQuery(repo, q.query, tenantCtx(req)).length };
   });
 
   app.post('/api/chats/:id/tags', async (req, reply) => {
-    const { chat, item } = loadChat(req, reply, repo) ?? {};
+    const { chat, item } = loadChat(req, reply, repo, tenantCtx(req)) ?? {};
     if (!chat || !item) return;
+    const ctx = tenantCtx(req);
     const body = z.object({ name: z.string().trim().min(1).max(40) }).parse(req.body);
-    const name = repo.addManualTag(item.id, body.name);
+    const name = repo.addManualTag(item.id, body.name, ctx);
     if (!name) return reply.code(400).send({ error: 'empty tag' });
     worker.reindex(item, chat.id, item.modeEffective ?? 'quick');
     worker.emit('chat_updated', chat.id);
-    return { tags: repo.listTags(item.id) };
+    return { tags: repo.listTags(item.id, ctx) };
   });
 
   app.delete('/api/chats/:id/tags/:name', async (req, reply) => {
-    const { chat, item } = loadChat(req, reply, repo) ?? {};
+    const { chat, item } = loadChat(req, reply, repo, tenantCtx(req)) ?? {};
     if (!chat || !item) return;
+    const ctx = tenantCtx(req);
     const { name } = z.object({ name: z.string().min(1) }).parse(req.params);
-    repo.removeTag(item.id, decodeURIComponent(name));
+    repo.removeTag(item.id, decodeURIComponent(name), ctx);
     worker.reindex(item, chat.id, item.modeEffective ?? 'quick');
     worker.emit('chat_updated', chat.id);
-    return { tags: repo.listTags(item.id) };
+    return { tags: repo.listTags(item.id, ctx) };
   });
 
   app.get('/api/chats/:id', async (req, reply) => {
-    const { chat, item } = loadChat(req, reply, repo) ?? {};
+    const ctx = tenantCtx(req);
+    const { chat, item } = loadChat(req, reply, repo, ctx) ?? {};
     if (!chat || !item) return;
-    return toChatDetail(repo, chat, item);
+    return toChatDetail(repo, chat, item, ctx);
   });
 
   /**
@@ -782,10 +819,10 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
    * resolve to a file inside `<dataDir>/media/`, so a stale row can never read elsewhere.
    */
   app.get('/api/chats/:id/media/:mediaId', async (req, reply) => {
-    const { chat, item } = loadChat(req, reply, repo) ?? {};
+    const { chat, item } = loadChat(req, reply, repo, tenantCtx(req)) ?? {};
     if (!chat || !item) return;
     const { mediaId } = z.object({ mediaId: z.string() }).parse(req.params);
-    const asset = repo.getMediaAsset(mediaId);
+    const asset = repo.getMediaAsset(mediaId, tenantCtx(req));
     if (!asset || asset.itemId !== item.id || !STILL_KINDS.has(asset.kind))
       return reply.code(404).send({ error: 'not found' });
     const mediaRoot = path.resolve(cfg.dataDir, 'media') + path.sep;
@@ -799,26 +836,33 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
   });
 
   app.post('/api/chats/:id/read', async (req, reply) => {
-    const { chat } = loadChat(req, reply, repo) ?? {};
+    const { chat } = loadChat(req, reply, repo, tenantCtx(req)) ?? {};
     if (!chat) return;
-    repo.markRead(chat.id);
+    repo.markRead(chat.id, tenantCtx(req));
     return { ok: true };
   });
 
   /** Follow-up question: cheap turn by default. */
   app.post('/api/chats/:id/messages', async (req, reply) => {
-    const { chat, item } = loadChat(req, reply, repo) ?? {};
+    const { chat, item } = loadChat(req, reply, repo, tenantCtx(req)) ?? {};
     if (!chat || !item) return;
+    const ctx = tenantCtx(req);
     const body = z.object({ content: z.string().min(1).max(8000) }).parse(req.body);
-    repo.addMessage({ chatId: chat.id, role: 'user', kind: 'question', content: body.content });
-    const run = repo.createRun({
-      itemId: item.id,
-      chatId: chat.id,
-      kind: 'followup',
-      mode: (item.modeEffective as Mode | null) ?? 'quick',
-      adapter: chat.brainAdapter ?? deps.brain.id,
-      userMessage: body.content,
-    });
+    repo.addMessage(
+      { chatId: chat.id, role: 'user', kind: 'question', content: body.content },
+      ctx,
+    );
+    const run = repo.createRun(
+      {
+        itemId: item.id,
+        chatId: chat.id,
+        kind: 'followup',
+        mode: (item.modeEffective as Mode | null) ?? 'quick',
+        adapter: chat.brainAdapter ?? deps.brain.id,
+        userMessage: body.content,
+      },
+      ctx,
+    );
     worker.kick();
     return reply.code(202).send({ runId: run.id });
   });
@@ -829,7 +873,7 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
    * adapter so the worker does not rebind it to the mode's default after classification.
    */
   app.post('/api/chats/:id/research', async (req, reply) => {
-    const { chat, item } = loadChat(req, reply, repo) ?? {};
+    const { chat, item } = loadChat(req, reply, repo, tenantCtx(req)) ?? {};
     if (!chat || !item) return;
     const body = z
       .object({
@@ -843,36 +887,40 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
       return reply.code(400).send({ error: `unknown adapter "${body.adapter}"` });
     if (body.model && !body.adapter)
       return reply.code(400).send({ error: 'model needs an adapter' });
+    const ctx = tenantCtx(req);
     if (body.note?.trim()) {
-      repo.addMessage({ chatId: chat.id, role: 'user', kind: 'question', content: body.note });
-      repo.updateItem(item.id, { note: [item.note, body.note].filter(Boolean).join('\n\n') });
+      repo.addMessage({ chatId: chat.id, role: 'user', kind: 'question', content: body.note }, ctx);
+      repo.updateItem(item.id, { note: [item.note, body.note].filter(Boolean).join('\n\n') }, ctx);
     }
     const mode = body.mode ?? (item.modeEffective as Mode | null) ?? 'standard';
-    repo.updateItem(item.id, { modeRequested: mode, status: 'new' });
+    repo.updateItem(item.id, { modeRequested: mode, status: 'new' }, ctx);
     const bound = worker.brains.forMode(mode);
-    const run = repo.createRun({
-      itemId: item.id,
-      chatId: chat.id,
-      kind: 'research',
-      mode,
-      adapter: body.adapter ?? bound.adapter.id,
-      model: body.adapter ? (body.model ?? null) : bound.model,
-      pinned: Boolean(body.adapter),
-    });
+    const run = repo.createRun(
+      {
+        itemId: item.id,
+        chatId: chat.id,
+        kind: 'research',
+        mode,
+        adapter: body.adapter ?? bound.adapter.id,
+        model: body.adapter ? (body.model ?? null) : bound.model,
+        pinned: Boolean(body.adapter),
+      },
+      ctx,
+    );
     worker.kick();
     return reply.code(202).send({ runId: run.id });
   });
 
   app.get('/api/chats/:id/runs/:runId/events', async (req, reply) => {
-    const { chat } = loadChat(req, reply, repo) ?? {};
+    const { chat } = loadChat(req, reply, repo, tenantCtx(req)) ?? {};
     if (!chat) return;
     const { runId } = z.object({ runId: z.string() }).parse(req.params);
-    const run = repo.getRun(runId);
+    const run = repo.getRun(runId, tenantCtx(req));
     if (!run || run.chatId !== chat.id) return reply.code(404).send({ error: 'run not found' });
     return {
       run: toRunDto(run),
       events: repo
-        .listRunEvents(runId)
+        .listRunEvents(runId, tenantCtx(req))
         .map((e) => ({ seq: e.seq, type: e.type, payload: JSON.parse(e.payload), at: e.at })),
     };
   });
@@ -1026,10 +1074,15 @@ function tokenFromQuery(req: FastifyRequest): string | undefined {
   return typeof q?.token === 'string' ? q.token : undefined;
 }
 
-function loadChat(req: FastifyRequest, reply: FastifyReply, repo: Repo) {
+function loadChat(
+  req: FastifyRequest,
+  reply: FastifyReply,
+  repo: Repo,
+  ctx: TenantCtx | undefined,
+) {
   const { id } = z.object({ id: z.string() }).parse(req.params);
-  const chat = repo.getChat(id);
-  const item = chat ? repo.getItem(chat.itemId) : undefined;
+  const chat = repo.getChat(id, ctx);
+  const item = chat ? repo.getItem(chat.itemId, ctx) : undefined;
   if (!chat || !item) {
     reply.code(404).send({ error: 'chat not found' });
     return undefined;

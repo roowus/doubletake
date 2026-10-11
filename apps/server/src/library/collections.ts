@@ -11,7 +11,7 @@
 
 import { Category, EntityKind } from '@doubletake/shared';
 import { ftsQuery } from '../api/fts.js';
-import type { Repo } from '../db/repo.js';
+import type { Repo, TenantCtx } from '../db/repo.js';
 
 export interface CollectionDto {
   id: string;
@@ -52,19 +52,19 @@ const ENTITY_NAMES: Record<EntityKind, string> = {
 };
 
 /** Idempotent: inserts the auto collections that do not exist yet. Returns how many were added. */
-export function seedAutoCollections(repo: Repo): number {
+export function seedAutoCollections(repo: Repo, ctx?: TenantCtx | undefined): number {
   let added = 0;
   for (const c of Category.options) {
     const query = `category:${c}`;
-    if (!repo.findCollectionByQuery(query)) {
-      repo.createCollection({ name: CATEGORY_NAMES[c], query, manual: false, auto: true });
+    if (!repo.findCollectionByQuery(query, ctx)) {
+      repo.createCollection({ name: CATEGORY_NAMES[c], query, manual: false, auto: true }, ctx);
       added++;
     }
   }
   for (const k of EntityKind.options) {
     const query = `entity:${k}`;
-    if (!repo.findCollectionByQuery(query)) {
-      repo.createCollection({ name: ENTITY_NAMES[k], query, manual: false, auto: true });
+    if (!repo.findCollectionByQuery(query, ctx)) {
+      repo.createCollection({ name: ENTITY_NAMES[k], query, manual: false, auto: true }, ctx);
       added++;
     }
   }
@@ -75,22 +75,23 @@ export function seedAutoCollections(repo: Repo): number {
 export function resolveCollection(
   repo: Repo,
   c: { id: string; query: string; manual: boolean },
+  ctx?: TenantCtx | undefined,
 ): Set<string> {
-  if (c.manual) return new Set(repo.collectionItemIds(c.id));
-  return new Set(resolveQuery(repo, c.query));
+  if (c.manual) return new Set(repo.collectionItemIds(c.id, ctx));
+  return new Set(resolveQuery(repo, c.query, ctx));
 }
 
-export function resolveQuery(repo: Repo, query: string): string[] {
+export function resolveQuery(repo: Repo, query: string, ctx?: TenantCtx | undefined): string[] {
   const q = query.trim();
   const m = q.match(/^(category|entity|tag):(.+)$/);
   if (m?.[1] && m[2] !== undefined) {
     const arg = m[2].trim().toLowerCase();
-    if (m[1] === 'category') return repo.itemIdsByCategory(arg);
-    if (m[1] === 'entity') return repo.itemIdsByEntityKind(arg);
-    return repo.itemIdsByTag(arg);
+    if (m[1] === 'category') return repo.itemIdsByCategory(arg, ctx);
+    if (m[1] === 'entity') return repo.itemIdsByEntityKind(arg, ctx);
+    return repo.itemIdsByTag(arg, ctx);
   }
   if (!q) return [];
-  return repo.searchFts(ftsQuery(q), 500);
+  return repo.searchFts(ftsQuery(q), 500, ctx);
 }
 
 export function listCollections(
@@ -99,10 +100,11 @@ export function listCollections(
   onlyNonEmpty: boolean,
   /** Turns a share token into the public page URL (ADR 0025); omit → `shareUrl: null`. */
   toShareUrl?: (token: string) => string,
+  ctx?: TenantCtx | undefined,
 ): CollectionDto[] {
   const out: CollectionDto[] = [];
-  for (const { shareToken, ...c } of repo.listCollections(includeHidden)) {
-    const count = resolveCollection(repo, c).size;
+  for (const { shareToken, ...c } of repo.listCollections(includeHidden, ctx)) {
+    const count = resolveCollection(repo, c, ctx).size;
     if (onlyNonEmpty && c.auto && count === 0) continue;
     out.push({ ...c, count, shareUrl: shareToken && toShareUrl ? toShareUrl(shareToken) : null });
   }
