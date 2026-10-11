@@ -16,12 +16,12 @@ import { renderUntrustedAll, UNTRUSTED_PREAMBLE } from '@doubletake/shared';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { toChatDetail, toChatSummary } from '../api/dto.js';
 import { ftsQuery } from '../api/fts.js';
 import type { Session } from '../auth/index.js';
-import type { ChatRow, ItemRow, Repo } from '../db/repo.js';
+import type { ChatRow, ItemRow, Repo, TenantCtx } from '../db/repo.js';
 import { ingest } from '../ingest/index.js';
 import { LIBRARY_TOOL } from '../library/ask.js';
 import { listCollections, resolveCollection } from '../library/collections.js';
@@ -174,7 +174,7 @@ function sleep(ms: number) {
 }
 
 /** Build a per-request MCP server bound to the calling device's session. */
-export function buildMcpServer(deps: McpDeps, session: Session): McpServer {
+export function buildMcpServer(deps: McpDeps, session: Session, ctx?: TenantCtx): McpServer {
   const { repo, worker } = deps;
   const server = new McpServer({ name: SERVER_NAME, version: SERVER_VERSION });
 
@@ -199,9 +199,9 @@ export function buildMcpServer(deps: McpDeps, session: Session): McpServer {
       const q = ftsQuery(query);
       if (!q) return text('No searchable terms in the query.');
       const rows: string[] = [];
-      for (const itemId of repo.searchFts(q, limit)) {
-        const item = repo.getItem(itemId);
-        const chat = repo.getChatByItem(itemId);
+      for (const itemId of repo.searchFts(q, limit, ctx)) {
+        const item = repo.getItem(itemId, ctx);
+        const chat = repo.getChatByItem(itemId, ctx);
         if (item && chat) rows.push(summaryLine(repo, chat, item));
       }
       return text(rows.length ? rows.join('\n') : 'No matches.');
@@ -222,7 +222,7 @@ export function buildMcpServer(deps: McpDeps, session: Session): McpServer {
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     async ({ collection, tag, limit }) => {
-      let rows = repo.listChats(limit);
+      let rows = repo.listChats(limit, ctx);
       if (collection) {
         const c = repo.getCollection(collection);
         if (!c) return { ...text(`Collection ${collection} not found.`), isError: true };
@@ -255,15 +255,15 @@ export function buildMcpServer(deps: McpDeps, session: Session): McpServer {
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     async ({ chat_id, include_extractions, wait_seconds }, extra) => {
-      const chat = repo.getChat(chat_id);
+      const chat = repo.getChat(chat_id, ctx);
       if (!chat) return { ...text(`Chat ${chat_id} not found.`), isError: true };
       const deadline = Date.now() + wait_seconds * 1000;
       while (Date.now() < deadline && !extra.signal.aborted) {
-        const run = repo.listRuns(chat.id).at(-1);
+        const run = repo.listRuns(chat.id, ctx).at(-1);
         if (!run || !['queued', 'extracting', 'researching'].includes(run.status)) break;
         await sleep(500);
       }
-      const item = repo.getItem(chat.itemId);
+      const item = repo.getItem(chat.itemId, ctx);
       if (!item) return { ...text(`Chat ${chat_id} not found.`), isError: true };
       return text(renderChat(repo, chat, item, { extractions: include_extractions }));
     },
@@ -300,7 +300,7 @@ export function buildMcpServer(deps: McpDeps, session: Session): McpServer {
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     async () => {
-      const tags = repo.listAllTags();
+      const tags = repo.listAllTags(ctx);
       return text(
         tags.length
           ? tags.map((t) => `- ${t.name} (${t.count}, ${t.kind})`).join('\n')
@@ -332,7 +332,7 @@ export function buildMcpServer(deps: McpDeps, session: Session): McpServer {
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     async ({ kind, limit }) => {
-      const rows = repo.listEntitiesByKind(kind, limit);
+      const rows = repo.listEntitiesByKind(kind, limit, undefined, ctx);
       return text(
         rows.length
           ? rows
@@ -356,7 +356,7 @@ export function buildMcpServer(deps: McpDeps, session: Session): McpServer {
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     async ({ done }) => {
-      const rows = repo.listTodos(done);
+      const rows = repo.listTodos(done, ctx);
       return text(
         rows.length
           ? rows
@@ -397,7 +397,9 @@ export function buildMcpServer(deps: McpDeps, session: Session): McpServer {
         focus: 'whole',
         modeHint: mode,
       };
-      const out = ingest(req, { repo, adapterFor: (m) => worker.brains.forMode(m) });
+      // Hosted MCP tokens map to hosted users in a later step; when req.hosted is absent the
+      // context stays undefined and the tool behaves exactly as self-hosted (ADR 0032).
+      const out = ingest(req, { repo, ctx, adapterFor: (m) => worker.brains.forMode(m) });
       worker.kick();
       return text(
         `${out.deduplicated ? 'Already saved recently; re-running on the existing chat' : 'Queued'} as chat \`${out.chat.id}\` (run \`${out.run.id}\`, requested by device "${session.deviceName}").`,
@@ -418,7 +420,7 @@ export function buildMcpServer(deps: McpDeps, session: Session): McpServer {
     async ({ question, mode }) => {
       const out = ingest(
         { text: question, channel: 'library', focus: 'whole', modeHint: mode },
-        { repo, adapterFor: (m) => worker.brains.forMode(m) },
+        { repo, ctx, adapterFor: (m) => worker.brains.forMode(m) },
       );
       worker.kick();
       return text(`Asked as chat \`${out.chat.id}\` (run \`${out.run.id}\`).`);
@@ -436,7 +438,9 @@ export function registerMcpRoutes(app: FastifyInstance, deps: McpDeps): void {
   app.post(MCP_PATH, async (req, reply) => {
     const session = req.session;
     if (!session) return reply.code(401).send({ error: 'unauthorized' });
-    const server = buildMcpServer(deps, session);
+    const hosted = (req as FastifyRequest & { hosted?: { userId?: string } }).hosted;
+    const ctx = hosted?.userId ? { userId: hosted.userId } : undefined;
+    const server = buildMcpServer(deps, session, ctx);
     // No `sessionIdGenerator` = stateless mode. The SDK's option types are not written for
     // `exactOptionalPropertyTypes`, hence the casts.
     const transport = new StreamableHTTPServerTransport({
