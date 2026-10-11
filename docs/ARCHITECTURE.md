@@ -449,6 +449,22 @@ and is authenticated by Meta's signature instead. `/mcp` is outside `/api` too b
 same Bearer token: it is the MCP endpoint for other agents ([ADR 0023](adr/0023-mcp-server.md),
 connection recipe in [DEPLOYMENT.md](DEPLOYMENT.md#connect-an-agent-mcp)).
 
+**Hosted mode** ([ADR 0032](adr/0032-hosted-mode.md)): when `DOUBLETAKE_HOSTED=1` (and
+`DOUBLETAKE_DATABASE_URL` + `DOUBLETAKE_MASTER_KEY_FILE` are set), the routes below register
+and the shared gate also accepts a `dth_` Bearer token or a `dt_session` cookie (hosted
+sessions table, stored hashed, kind browser|device|mcp) in place of the device token;
+self-hosted behavior is unchanged when the flag is off.
+
+| route | purpose (hosted mode only) |
+|---|---|
+| `POST auth/register`, `POST auth/login` | email + password account (argon2id; invite-code gate via `DOUBLETAKE_INVITE_CODE` when set) → `{ token, user }`; duplicate email → 400 |
+| `POST auth/logout` | revoke the current session |
+| `GET auth/google`, `GET auth/callback/google` | Google OAuth: single-use 10-min state, code exchange, id_token verified against Google JWKS (RS256, aud/exp/iss), upsert by `google_sub` → link by email → create; session via `dt_session` cookie + `return_to#dth_token=` redirect |
+| `GET auth/openrouter`, `GET auth/callback/openrouter` | BYOK connect: PKCE S256 app-install flow; identity from the state row only; the returned key is SecretBox-sealed into `credentials`, never logged, echoed or redirected |
+| `GET account` | profile, credentials (metadata only — never `sealed_key`), sessions, spend this month |
+| `POST account/credentials`, `DELETE account/credentials/:id` | paste-key vault add (sealed at rest; user-set monthly/per-run caps) and revoke (soft-revoke + wipe sealed material) |
+| `POST account/sessions/:id/revoke` | revoke a browser/device/MCP session |
+
 | route | purpose |
 |---|---|
 | `GET health`, `GET status` | liveness; brain id/model, spend today vs cap, notes dir, `push: { kinds, channels, vapidPublicKey, quietHours, pending }` |
