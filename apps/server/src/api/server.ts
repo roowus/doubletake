@@ -935,6 +935,10 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
       .object({ health: z.enum(['cached', 'refresh', 'skip']).default('cached') })
       .parse(req.query);
     return {
+      // Hosted-mode markers (ADR 0032, non-sensitive): lets the PWA show/hide hosted UI and the
+      // register form show the invite field. Self-hosted shape otherwise unchanged.
+      hosted: isHostedMode(),
+      ...(isHostedMode() ? { inviteRequired: Boolean(process.env.DOUBLETAKE_INVITE_CODE) } : {}),
       spentTodayUsd: repo.spentToday(),
       dailyCapUsd: cfg.dailyCapUsd,
       brain: deps.brain.id,
