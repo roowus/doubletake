@@ -168,6 +168,28 @@ export function registerHostedRoutes(app: FastifyInstance, hosted: HostedAuth | 
     return { ok };
   });
 
+  /** Max active (`kind='mcp'`, not revoked) MCP sessions per user; beyond this minting 409s. */
+  const MCP_SESSION_CAP = 20;
+
+  const McpTokenBody = z.object({ label: z.string().trim().min(1).max(120) });
+
+  /**
+   * Mint an MCP token (ADR 0032): a hosted session with `kind='mcp'`, listed in GET
+   * /api/account like any other session and revoked via the shared sessions revoke route. The
+   * raw `dth_` token is returned exactly once — only its sha256 is stored.
+   */
+  app.post('/api/account/mcp-tokens', async (req, reply) => {
+    const userId = requireUser(req);
+    const body = McpTokenBody.parse(req.body);
+    const activeMcp = (await hosted.listSessions(userId)).filter(
+      (s) => s.kind === 'mcp' && !s.revokedAt,
+    );
+    if (activeMcp.length >= MCP_SESSION_CAP)
+      return reply.code(409).send({ error: `too many active MCP tokens (max ${MCP_SESSION_CAP})` });
+    const { token, sessionId } = await hosted.createSession(userId, 'mcp', body.label);
+    return reply.code(201).send({ token, id: sessionId, label: body.label });
+  });
+
   app.post('/api/account/sessions/:id/revoke', async (req) => {
     const userId = requireUser(req);
     const { id } = z.object({ id: z.string() }).parse(req.params);
