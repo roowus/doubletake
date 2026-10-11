@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ApiError, api, type Device, type IgStatus, type Status } from '../../api';
+import { ApiError, api, type Device, type IgStatus, setToken, type Status } from '../../api';
 import { readAppearance } from '../../appearance';
+import { Confirm } from '../../components/Confirm';
 import { Icon } from '../../components/Icon';
+import { useHosted } from '../../lib/hosted';
 import { isNative, nativePlatform, nativePushEnabled } from '../../native';
 import { pushEnabled, pushSupported } from '../../push';
+import { navigate } from '../../router';
 import { Group, Row } from './parts';
 
 interface Entry {
@@ -103,6 +106,9 @@ export function SettingsIndex() {
   const [devices, setDevices] = useState<Device[] | null>(null);
   const [ig, setIg] = useState<IgStatus | 'off' | null>(null);
   const [push, setPush] = useState<boolean | null>(null);
+  const [signOut, setSignOut] = useState(false);
+  const hosted = useHosted();
+  const hostedOn = hosted?.hosted === true;
   const native = isNative();
   const ios = native && nativePlatform() === 'ios';
 
@@ -188,6 +194,26 @@ export function SettingsIndex() {
       {groups.length === 0 && (
         <p className="muted small empty-note">Nothing matches “{q}”. Try “theme” or “push”.</p>
       )}
+      {hostedOn && (
+        <Group title="Hosted account">
+          <Row
+            icon="user"
+            label="Account"
+            hint="Brains, caps, sessions, agent tokens"
+            to="/settings/account"
+            value={
+              status ? `$${status.spentTodayUsd.toFixed(2)} today` : undefined
+            }
+          />
+          <Row
+            icon="log-out"
+            label="Log out"
+            hint="End this browser session"
+            onClick={() => setSignOut(true)}
+            danger
+          />
+        </Group>
+      )}
       {groups.map((g) => (
         <Group title={g.title} key={g.title}>
           {g.entries.map((e) => (
@@ -203,6 +229,21 @@ export function SettingsIndex() {
           ))}
         </Group>
       ))}
+      {hostedOn && (
+        <Confirm
+          open={signOut}
+          onOpenChange={setSignOut}
+          title="Log out?"
+          body="Your library stays in the hosted account. Sign back in with your e-mail or Google."
+          action="Log out"
+          onConfirm={() => {
+            api.hostedLogout().catch(() => {});
+            setToken(null);
+            navigate('/', true);
+            location.reload();
+          }}
+        />
+      )}
     </div>
   );
 }

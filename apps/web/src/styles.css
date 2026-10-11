@@ -3580,3 +3580,40 @@ input.switch {
   gap: var(--space-2);
   padding-left: var(--space-2);
 }
+
+/* Hosted mode (ADR 0032): login divider, credential form rows, one-time agent token block. */
+.or-rule {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 12px 0;
+  color: var(--ink-3, #6b675e);
+  font-size: 0.8rem;
+}
+.or-rule::before,
+.or-rule::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--line, #ddd8cc);
+}
+.field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.token-block {
+  border: 1px solid var(--line, #ddd8cc);
+  border-radius: 8px;
+  padding: 10px;
+  margin: 8px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.token-block pre {
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  word-break: break-all;
+}

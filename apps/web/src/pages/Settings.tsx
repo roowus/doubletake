@@ -1,4 +1,5 @@
 import { AboutSettings } from './settings/About';
+import { AccountSettings } from './settings/Account';
 import { AppearanceSettings } from './settings/Appearance';
 import { DataSettings } from './settings/Data';
 import { DevicesSettings } from './settings/Devices';
@@ -13,6 +14,8 @@ import { SettingsIndex } from './settings/SettingsIndex';
  */
 export function Settings({ section }: { section?: string | undefined }) {
   switch (section) {
+    case 'account':
+      return <AccountSettings />;
     case 'devices':
       return <DevicesSettings />;
     case 'research':
