@@ -108,6 +108,9 @@ type Insert<T> = T & { userId?: string };
  * union is deliberately contained inside this class.
  */
 class Exec {
+  /** Ordering tail: on pg, every call is registered here so the next one waits its turn. */
+  private tail: Promise<unknown> = Promise.resolve();
+
   constructor(
     readonly db: unknown,
     readonly isPg: boolean,
@@ -118,48 +121,77 @@ class Exec {
     return this.db as Db;
   }
 
-  /** Single row. On pg appends `LIMIT 1` and awaits. */
-  one<T>(q: unknown): T | undefined {
-    if (!this.isPg) return (q as { get(): T | undefined }).get();
-    return lazy((q as { limit(n: number): PromiseLike<T[]> }).limit(1).then((rows) => rows[0]));
-  }
-
-  /** All rows. */
-  many<T>(q: unknown): T[] {
-    if (!this.isPg) return (q as { all(): T[] }).all();
-    return lazy(q as PromiseLike<T[]>);
-  }
-
-  /** Write; returns a sqlite-shaped `{ changes }` on both dialects. */
-  exec(q: unknown): { changes: number } {
-    if (!this.isPg) return (q as { run(): { changes: number } }).run();
-    return lazy(
-      (async () => {
-        const res = await (q as PromiseLike<unknown>);
-        const r = res as { count?: number; rowCount?: number };
-        if (r && typeof r.count === 'number') return { changes: r.count };
-        if (r && typeof r.rowCount === 'number') return { changes: r.rowCount };
-        return { changes: Array.isArray(res) ? res.length : 0 };
-      })(),
+  chain(p: PromiseLike<unknown>): void {
+    this.tail = this.tail.then(
+      () => p,
+      () => p,
     );
   }
 
-  /** Atomic multi-statement write. The callback may be async; on SQLite it still runs synchronously. */
-  transaction(fn: (x: Exec) => void | Promise<void>): void | Promise<void> {
+  /** Single row. On pg appends `LIMIT 1`; execution starts immediately, the value arrives on await. */
+  one<T>(q: unknown): T | undefined {
+    if (!this.isPg) return (q as { get(): T | undefined }).get();
+    const p = (async () => {
+      await this.tail;
+      return (await (q as { limit(n: number): PromiseLike<T[]> }).limit(1))[0];
+    })();
+    this.chain(p);
+    return lazy(p);
+  }
+
+  /** All rows; pg execution starts immediately. */
+  many<T>(q: unknown): T[] {
+    if (!this.isPg) return (q as { all(): T[] }).all();
+    const p = (async () => {
+      await this.tail;
+      return await (q as PromiseLike<T[]>);
+    })();
+    this.chain(p);
+    return lazy(p);
+  }
+
+  /** Write; returns a sqlite-shaped `{ changes }` on both dialects. Pg writes start immediately. */
+  exec(q: unknown): { changes: number } {
+    if (!this.isPg) return (q as { run(): { changes: number } }).run();
+    const p = (async () => {
+      await this.tail;
+      const res = await (q as PromiseLike<unknown>);
+      const r = res as { count?: number; rowCount?: number };
+      if (r && typeof r.count === 'number') return { changes: r.count };
+      if (r && typeof r.rowCount === 'number') return { changes: r.rowCount };
+      return { changes: Array.isArray(res) ? res.length : 0 };
+    })();
+    this.chain(p);
+    return lazy(p);
+  }
+
+  /**
+   * Atomic multi-statement write. The callback is SYNCHRONOUS: on SQLite every Exec call runs
+   * inline (better-sqlite3 requires a sync transaction function), and on pg the queries fire
+   * eagerly and `tail` holds the commit until they have all run.
+   */
+  transaction(fn: (x: Exec) => void): void {
     if (!this.isPg) {
-      // better-sqlite3 requires a sync transaction function. On this dialect every Exec call is
-      // synchronous, so the async callback body runs to completion inline; only the (already
-      // resolved) promise it returns must be discarded.
       (this.db as { transaction(cb: (tx: unknown) => unknown): unknown }).transaction((tx) => {
-        void fn(new Exec(tx, false));
+        fn(new Exec(tx, false));
       });
       return;
     }
-    return (
-      this.db as { transaction(cb: (tx: unknown) => Promise<void>): Promise<void> }
-    ).transaction(async (tx) => {
-      await fn(new Exec(tx, true));
-    });
+    const outer = this.tail;
+    this.chain(
+      (async () => {
+        await outer;
+        let inner: Promise<unknown> = Promise.resolve();
+        await (
+          this.db as { transaction(cb: (tx: unknown) => Promise<void>): Promise<void> }
+        ).transaction(async (tx) => {
+          const x = new Exec(tx, true);
+          fn(x);
+          inner = x.tail;
+          await inner;
+        });
+      })(),
+    );
   }
 }
 
@@ -189,8 +221,6 @@ export class Repo {
   /** Dialect-aware table set (`PG_TABLES` on pg). */
   readonly t: typeof s;
   private readonly ex: Exec;
-  /** Ordered chain of fired pg writes; awaited before the next pg read. */
-  private tail: Promise<unknown> = Promise.resolve();
 
   constructor(db: Db | PgDb, sqlite: import('better-sqlite3').Database | null) {
     this.db = db as Db;
@@ -201,61 +231,28 @@ export class Repo {
     this.ex = new Exec(db, this.isPg);
   }
 
-  /** Queue a fired pg write so the next read observes it; no-op on SQLite. */
+  /** Queue a fired pg write (raw pg inserts) so the next call observes it; no-op on SQLite. */
   private fire(p: PromiseLike<unknown>): void {
     if (!this.isPg) return;
-    this.tail = this.tail.then(
-      () => p,
-      () => p,
-    );
+    this.ex.chain(p);
   }
 
   private one<T>(q: unknown): T | undefined {
-    if (!this.isPg) return this.ex.one<T>(q);
-    const tail = this.tail;
-    return lazy(
-      (async () => {
-        await tail;
-        return this.ex.one<T>(q);
-      })(),
-    );
+    return this.ex.one<T>(q);
   }
 
   private many<T>(q: unknown): T[] {
-    if (!this.isPg) return this.ex.many<T>(q);
-    const tail = this.tail;
-    return lazy(
-      (async () => {
-        await tail;
-        return this.ex.many<T>(q);
-      })(),
-    );
+    return this.ex.many<T>(q);
   }
 
   private exec(q: unknown): { changes: number } {
-    if (!this.isPg) return this.ex.exec(q);
-    const tail = this.tail;
-    this.fire(
-      (async () => {
-        await tail;
-        return this.ex.exec(q);
-      })(),
-    );
-    return { changes: 0 };
+    return this.ex.exec(q);
   }
 
-  private transaction(fn: (x: Exec) => void | Promise<void>): void {
-    if (!this.isPg) {
-      this.ex.transaction(fn);
-      return;
-    }
-    const tail = this.tail;
-    this.fire(
-      (async () => {
-        await tail;
-        await this.ex.transaction(fn);
-      })(),
-    );
+  private transaction(fn: (x: Exec) => void): void {
+    // Sync callback by design: SQLite commits inline; on pg Exec fires the statements eagerly
+    // and chains them (and the commit) onto the shared ordering tail.
+    this.ex.transaction(fn);
   }
 
   /**
@@ -265,6 +262,27 @@ export class Repo {
   private scope(table: TenantTable, ctx?: TenantCtx): SQL[] {
     if (!ctx || !this.isPg) return [];
     return [eq(PG_USER_ID[table], ctx.userId)];
+  }
+
+  /**
+   * Coerce SQLite boolean-mode integer columns for Postgres (0/1). Needed because pg queries
+   * are built from values typed against the SQLite schema (see the dialect contract above).
+   */
+  private pgVals<V>(v: V): V {
+    if (!this.isPg) return v;
+    const out = { ...(v as Record<string, unknown>) };
+    for (const k of ['pinned', 'hidden', 'starred'])
+      if (typeof out[k] === 'boolean') out[k] = out[k] ? 1 : 0;
+    return out as V;
+  }
+
+  /**
+   * Map over `many` rows, pg-safe (see dialect contract): a plain array on SQLite, a
+   * lazily-awaited mapped array on Postgres.
+   */
+  private manyMap<X, R>(q: unknown, f: (row: X) => R): R[] {
+    if (!this.isPg) return this.many<X>(q).map(f);
+    return lazy(Promise.resolve((async () => (await this.many<X>(q)).map(f))()));
   }
 
   /** Tenant stamp for insert values (Postgres only; SQLite has no `user_id` column). */
@@ -440,7 +458,7 @@ export class Repo {
 
   markRead(chatId: string, ctx?: TenantCtx): void {
     const now = nowIso();
-    this.transaction(async (tx) => {
+    this.transaction((tx) => {
       tx.exec(
         tx.db2
           .update(this.t.messages)
@@ -489,7 +507,7 @@ export class Repo {
       readAt: m.unread ? null : now,
       ...this.stamp(ctx),
     };
-    this.transaction(async (tx) => {
+    this.transaction((tx) => {
       tx.exec(tx.db2.insert(this.t.messages).values(row));
       tx.exec(
         tx.db2
@@ -557,7 +575,7 @@ export class Repo {
       const pgDb = this.pg as unknown as {
         insert(t: unknown): { values(v: unknown): PromiseLike<unknown> };
       };
-      this.fire(pgDb.insert(pg.runs).values(row as never));
+      this.fire(pgDb.insert(pg.runs).values(this.pgVals(row) as never));
       return row as RunRow;
     }
     this.db.insert(s.runs).values(row).run();
@@ -743,7 +761,7 @@ export class Repo {
 
   replaceEntities(itemId: string, runId: string, ents: Answer['entities'], ctx?: TenantCtx): void {
     const now = nowIso();
-    this.transaction(async (tx) => {
+    this.transaction((tx) => {
       tx.exec(
         tx.db2
           .delete(this.t.entities)
@@ -795,7 +813,7 @@ export class Repo {
     this.exec(
       this.db
         .update(this.t.entities)
-        .set({ starred })
+        .set(this.pgVals({ starred }))
         .where(and(eq(this.t.entities.id, id), ...this.scope('entities', ctx))),
     );
     return this.getEntity(id, ctx);
@@ -806,71 +824,133 @@ export class Repo {
       0,
       12,
     );
-    this.transaction(async (tx) => {
-      for (const name of clean) {
-        let tag = tx.one<typeof s.tags.$inferSelect>(
-          tx.db2.select().from(this.t.tags).where(eq(this.t.tags.name, name)),
-        );
-        if (!tag) {
-          tag = {
-            id: newId(),
-            name,
-            kind: 'auto',
+    if (this.isPg) {
+      // The tag row must be read before linking; on pg that read is async, so the whole
+      // ensure-then-link sequence is queued on the ordering tail (dialect contract above).
+      const itemId_ = itemId;
+      const ctx_ = ctx;
+      this.ex.chain(
+        (async () => {
+          for (const name of clean) {
+            let tag = await this.one<typeof s.tags.$inferSelect>(
+              this.db.select().from(this.t.tags).where(eq(this.t.tags.name, name)),
+            );
+            if (!tag) {
+              tag = {
+                id: newId(),
+                name,
+                kind: 'auto',
+                ...this.stamp(ctx_),
+              } as typeof s.tags.$inferSelect;
+              this.exec(this.db.insert(this.t.tags).values(tag));
+            }
+            this.exec(
+              this.db
+                .insert(this.t.itemTags)
+                .values({
+                  itemId: itemId_,
+                  tagId: tag.id,
+                  confidence: 0.8,
+                  ...this.stamp(ctx_),
+                } as Insert<typeof s.itemTags.$inferInsert>)
+                .onConflictDoNothing(),
+            );
+          }
+        })(),
+      );
+      return;
+    }
+    for (const name of clean) {
+      // Ensure-then-link; the tags.name unique index arbitrates concurrent creators and a
+      // duplicate link is absorbed by onConflictDoNothing.
+      this.exec(
+        this.db
+          .insert(this.t.tags)
+          .values({ id: newId(), name, kind: 'auto', ...this.stamp(ctx) } as Insert<
+            typeof s.tags.$inferInsert
+          >)
+          .onConflictDoNothing(),
+      );
+      const tag = this.one<typeof s.tags.$inferSelect>(
+        this.db.select().from(this.t.tags).where(eq(this.t.tags.name, name)),
+      );
+      if (!tag) continue;
+      this.exec(
+        this.db
+          .insert(this.t.itemTags)
+          .values({
+            itemId,
+            tagId: tag.id,
+            confidence: 0.8,
             ...this.stamp(ctx),
-          } as typeof s.tags.$inferSelect;
-          tx.exec(tx.db2.insert(this.t.tags).values(tag));
-        }
-        tx.exec(
-          tx.db2
-            .insert(this.t.itemTags)
-            .values({
-              itemId,
-              tagId: tag.id,
-              confidence: 0.8,
-              ...this.stamp(ctx),
-            } as Insert<typeof s.itemTags.$inferInsert>)
-            .onConflictDoNothing(),
-        );
-      }
-    });
+          } as Insert<typeof s.itemTags.$inferInsert>)
+          .onConflictDoNothing(),
+      );
+    }
   }
 
   listTags(itemId: string, ctx?: TenantCtx): string[] {
-    return this.many<{ name: string }>(
+    return this.manyMap<{ name: string }, string>(
       this.db
         .select({ name: this.t.tags.name })
         .from(this.t.itemTags)
         .innerJoin(this.t.tags, eq(this.t.tags.id, this.t.itemTags.tagId))
         .where(and(eq(this.t.itemTags.itemId, itemId), ...this.scope('item_tags', ctx))),
-    ).map((r) => r.name);
+      (r) => r.name,
+    );
   }
 
   /** Owner-added tag. Reuses an existing tag row of any kind; the link has no confidence. */
   addManualTag(itemId: string, rawName: string, ctx?: TenantCtx): string | null {
     const name = normalizeTag(rawName);
     if (!name) return null;
-    this.transaction(async (tx) => {
-      let tag = tx.one<typeof s.tags.$inferSelect>(
-        tx.db2.select().from(this.t.tags).where(eq(this.t.tags.name, name)),
+    if (this.isPg) {
+      this.ex.chain(
+        (async () => {
+          let tag = await this.one<typeof s.tags.$inferSelect>(
+            this.db.select().from(this.t.tags).where(eq(this.t.tags.name, name)),
+          );
+          if (!tag) {
+            tag = {
+              id: newId(),
+              name,
+              kind: 'manual',
+              ...this.stamp(ctx),
+            } as typeof s.tags.$inferSelect;
+            this.exec(this.db.insert(this.t.tags).values(tag));
+          }
+          this.exec(
+            this.db
+              .insert(this.t.itemTags)
+              .values({ itemId, tagId: tag.id, ...this.stamp(ctx) } as Insert<
+                typeof s.itemTags.$inferInsert
+              >)
+              .onConflictDoNothing(),
+          );
+        })(),
       );
-      if (!tag) {
-        tag = {
-          id: newId(),
-          name,
-          kind: 'manual',
-          ...this.stamp(ctx),
-        } as typeof s.tags.$inferSelect;
-        tx.exec(tx.db2.insert(this.t.tags).values(tag));
-      }
-      tx.exec(
-        tx.db2
-          .insert(this.t.itemTags)
-          .values({ itemId, tagId: tag.id, ...this.stamp(ctx) } as Insert<
-            typeof s.itemTags.$inferInsert
-          >)
-          .onConflictDoNothing(),
-      );
-    });
+      return name;
+    }
+    this.exec(
+      this.db
+        .insert(this.t.tags)
+        .values({ id: newId(), name, kind: 'manual', ...this.stamp(ctx) } as Insert<
+          typeof s.tags.$inferInsert
+        >)
+        .onConflictDoNothing(),
+    );
+    const tag = this.one<typeof s.tags.$inferSelect>(
+      this.db.select().from(this.t.tags).where(eq(this.t.tags.name, name)),
+    );
+    if (!tag) return name;
+    this.exec(
+      this.db
+        .insert(this.t.itemTags)
+        .values({ itemId, tagId: tag.id, ...this.stamp(ctx) } as Insert<
+          typeof s.itemTags.$inferInsert
+        >)
+        .onConflictDoNothing(),
+    );
     return name;
   }
 
@@ -905,7 +985,14 @@ export class Repo {
 
   /** Every tag in use with how many items carry it, most used first. */
   listAllTags(ctx?: TenantCtx): { name: string; kind: 'auto' | 'manual'; count: number }[] {
-    return this.many<{ name: string; kind: string; count: number }>(
+    return this.manyMap<
+      { name: string; kind: string; count: number },
+      {
+        name: string;
+        kind: 'auto' | 'manual';
+        count: number;
+      }
+    >(
       this.db
         .select({
           name: this.t.tags.name,
@@ -917,36 +1004,51 @@ export class Repo {
         .where(and(...this.scope('item_tags', ctx)))
         .groupBy(this.t.tags.id)
         .orderBy(desc(sql`count(${this.t.itemTags.itemId})`), this.t.tags.name),
-    ).map((r) => ({
-      name: r.name,
-      kind: r.kind === 'manual' ? 'manual' : 'auto',
-      count: r.count,
-    }));
+      (r) => ({
+        name: r.name,
+        kind: r.kind === 'manual' ? 'manual' : 'auto',
+        count: r.count,
+      }),
+    );
   }
 
   /** Item ids carrying the tag. */
   itemIdsByTag(rawName: string, ctx?: TenantCtx): string[] {
     const name = normalizeTag(rawName);
-    return this.many<{ itemId: string }>(
+    return this.manyMap<{ itemId: string }, string>(
       this.db
         .select({ itemId: this.t.itemTags.itemId })
         .from(this.t.itemTags)
         .innerJoin(this.t.tags, eq(this.t.tags.id, this.t.itemTags.tagId))
         .where(and(eq(this.t.tags.name, name), ...this.scope('item_tags', ctx))),
-    ).map((r) => r.itemId);
+      (r) => r.itemId,
+    );
   }
 
   // ---- collections ----
 
   listCollections(includeHidden = false, ctx?: TenantCtx): (typeof s.collections.$inferSelect)[] {
-    const rows = this.many<typeof s.collections.$inferSelect>(
-      this.db
-        .select()
-        .from(this.t.collections)
-        .where(and(...this.scope('collections', ctx)))
-        .orderBy(this.t.collections.name),
+    if (!this.isPg) {
+      const rows = this.many<typeof s.collections.$inferSelect>(
+        this.db
+          .select()
+          .from(this.t.collections)
+          .where(and(...this.scope('collections', ctx)))
+          .orderBy(this.t.collections.name),
+      );
+      return includeHidden ? rows : rows.filter((c) => !c.hidden);
+    }
+    return lazy(
+      Promise.resolve(
+        this.many<typeof s.collections.$inferSelect>(
+          this.db
+            .select()
+            .from(this.t.collections)
+            .where(and(...this.scope('collections', ctx)))
+            .orderBy(this.t.collections.name),
+        ),
+      ).then((rows) => (includeHidden ? rows : rows.filter((c) => !c.hidden))),
     );
-    return includeHidden ? rows : rows.filter((c) => !c.hidden);
   }
 
   getCollection(id: string, ctx?: TenantCtx): typeof s.collections.$inferSelect | undefined {
@@ -1000,9 +1102,11 @@ export class Repo {
     this.exec(
       this.db
         .insert(this.t.collections)
-        .values({ id, ...c, hidden: false, ...this.stamp(ctx) } as Insert<
-          typeof s.collections.$inferInsert
-        >),
+        .values(
+          this.pgVals({ id, ...c, hidden: false, ...this.stamp(ctx) }) as Insert<
+            typeof s.collections.$inferInsert
+          >,
+        ),
     );
     return id;
   }
@@ -1017,7 +1121,7 @@ export class Repo {
     this.exec(
       this.db
         .update(this.t.collections)
-        .set(patch)
+        .set(this.pgVals(patch))
         .where(and(eq(this.t.collections.id, id), ...this.scope('collections', ctx))),
     );
   }
@@ -1063,7 +1167,7 @@ export class Repo {
   }
 
   collectionItemIds(collectionId: string, ctx?: TenantCtx): string[] {
-    return this.many<{ itemId: string }>(
+    return this.manyMap<{ itemId: string }, string>(
       this.db
         .select({ itemId: this.t.collectionItems.itemId })
         .from(this.t.collectionItems)
@@ -1074,36 +1178,40 @@ export class Repo {
           ),
         )
         .orderBy(desc(this.t.collectionItems.addedAt)),
-    ).map((r) => r.itemId);
+      (r) => r.itemId,
+    );
   }
 
   collectionsForItem(itemId: string, ctx?: TenantCtx): string[] {
-    return this.many<{ collectionId: string }>(
+    return this.manyMap<{ collectionId: string }, string>(
       this.db
         .select({ collectionId: this.t.collectionItems.collectionId })
         .from(this.t.collectionItems)
         .where(
           and(eq(this.t.collectionItems.itemId, itemId), ...this.scope('collection_items', ctx)),
         ),
-    ).map((r) => r.collectionId);
+      (r) => r.collectionId,
+    );
   }
 
   itemIdsByCategory(category: string, ctx?: TenantCtx): string[] {
-    return this.many<{ id: string }>(
+    return this.manyMap<{ id: string }, string>(
       this.db
         .select({ id: this.t.items.id })
         .from(this.t.items)
         .where(and(eq(this.t.items.category, category), ...this.scope('items', ctx))),
-    ).map((r) => r.id);
+      (r) => r.id,
+    );
   }
 
   itemIdsByEntityKind(kind: string, ctx?: TenantCtx): string[] {
-    return this.many<{ itemId: string }>(
+    return this.manyMap<{ itemId: string }, string>(
       this.db
         .selectDistinct({ itemId: this.t.entities.itemId })
         .from(this.t.entities)
         .where(and(eq(this.t.entities.kind, kind), ...this.scope('entities', ctx))),
-    ).map((r) => r.itemId);
+      (r) => r.itemId,
+    );
   }
 
   /**
@@ -1395,7 +1503,7 @@ export class Repo {
   searchFts(query: string, limit = 50, ctx?: TenantCtx): string[] {
     if (this.isPg) {
       const like = `%${query.replace(/[*"()%_]/g, ' ')}%`;
-      const rows = this.many<{ id: string }>(
+      return this.manyMap<{ id: string }, string>(
         this.db
           .select({ id: this.t.items.id })
           .from(this.t.items)
@@ -1410,8 +1518,8 @@ export class Repo {
             ),
           )
           .limit(limit),
+        (r) => r.id,
       );
-      return rows.map((r) => r.id);
     }
     if (!this.sqlite) return [];
     const rows = this.sqlite
