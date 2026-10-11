@@ -107,11 +107,7 @@ export type Gate = 'shell' | 'login' | 'leave-login';
  * self-hosted (no hosted UI). Anonymous in hosted mode every view lands on login; an
  * authenticated session never sees the login page again.
  */
-export function hostedGate(
-  hosted: HostedStatus | null,
-  authed: boolean,
-  path: string,
-): Gate {
+export function hostedGate(hosted: HostedStatus | null, authed: boolean, path: string): Gate {
   if (!hosted?.hosted) return 'shell';
   if (!authed) return path === '/login' ? 'login' : 'login';
   return path === '/login' ? 'leave-login' : 'shell';

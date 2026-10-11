@@ -3,6 +3,7 @@ import { lazy, Suspense, useEffect, useState } from 'react';
 import { getToken, setToken } from './api';
 import { Shell } from './components/Shell';
 import { Toaster } from './components/Toast';
+import { detectHostedOnce, parseAuthHash, useHosted } from './lib/hosted';
 import { resetLive } from './live';
 import {
   installNativeListeners,
@@ -20,7 +21,6 @@ import { Settings } from './pages/Settings';
 import { Todo } from './pages/Todo';
 import { Welcome } from './pages/Welcome';
 import { navigate, usePath } from './router';
-import { detectHostedOnce, parseAuthHash, useHosted } from './lib/hosted';
 
 // Leaflet is only needed on the map, so it ships as its own chunk.
 const MapView = lazy(() => import('./pages/MapView').then((m) => ({ default: m.MapView })));
@@ -52,7 +52,11 @@ export function App() {
     if (!h.token && !h.error) return;
     if (h.token) setToken(h.token);
     setOauthError(h.error ?? null);
-    history.replaceState(null, '', location.pathname + location.search + (h.rest ? `#${h.rest}` : ''));
+    history.replaceState(
+      null,
+      '',
+      location.pathname + location.search + (h.rest ? `#${h.rest}` : ''),
+    );
     window.dispatchEvent(new Event('doubletake:navigate'));
     if (h.token) {
       setAuthed(true);
@@ -64,8 +68,8 @@ export function App() {
   // Hosted and anonymous: every view is the login page. Hosted and signed in: never the login.
   useEffect(() => {
     if (hosted?.hosted !== true) return;
-    if (!authed && !location.pathname.startsWith('/login')) navigate('/login', true);
-    if (authed && location.pathname === '/login') navigate('/', true);
+    if (!authed && !path.startsWith('/login')) navigate('/login', true);
+    if (authed && path === '/login') navigate('/', true);
   }, [hosted, authed, path]);
 
   // A share received by the native sheet while unpaired is replayed once we are signed in.

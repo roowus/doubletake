@@ -467,7 +467,7 @@ self-hosted behavior is unchanged when the flag is off.
 
 | route | purpose |
 |---|---|
-| `GET health`, `GET status` | liveness; brain id/model, spend today vs cap, notes dir, `push: { kinds, channels, vapidPublicKey, quietHours, pending }` |
+| `GET health`, `GET status` | liveness; brain id/model, spend today vs cap, notes dir, `push: { kinds, channels, vapidPublicKey, quietHours, pending }`; hosted mode adds `hosted: true` and `inviteRequired` (public fields driving the PWA's hosted UI gating, [ADR 0032](adr/0032-hosted-mode.md)) |
 | `POST setup`, `POST login` | create owner password once; exchange password for a device token |
 | `POST pair/start`, `POST pair/redeem`, `GET/DELETE devices[/:id]` | 10-minute single-use pairing codes; device list and revocation |
 | `POST ingest` | `{ url? , text?, note?, channel, modeHint?, focus?, clientId?, adapter?, model? }` (`adapter` must name a configured brain, else `400`; with it the run is `pinned`) → `202 { itemId, chatId, runId, deduplicated, replayed }`; a repeated `clientId` (offline share queue retrying after a lost response) returns the first ingest's ids with `replayed: true` and creates nothing |
@@ -553,3 +553,15 @@ Backup = copy `~/.doubletake` and `~/Doubletake`. See [DEPLOYMENT.md](DEPLOYMENT
   failed run with an explanatory error instead of storing a blank answer.
 - yt-dlp's Instagram extractor breaks periodically; pin the version and surface errors in chat
   (M3).
+
+### Hosted PWA (ADR 0032)
+
+When `GET /api/status` reports `hosted: true`, the PWA adds: `/login` (email+password with
+Login/Register toggle and invite-code field when `inviteRequired`; "Sign in with Google"
+via `/api/auth/google`; OAuth returns capture `#dth_token=` into the existing token store),
+`/settings/account` (Connect OpenRouter, paste-key form with monthly/per-run caps and the
+encryption disclaimer, credential cards with wipe-on-revoke, sessions with revoke, one-time
+MCP agent tokens with Claude Code/Truss config snippets, monthly spend), hosted-only Log
+out, and run-failure copy mapping `no_credential`/`cap_reached`/`per_run_cap` to fix-it
+messages. Hosted+anonymous traffic gates to `/login`; when `hosted` is false the PWA is
+byte-identical to self-hosted.

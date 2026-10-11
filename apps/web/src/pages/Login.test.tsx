@@ -53,14 +53,10 @@ describe('Login', () => {
 
   it('disables submit until both fields are filled', () => {
     render();
-    const submit = () =>
-      host.querySelector<HTMLButtonElement>('button[type="submit"]')!.disabled;
+    const submit = () => host.querySelector<HTMLButtonElement>('button[type="submit"]')!.disabled;
     expect(submit()).toBe(true);
     act(() => {
-      const setter = Object.getOwnPropertyDescriptor(
-        HTMLInputElement.prototype,
-        'value',
-      )!.set!;
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
       const set = (id: string, v: string) => {
         const el = document.getElementById(id) as HTMLInputElement;
         setter.call(el, v);

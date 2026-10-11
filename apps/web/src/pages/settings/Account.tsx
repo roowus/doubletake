@@ -1,10 +1,5 @@
 import { useEffect, useState } from 'react';
-import {
-  type AccountInfo,
-  type AccountSession,
-  api,
-  type CredentialRow,
-} from '../../api';
+import { type AccountInfo, type AccountSession, api, type CredentialRow } from '../../api';
 import { Confirm } from '../../components/Confirm';
 import { Icon } from '../../components/Icon';
 import { toast } from '../../components/Toast';
@@ -21,8 +16,7 @@ export function CredentialCards({
   credentials: CredentialRow[];
   onRevoke: (c: CredentialRow) => void;
 }) {
-  if (credentials.length === 0)
-    return <div className="srow muted">No brains connected yet.</div>;
+  if (credentials.length === 0) return <div className="srow muted">No brains connected yet.</div>;
   return (
     <>
       {credentials.map((c) => {
@@ -186,7 +180,10 @@ export function AccountSettings() {
       title="Account"
       intro="Your hosted account: the brains your runs may use, what they may cost, and what can sign in as you."
     >
-      <Group title="Profile" foot={info ? `Spend this month: $${info.spend.month_usd.toFixed(2)}` : undefined}>
+      <Group
+        title="Profile"
+        foot={info ? `Spend this month: $${info.spend.month_usd.toFixed(2)}` : undefined}
+      >
         <Row icon="user" label={info?.user.email ?? '…'} hint="Signed in with this e-mail" />
         <Row
           icon="external-link"
@@ -269,10 +266,7 @@ export function AccountSettings() {
       </Group>
 
       <Group title="Connected brains">
-        <CredentialCards
-          credentials={info?.credentials ?? []}
-          onRevoke={setRevokeCred}
-        />
+        <CredentialCards credentials={info?.credentials ?? []} onRevoke={setRevokeCred} />
       </Group>
 
       <Group

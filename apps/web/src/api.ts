@@ -319,8 +319,7 @@ export const api = {
   account: () => call<AccountInfo>('GET', '/api/account'),
   addCredential: (c: NewCredential) => call<CredentialRow>('POST', '/api/account/credentials', c),
   revokeCredential: (id: string) => call<void>('DELETE', `/api/account/credentials/${id}`),
-  revokeAccountSession: (id: string) =>
-    call<void>('POST', `/api/account/sessions/${id}/revoke`),
+  revokeAccountSession: (id: string) => call<void>('POST', `/api/account/sessions/${id}/revoke`),
   /** The agent token is shown exactly once, in the response. */
   createMcpToken: (label: string) =>
     call<{ id: string; token: string; label: string }>('POST', '/api/account/mcp-tokens', {
