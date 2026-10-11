@@ -1,41 +1,309 @@
+/**
+ * Data access over either database dialect (ADR 0032).
+ *
+ * DIALECT CONTRACT — read before touching: every method keeps its historical synchronous
+ * signature because all self-hosted callers and 238+ tests use it that way, and SQLite
+ * (better-sqlite3) really is synchronous. Postgres (postgres-js) is inherently async, so when a
+ * Repo is constructed over a PG database the SAME methods return Promise-valued results that the
+ * declared types do not mention (`lazy()` below is that documented lie). PG-side callers MUST
+ * `await` every Repo call; SQLite-side callers are unaffected (`await` on a plain value is a
+ * no-op). A full hosted-PG runtime therefore requires an async sweep of all call sites —
+ * tracked, out of scope for H1. Tenant scoping lives in exactly one place, `scope()`: it applies
+ * `user_id` filters and stamps only on the PG dialect, so routes can pass a `TenantCtx`
+ * unconditionally with zero self-hosted effect.
+ */
 import type { Answer, IngestRequest, Mode, Platform, RunKind } from '@doubletake/shared';
 import { newId, nowIso } from '@doubletake/shared';
-import { and, desc, eq, gte, inArray, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, ilike, inArray, isNull, or, type SQL, sql } from 'drizzle-orm';
 import type { Db } from './index.js';
+import type { PgDb } from './pg.js';
 import * as s from './schema.js';
+import * as pg from './schema.pg.js';
 
 export type ItemRow = typeof s.items.$inferSelect;
 export type ChatRow = typeof s.chats.$inferSelect;
 export type RunRow = typeof s.runs.$inferSelect;
 export type MessageRow = typeof s.messages.$inferSelect;
 
-export class Repo {
+/**
+ * Tenant identity (ADR 0032). The API layer builds it from `req.hosted` in hosted mode and
+ * leaves it undefined in self-hosted mode. Every Repo method that touches a tenant table takes
+ * an optional trailing `ctx`; when the underlying database is Postgres the filter (and the
+ * `user_id` stamp on writes) is applied inside the Repo — in exactly one place, `scope()` —
+ * never at call sites. On SQLite (no `user_id` column by design) a present ctx is ignored, so
+ * self-hosted behaviour is unchanged byte-for-byte.
+ */
+export type TenantCtx = { userId: string };
+
+/** Read the tenant context off a row that carries `user_id` (Postgres rows only). */
+export function ctxOf(row: { userId?: string | null } | null | undefined): TenantCtx | undefined {
+  return row?.userId ? { userId: row.userId } : undefined;
+}
+
+/**
+ * Postgres `user_id` columns per tenant table (ADR 0032). One map so scoping and stamping stay
+ * in one place; SQLite never consults it.
+ */
+const PG_USER_ID = {
+  items: pg.items.userId,
+  chats: pg.chats.userId,
+  messages: pg.messages.userId,
+  runs: pg.runs.userId,
+  run_events: pg.runEvents.userId,
+  extractions: pg.extractions.userId,
+  media_assets: pg.mediaAssets.userId,
+  entities: pg.entities.userId,
+  tags: pg.tags.userId,
+  item_tags: pg.itemTags.userId,
+  collections: pg.collections.userId,
+  collection_items: pg.collectionItems.userId,
+  todos: pg.todos.userId,
+  devices: pg.devices.userId,
+  push_subscriptions: pg.pushSubscriptions.userId,
+  cost_ledger: pg.costLedger.userId,
+  place_geo: pg.placeGeo.userId,
+} as const;
+
+type TenantTable = keyof typeof PG_USER_ID;
+
+/**
+ * The pg schema mirrored under the SQLite module's shape. On Postgres queries are built from
+ * these tables (same names/columns); the cast keeps every method's types identical between
+ * dialects — pg rows simply carry the extra runtime `userId` field.
+ */
+const PG_TABLES = {
+  items: pg.items,
+  extractions: pg.extractions,
+  mediaAssets: pg.mediaAssets,
+  chats: pg.chats,
+  messages: pg.messages,
+  runs: pg.runs,
+  runEvents: pg.runEvents,
+  artifacts: pg.artifacts,
+  entities: pg.entities,
+  tags: pg.tags,
+  itemTags: pg.itemTags,
+  collections: pg.collections,
+  collectionItems: pg.collectionItems,
+  devices: pg.devices,
+  pushSubscriptions: pg.pushSubscriptions,
+  pendingNotifications: pg.pendingNotifications,
+  placeGeo: pg.placeGeo,
+  costLedger: pg.costLedger,
+  settings: pg.settings,
+  igAccounts: pg.igAccounts,
+  igEvents: pg.igEvents,
+  todos: pg.todos,
+} as unknown as typeof s;
+
+/** Insert-value rows may carry the tenant stamp (Postgres only). */
+type Insert<T> = T & { userId?: string };
+
+/**
+ * Query-execution seam. On SQLite everything above stays synchronous (better-sqlite3), and the
+ * public method signatures are frozen because 238+ tests and every self-hosted caller use them
+ * synchronously. Postgres (postgres-js) is inherently async, so on that dialect the same helpers
+ * return lazily-awaited results: pg callers `await` (a no-op on the SQLite values). The sync/async
+ * union is deliberately contained inside this class.
+ */
+class Exec {
   constructor(
-    readonly db: Db,
-    readonly sqlite: import('better-sqlite3').Database,
+    readonly db: unknown,
+    readonly isPg: boolean,
   ) {}
+
+  /** Typed handle on the underlying drizzle db/tx (declaration-lying, see file header). */
+  get db2(): Db {
+    return this.db as Db;
+  }
+
+  /** Single row. On pg appends `LIMIT 1` and awaits. */
+  one<T>(q: unknown): T | undefined {
+    if (!this.isPg) return (q as { get(): T | undefined }).get();
+    return lazy((q as { limit(n: number): PromiseLike<T[]> }).limit(1).then((rows) => rows[0]));
+  }
+
+  /** All rows. */
+  many<T>(q: unknown): T[] {
+    if (!this.isPg) return (q as { all(): T[] }).all();
+    return lazy(q as PromiseLike<T[]>);
+  }
+
+  /** Write; returns a sqlite-shaped `{ changes }` on both dialects. */
+  exec(q: unknown): { changes: number } {
+    if (!this.isPg) return (q as { run(): { changes: number } }).run();
+    return lazy(
+      (async () => {
+        const res = await (q as PromiseLike<unknown>);
+        const r = res as { count?: number; rowCount?: number };
+        if (r && typeof r.count === 'number') return { changes: r.count };
+        if (r && typeof r.rowCount === 'number') return { changes: r.rowCount };
+        return { changes: Array.isArray(res) ? res.length : 0 };
+      })(),
+    );
+  }
+
+  /** Atomic multi-statement write. The callback may be async; on SQLite it still runs synchronously. */
+  transaction(fn: (x: Exec) => void | Promise<void>): void | Promise<void> {
+    if (!this.isPg) {
+      // better-sqlite3 requires a sync transaction function. On this dialect every Exec call is
+      // synchronous, so the async callback body runs to completion inline; only the (already
+      // resolved) promise it returns must be discarded.
+      (this.db as { transaction(cb: (tx: unknown) => unknown): unknown }).transaction((tx) => {
+        void fn(new Exec(tx, false));
+      });
+      return;
+    }
+    return (
+      this.db as { transaction(cb: (tx: unknown) => Promise<void>): Promise<void> }
+    ).transaction(async (tx) => {
+      await fn(new Exec(tx, true));
+    });
+  }
+}
+
+/**
+ * The deliberate, documented type lie (ADR 0032, see the file header): on the Postgres dialect a
+ * method declared to return `T` actually returns `Promise<T>`, and every pg-side caller must
+ * `await` it. On SQLite the same call returns plain `T` synchronously, which is why 238+
+ * self-hosted tests and callers need no change. A full hosted-PG runtime requires an async sweep
+ * of all call sites — tracked, out of scope for H1.
+ */
+function lazy<T>(p: PromiseLike<T>): T {
+  return p as unknown as T;
+}
+
+export class Repo {
+  /**
+   * SQLite-typed by declaration so every untouched method keeps compiling unchanged. In hosted
+   * mode this field actually holds the Postgres db (`this.pg`); only methods that are safe on
+   * pg (those routed through `this.ex` below) may run on that dialect.
+   */
+  readonly db: Db;
+  /** Present only on the SQLite (self-hosted) path; FTS5 lives here. */
+  readonly sqlite: import('better-sqlite3').Database | null;
+  /** Non-null in hosted mode: the Postgres database behind `this.db`. */
+  readonly pg: PgDb | null;
+  readonly isPg: boolean;
+  /** Dialect-aware table set (`PG_TABLES` on pg). */
+  readonly t: typeof s;
+  private readonly ex: Exec;
+  /** Ordered chain of fired pg writes; awaited before the next pg read. */
+  private tail: Promise<unknown> = Promise.resolve();
+
+  constructor(db: Db | PgDb, sqlite: import('better-sqlite3').Database | null) {
+    this.db = db as Db;
+    this.sqlite = sqlite;
+    this.pg = sqlite === null ? (db as PgDb) : null;
+    this.isPg = sqlite === null;
+    this.t = this.isPg ? PG_TABLES : s;
+    this.ex = new Exec(db, this.isPg);
+  }
+
+  /** Queue a fired pg write so the next read observes it; no-op on SQLite. */
+  private fire(p: PromiseLike<unknown>): void {
+    if (!this.isPg) return;
+    this.tail = this.tail.then(
+      () => p,
+      () => p,
+    );
+  }
+
+  private one<T>(q: unknown): T | undefined {
+    if (!this.isPg) return this.ex.one<T>(q);
+    const tail = this.tail;
+    return lazy(
+      (async () => {
+        await tail;
+        return this.ex.one<T>(q);
+      })(),
+    );
+  }
+
+  private many<T>(q: unknown): T[] {
+    if (!this.isPg) return this.ex.many<T>(q);
+    const tail = this.tail;
+    return lazy(
+      (async () => {
+        await tail;
+        return this.ex.many<T>(q);
+      })(),
+    );
+  }
+
+  private exec(q: unknown): { changes: number } {
+    if (!this.isPg) return this.ex.exec(q);
+    const tail = this.tail;
+    this.fire(
+      (async () => {
+        await tail;
+        return this.ex.exec(q);
+      })(),
+    );
+    return { changes: 0 };
+  }
+
+  private transaction(fn: (x: Exec) => void | Promise<void>): void {
+    if (!this.isPg) {
+      this.ex.transaction(fn);
+      return;
+    }
+    const tail = this.tail;
+    this.fire(
+      (async () => {
+        await tail;
+        await this.ex.transaction(fn);
+      })(),
+    );
+  }
+
+  /**
+   * Tenant filter — the single place query scoping is decided (ADR 0032). Applied only when the
+   * database is Postgres and a context was supplied; spread into any `and(...)`.
+   */
+  private scope(table: TenantTable, ctx?: TenantCtx): SQL[] {
+    if (!ctx || !this.isPg) return [];
+    return [eq(PG_USER_ID[table], ctx.userId)];
+  }
+
+  /** Tenant stamp for insert values (Postgres only; SQLite has no `user_id` column). */
+  private stamp(ctx?: TenantCtx): { userId?: string } {
+    return ctx && this.isPg ? { userId: ctx.userId } : {};
+  }
 
   // ---- items / chats ----
 
-  findRecentDuplicate(canonicalUrl: string, focus: string, hours = 24): ItemRow | undefined {
+  findRecentDuplicate(
+    canonicalUrl: string,
+    focus: string,
+    hours = 24,
+    ctx?: TenantCtx,
+  ): ItemRow | undefined {
     const since = new Date(Date.now() - hours * 3600_000).toISOString();
-    return this.db
-      .select()
-      .from(s.items)
-      .where(
-        and(
-          eq(s.items.canonicalUrl, canonicalUrl),
-          eq(s.items.focus, focus),
-          gte(s.items.createdAt, since),
-        ),
-      )
-      .orderBy(desc(s.items.createdAt))
-      .get();
+    return this.one<ItemRow>(
+      this.db
+        .select()
+        .from(this.t.items)
+        .where(
+          and(
+            eq(this.t.items.canonicalUrl, canonicalUrl),
+            eq(this.t.items.focus, focus),
+            gte(this.t.items.createdAt, since),
+            ...this.scope('items', ctx),
+          ),
+        )
+        .orderBy(desc(this.t.items.createdAt)),
+    );
   }
 
   /** The item a retrying client already created under this idempotency key, if any. */
-  findByClientId(clientId: string): ItemRow | undefined {
-    return this.db.select().from(s.items).where(eq(s.items.clientId, clientId)).get();
+  findByClientId(clientId: string, ctx?: TenantCtx): ItemRow | undefined {
+    return this.one<ItemRow>(
+      this.db
+        .select()
+        .from(this.t.items)
+        .where(and(eq(this.t.items.clientId, clientId), ...this.scope('items', ctx))),
+    );
   }
 
   createItemWithChat(
@@ -45,9 +313,10 @@ export class Repo {
     title: string,
     /** Pre-minted id (an upload wrote `media/<id>/…` before the row existed). */
     id: string = newId(),
-  ) {
+    ctx?: TenantCtx,
+  ): { item: ItemRow; chat: ChatRow } {
     const now = nowIso();
-    const item: typeof s.items.$inferInsert = {
+    const item: Insert<typeof s.items.$inferInsert> = {
       id,
       sourceUrl: req.url ?? null,
       canonicalUrl,
@@ -62,13 +331,25 @@ export class Repo {
       clientId: req.clientId ?? null,
       createdAt: now,
       updatedAt: now,
+      ...this.stamp(ctx),
     };
-    const chat: typeof s.chats.$inferInsert = {
+    const chat: Insert<typeof s.chats.$inferInsert> = {
       id: newId(),
       itemId: item.id,
       unreadCount: 0,
       createdAt: now,
+      ...this.stamp(ctx),
     };
+    if (this.isPg) {
+      // Lazy pg builders: fire both inserts in order; the constructed rows are complete, so no
+      // re-read is needed. A later awaited read observes both (see `fire`).
+      const pgDb = this.pg as unknown as {
+        insert(t: unknown): { values(v: unknown): PromiseLike<unknown> };
+      };
+      this.fire(pgDb.insert(pg.items).values(item as never));
+      this.fire(pgDb.insert(pg.chats).values(chat as never));
+      return { item: item as ItemRow, chat: chat as ChatRow };
+    }
     this.db.transaction((tx) => {
       tx.insert(s.items).values(item).run();
       tx.insert(s.chats).values(chat).run();
@@ -79,76 +360,123 @@ export class Repo {
     return { item: created, chat: createdChat };
   }
 
-  getItem(id: string) {
-    return this.db.select().from(s.items).where(eq(s.items.id, id)).get();
+  getItem(id: string, ctx?: TenantCtx): ItemRow | undefined {
+    return this.one<ItemRow>(
+      this.db
+        .select()
+        .from(this.t.items)
+        .where(and(eq(this.t.items.id, id), ...this.scope('items', ctx))),
+    );
   }
-  getChat(id: string) {
-    return this.db.select().from(s.chats).where(eq(s.chats.id, id)).get();
+  getChat(id: string, ctx?: TenantCtx): ChatRow | undefined {
+    return this.one<ChatRow>(
+      this.db
+        .select()
+        .from(this.t.chats)
+        .where(and(eq(this.t.chats.id, id), ...this.scope('chats', ctx))),
+    );
   }
   /** Any item ever saved for this permalink (import dedupe is all-time, unlike the 24 h share window). */
-  findItemByCanonicalUrl(canonicalUrl: string): ItemRow | undefined {
-    return this.db
-      .select()
-      .from(s.items)
-      .where(eq(s.items.canonicalUrl, canonicalUrl))
-      .orderBy(desc(s.items.createdAt))
-      .get();
+  findItemByCanonicalUrl(canonicalUrl: string, ctx?: TenantCtx): ItemRow | undefined {
+    return this.one<ItemRow>(
+      this.db
+        .select()
+        .from(this.t.items)
+        .where(and(eq(this.t.items.canonicalUrl, canonicalUrl), ...this.scope('items', ctx)))
+        .orderBy(desc(this.t.items.createdAt)),
+    );
   }
 
-  listItems(limit = 200) {
-    return this.db.select().from(s.items).orderBy(desc(s.items.createdAt)).limit(limit).all();
+  listItems(limit = 200, ctx?: TenantCtx): ItemRow[] {
+    return this.many<ItemRow>(
+      this.db
+        .select()
+        .from(this.t.items)
+        .where(and(...this.scope('items', ctx)))
+        .orderBy(desc(this.t.items.createdAt))
+        .limit(limit),
+    );
   }
 
-  getChatByItem(itemId: string) {
-    return this.db.select().from(s.chats).where(eq(s.chats.itemId, itemId)).get();
+  getChatByItem(itemId: string, ctx?: TenantCtx): ChatRow | undefined {
+    return this.one<ChatRow>(
+      this.db
+        .select()
+        .from(this.t.chats)
+        .where(and(eq(this.t.chats.itemId, itemId), ...this.scope('chats', ctx))),
+    );
   }
 
-  updateItem(id: string, patch: Partial<typeof s.items.$inferInsert>) {
-    this.db
-      .update(s.items)
-      .set({ ...patch, updatedAt: nowIso() })
-      .where(eq(s.items.id, id))
-      .run();
+  updateItem(id: string, patch: Partial<typeof s.items.$inferInsert>, ctx?: TenantCtx): void {
+    this.exec(
+      this.db
+        .update(this.t.items)
+        .set({ ...patch, updatedAt: nowIso() })
+        .where(and(eq(this.t.items.id, id), ...this.scope('items', ctx))),
+    );
   }
 
-  updateChat(id: string, patch: Partial<typeof s.chats.$inferInsert>) {
-    this.db.update(s.chats).set(patch).where(eq(s.chats.id, id)).run();
+  updateChat(id: string, patch: Partial<typeof s.chats.$inferInsert>, ctx?: TenantCtx): void {
+    this.exec(
+      this.db
+        .update(this.t.chats)
+        .set(patch)
+        .where(and(eq(this.t.chats.id, id), ...this.scope('chats', ctx))),
+    );
   }
 
-  listChats(limit = 200) {
-    return this.db
-      .select({ chat: s.chats, item: s.items })
-      .from(s.chats)
-      .innerJoin(s.items, eq(s.items.id, s.chats.itemId))
-      .orderBy(desc(sql`coalesce(${s.chats.lastMessageAt}, ${s.chats.createdAt})`))
-      .limit(limit)
-      .all();
+  listChats(limit = 200, ctx?: TenantCtx): { chat: ChatRow; item: ItemRow }[] {
+    return this.many<{ chat: ChatRow; item: ItemRow }>(
+      this.db
+        .select({ chat: this.t.chats, item: this.t.items })
+        .from(this.t.chats)
+        .innerJoin(this.t.items, eq(this.t.items.id, this.t.chats.itemId))
+        .where(and(...this.scope('chats', ctx)))
+        .orderBy(desc(sql`coalesce(${this.t.chats.lastMessageAt}, ${this.t.chats.createdAt})`))
+        .limit(limit),
+    );
   }
 
-  markRead(chatId: string) {
+  markRead(chatId: string, ctx?: TenantCtx): void {
     const now = nowIso();
-    this.db.transaction((tx) => {
-      tx.update(s.messages)
-        .set({ readAt: now })
-        .where(and(eq(s.messages.chatId, chatId), sql`${s.messages.readAt} IS NULL`))
-        .run();
-      tx.update(s.chats).set({ unreadCount: 0 }).where(eq(s.chats.id, chatId)).run();
+    this.transaction(async (tx) => {
+      tx.exec(
+        tx.db2
+          .update(this.t.messages)
+          .set({ readAt: now })
+          .where(
+            and(
+              eq(this.t.messages.chatId, chatId),
+              sql`${this.t.messages.readAt} IS NULL`,
+              ...this.scope('messages', ctx),
+            ),
+          ),
+      );
+      tx.exec(
+        tx.db2
+          .update(this.t.chats)
+          .set({ unreadCount: 0 })
+          .where(and(eq(this.t.chats.id, chatId), ...this.scope('chats', ctx))),
+      );
     });
   }
 
   // ---- messages ----
 
-  addMessage(m: {
-    chatId: string;
-    role: 'user' | 'assistant' | 'system';
-    kind: 'answer' | 'followup' | 'status' | 'error' | 'question';
-    content: string;
-    structured?: Answer | null;
-    runId?: string | null;
-    unread?: boolean;
-  }) {
+  addMessage(
+    m: {
+      chatId: string;
+      role: 'user' | 'assistant' | 'system';
+      kind: 'answer' | 'followup' | 'status' | 'error' | 'question';
+      content: string;
+      structured?: Answer | null;
+      runId?: string | null;
+      unread?: boolean;
+    },
+    ctx?: TenantCtx,
+  ): typeof s.messages.$inferSelect {
     const now = nowIso();
-    const row: typeof s.messages.$inferInsert = {
+    const row: Insert<typeof s.messages.$inferInsert> = {
       id: newId(),
       chatId: m.chatId,
       role: m.role,
@@ -158,47 +486,59 @@ export class Repo {
       runId: m.runId ?? null,
       createdAt: now,
       readAt: m.unread ? null : now,
+      ...this.stamp(ctx),
     };
-    this.db.transaction((tx) => {
-      tx.insert(s.messages).values(row).run();
-      tx.update(s.chats)
-        .set({
-          lastMessageAt: now,
-          unreadCount: m.unread ? sql`${s.chats.unreadCount} + 1` : s.chats.unreadCount,
-        })
-        .where(eq(s.chats.id, m.chatId))
-        .run();
+    this.transaction(async (tx) => {
+      tx.exec(tx.db2.insert(this.t.messages).values(row));
+      tx.exec(
+        tx.db2
+          .update(this.t.chats)
+          .set({
+            lastMessageAt: now,
+            unreadCount: m.unread ? sql`${this.t.chats.unreadCount} + 1` : this.t.chats.unreadCount,
+          })
+          .where(and(eq(this.t.chats.id, m.chatId), ...this.scope('chats', ctx))),
+      );
     });
-    return row;
+    return row as typeof s.messages.$inferSelect;
   }
 
-  listMessages(chatId: string) {
-    return this.db
-      .select()
-      .from(s.messages)
-      .where(eq(s.messages.chatId, chatId))
-      .orderBy(s.messages.createdAt)
-      .all();
+  listMessages(chatId: string, ctx?: TenantCtx): MessageRow[] {
+    return this.many<MessageRow>(
+      this.db
+        .select()
+        .from(this.t.messages)
+        .where(and(eq(this.t.messages.chatId, chatId), ...this.scope('messages', ctx)))
+        .orderBy(this.t.messages.createdAt),
+    );
   }
 
   /** Rewrite one message's text (used to swap a placeholder question for the owner's words). */
-  updateMessageContent(id: string, content: string) {
-    this.db.update(s.messages).set({ content }).where(eq(s.messages.id, id)).run();
+  updateMessageContent(id: string, content: string, ctx?: TenantCtx): void {
+    this.exec(
+      this.db
+        .update(this.t.messages)
+        .set({ content })
+        .where(and(eq(this.t.messages.id, id), ...this.scope('messages', ctx))),
+    );
   }
 
   // ---- runs ----
 
-  createRun(r: {
-    itemId: string;
-    chatId: string;
-    kind: RunKind;
-    mode: Mode;
-    adapter: string;
-    model?: string | null;
-    pinned?: boolean;
-    userMessage?: string | null;
-  }) {
-    const row: typeof s.runs.$inferInsert = {
+  createRun(
+    r: {
+      itemId: string;
+      chatId: string;
+      kind: RunKind;
+      mode: Mode;
+      adapter: string;
+      model?: string | null;
+      pinned?: boolean;
+      userMessage?: string | null;
+    },
+    ctx?: TenantCtx,
+  ): RunRow {
+    const row: Insert<typeof s.runs.$inferInsert> = {
       id: newId(),
       itemId: r.itemId,
       chatId: r.chatId,
@@ -210,79 +550,113 @@ export class Repo {
       status: 'queued',
       userMessage: r.userMessage ?? null,
       createdAt: nowIso(),
+      ...this.stamp(ctx),
     };
+    if (this.isPg) {
+      const pgDb = this.pg as unknown as {
+        insert(t: unknown): { values(v: unknown): PromiseLike<unknown> };
+      };
+      this.fire(pgDb.insert(pg.runs).values(row as never));
+      return row as RunRow;
+    }
     this.db.insert(s.runs).values(row).run();
     const created = this.getRun(row.id);
     if (!created) throw new Error('insert did not persist run');
     return created;
   }
 
-  getRun(id: string) {
-    return this.db.select().from(s.runs).where(eq(s.runs.id, id)).get();
+  getRun(id: string, ctx?: TenantCtx): RunRow | undefined {
+    return this.one<RunRow>(
+      this.db
+        .select()
+        .from(this.t.runs)
+        .where(and(eq(this.t.runs.id, id), ...this.scope('runs', ctx))),
+    );
   }
 
-  updateRun(id: string, patch: Partial<typeof s.runs.$inferInsert>) {
-    this.db.update(s.runs).set(patch).where(eq(s.runs.id, id)).run();
+  updateRun(id: string, patch: Partial<typeof s.runs.$inferInsert>, ctx?: TenantCtx): void {
+    this.exec(
+      this.db
+        .update(this.t.runs)
+        .set(patch)
+        .where(and(eq(this.t.runs.id, id), ...this.scope('runs', ctx))),
+    );
   }
 
-  listRuns(chatId: string) {
-    return this.db
-      .select()
-      .from(s.runs)
-      .where(eq(s.runs.chatId, chatId))
-      .orderBy(s.runs.createdAt)
-      .all();
+  listRuns(chatId: string, ctx?: TenantCtx): RunRow[] {
+    return this.many<RunRow>(
+      this.db
+        .select()
+        .from(this.t.runs)
+        .where(and(eq(this.t.runs.chatId, chatId), ...this.scope('runs', ctx)))
+        .orderBy(this.t.runs.createdAt),
+    );
   }
 
-  nextQueuedRun() {
-    return this.db
-      .select()
-      .from(s.runs)
-      .where(eq(s.runs.status, 'queued'))
-      .orderBy(s.runs.createdAt)
-      .limit(1)
-      .get();
+  /**
+   * The queue is deliberately global: the hosted worker runs everyone's queued runs, so this
+   * read is never tenant-scoped (the run's own user is resolved from the row for cap checks).
+   */
+  nextQueuedRun(): RunRow | undefined {
+    return this.one<RunRow>(
+      this.db
+        .select()
+        .from(this.t.runs)
+        .where(eq(this.t.runs.status, 'queued'))
+        .orderBy(this.t.runs.createdAt)
+        .limit(1),
+    );
   }
 
   /** Runs left mid-flight by a crash go back to the queue at boot. */
-  requeueInterrupted() {
-    this.db
-      .update(s.runs)
-      .set({ status: 'queued', startedAt: null })
-      .where(sql`${s.runs.status} IN ('extracting','researching')`)
-      .run();
+  requeueInterrupted(): void {
+    this.exec(
+      this.db
+        .update(this.t.runs)
+        .set({ status: 'queued', startedAt: null })
+        .where(sql`${this.t.runs.status} IN ('extracting','researching')`),
+    );
   }
 
-  addRunEvent(runId: string, seq: number, type: string, payload: unknown) {
-    this.db
-      .insert(s.runEvents)
-      .values({ runId, seq, type, payload: JSON.stringify(payload), at: nowIso() })
-      .run();
+  addRunEvent(runId: string, seq: number, type: string, payload: unknown, ctx?: TenantCtx): void {
+    this.exec(
+      this.db.insert(this.t.runEvents).values({
+        runId,
+        seq,
+        type,
+        payload: JSON.stringify(payload),
+        at: nowIso(),
+        ...this.stamp(ctx),
+      }),
+    );
   }
 
-  listRunEvents(runId: string) {
-    return this.db
-      .select()
-      .from(s.runEvents)
-      .where(eq(s.runEvents.runId, runId))
-      .orderBy(s.runEvents.seq)
-      .all();
+  listRunEvents(runId: string, ctx?: TenantCtx): (typeof s.runEvents.$inferSelect)[] {
+    return this.many<typeof s.runEvents.$inferSelect>(
+      this.db
+        .select()
+        .from(this.t.runEvents)
+        .where(and(eq(this.t.runEvents.runId, runId), ...this.scope('run_events', ctx)))
+        .orderBy(this.t.runEvents.seq),
+    );
   }
 
   // ---- extractions / entities / tags ----
 
-  addExtraction(e: {
-    itemId: string;
-    kind: string;
-    content: unknown;
-    tool?: string;
-    model?: string;
-    costUsd?: number;
-    durationMs?: number;
-  }) {
-    this.db
-      .insert(s.extractions)
-      .values({
+  addExtraction(
+    e: {
+      itemId: string;
+      kind: string;
+      content: unknown;
+      tool?: string;
+      model?: string;
+      costUsd?: number;
+      durationMs?: number;
+    },
+    ctx?: TenantCtx,
+  ): void {
+    this.exec(
+      this.db.insert(this.t.extractions).values({
         id: newId(),
         itemId: e.itemId,
         kind: e.kind,
@@ -292,25 +666,28 @@ export class Repo {
         costUsd: e.costUsd ?? null,
         durationMs: e.durationMs ?? null,
         createdAt: nowIso(),
-      })
-      .run();
+        ...this.stamp(ctx),
+      } as Insert<typeof s.extractions.$inferInsert>),
+    );
   }
 
-  addMediaAsset(a: {
-    itemId: string;
-    kind: string;
-    path: string;
-    sha256: string;
-    bytes: number;
-    durationS?: number | null;
-    width?: number | null;
-    height?: number | null;
-    frameTsS?: number | null;
-    source: string;
-  }) {
-    this.db
-      .insert(s.mediaAssets)
-      .values({
+  addMediaAsset(
+    a: {
+      itemId: string;
+      kind: string;
+      path: string;
+      sha256: string;
+      bytes: number;
+      durationS?: number | null;
+      width?: number | null;
+      height?: number | null;
+      frameTsS?: number | null;
+      source: string;
+    },
+    ctx?: TenantCtx,
+  ): void {
+    this.exec(
+      this.db.insert(this.t.mediaAssets).values({
         id: newId(),
         itemId: a.itemId,
         kind: a.kind,
@@ -323,33 +700,57 @@ export class Repo {
         frameTsS: a.frameTsS ?? null,
         source: a.source,
         createdAt: nowIso(),
-      })
-      .run();
+        ...this.stamp(ctx),
+      } as Insert<typeof s.mediaAssets.$inferInsert>),
+    );
   }
 
-  listMediaAssets(itemId: string) {
-    return this.db.select().from(s.mediaAssets).where(eq(s.mediaAssets.itemId, itemId)).all();
+  listMediaAssets(itemId: string, ctx?: TenantCtx): (typeof s.mediaAssets.$inferSelect)[] {
+    return this.many<typeof s.mediaAssets.$inferSelect>(
+      this.db
+        .select()
+        .from(this.t.mediaAssets)
+        .where(and(eq(this.t.mediaAssets.itemId, itemId), ...this.scope('media_assets', ctx))),
+    );
   }
 
-  getMediaAsset(id: string) {
-    return this.db.select().from(s.mediaAssets).where(eq(s.mediaAssets.id, id)).get();
+  getMediaAsset(id: string, ctx?: TenantCtx): typeof s.mediaAssets.$inferSelect | undefined {
+    return this.one<typeof s.mediaAssets.$inferSelect>(
+      this.db
+        .select()
+        .from(this.t.mediaAssets)
+        .where(and(eq(this.t.mediaAssets.id, id), ...this.scope('media_assets', ctx))),
+    );
   }
 
-  deleteMediaAssets(itemId: string) {
-    this.db.delete(s.mediaAssets).where(eq(s.mediaAssets.itemId, itemId)).run();
+  deleteMediaAssets(itemId: string, ctx?: TenantCtx): void {
+    this.exec(
+      this.db
+        .delete(this.t.mediaAssets)
+        .where(and(eq(this.t.mediaAssets.itemId, itemId), ...this.scope('media_assets', ctx))),
+    );
   }
 
-  listExtractions(itemId: string) {
-    return this.db.select().from(s.extractions).where(eq(s.extractions.itemId, itemId)).all();
+  listExtractions(itemId: string, ctx?: TenantCtx): (typeof s.extractions.$inferSelect)[] {
+    return this.many<typeof s.extractions.$inferSelect>(
+      this.db
+        .select()
+        .from(this.t.extractions)
+        .where(and(eq(this.t.extractions.itemId, itemId), ...this.scope('extractions', ctx))),
+    );
   }
 
-  replaceEntities(itemId: string, runId: string, ents: Answer['entities']) {
+  replaceEntities(itemId: string, runId: string, ents: Answer['entities'], ctx?: TenantCtx): void {
     const now = nowIso();
-    this.db.transaction((tx) => {
-      tx.delete(s.entities).where(eq(s.entities.itemId, itemId)).run();
+    this.transaction(async (tx) => {
+      tx.exec(
+        tx.db2
+          .delete(this.t.entities)
+          .where(and(eq(this.t.entities.itemId, itemId), ...this.scope('entities', ctx))),
+      );
       for (const e of ents) {
-        tx.insert(s.entities)
-          .values({
+        tx.exec(
+          tx.db2.insert(this.t.entities).values({
             id: newId(),
             itemId,
             runId,
@@ -359,150 +760,249 @@ export class Repo {
             url: e.url ?? null,
             confidence: e.confidence,
             createdAt: now,
-          })
-          .run();
+            ...this.stamp(ctx),
+          } as Insert<typeof s.entities.$inferInsert>),
+        );
       }
     });
   }
 
-  listEntities(itemId: string) {
-    return this.db.select().from(s.entities).where(eq(s.entities.itemId, itemId)).all();
+  listEntities(itemId: string, ctx?: TenantCtx): (typeof s.entities.$inferSelect)[] {
+    return this.many<typeof s.entities.$inferSelect>(
+      this.db
+        .select()
+        .from(this.t.entities)
+        .where(and(eq(this.t.entities.itemId, itemId), ...this.scope('entities', ctx))),
+    );
   }
 
-  getEntity(id: string) {
-    return this.db.select().from(s.entities).where(eq(s.entities.id, id)).get();
+  getEntity(id: string, ctx?: TenantCtx): typeof s.entities.$inferSelect | undefined {
+    return this.one<typeof s.entities.$inferSelect>(
+      this.db
+        .select()
+        .from(this.t.entities)
+        .where(and(eq(this.t.entities.id, id), ...this.scope('entities', ctx))),
+    );
   }
 
   /** Star (or unstar) one thing; undefined when the entity row does not exist. */
-  setEntityStarred(id: string, starred: boolean) {
-    this.db.update(s.entities).set({ starred }).where(eq(s.entities.id, id)).run();
-    return this.getEntity(id);
+  setEntityStarred(
+    id: string,
+    starred: boolean,
+    ctx?: TenantCtx,
+  ): typeof s.entities.$inferSelect | undefined {
+    this.exec(
+      this.db
+        .update(this.t.entities)
+        .set({ starred })
+        .where(and(eq(this.t.entities.id, id), ...this.scope('entities', ctx))),
+    );
+    return this.getEntity(id, ctx);
   }
 
-  setAutoTags(itemId: string, names: string[]) {
+  setAutoTags(itemId: string, names: string[], ctx?: TenantCtx): void {
     const clean = [...new Set(names.map((n) => n.trim().toLowerCase()).filter(Boolean))].slice(
       0,
       12,
     );
-    this.db.transaction((tx) => {
+    this.transaction(async (tx) => {
       for (const name of clean) {
-        let tag = tx.select().from(s.tags).where(eq(s.tags.name, name)).get();
+        let tag = tx.one<typeof s.tags.$inferSelect>(
+          tx.db2.select().from(this.t.tags).where(eq(this.t.tags.name, name)),
+        );
         if (!tag) {
-          tag = { id: newId(), name, kind: 'auto' };
-          tx.insert(s.tags).values(tag).run();
+          tag = {
+            id: newId(),
+            name,
+            kind: 'auto',
+            ...this.stamp(ctx),
+          } as typeof s.tags.$inferSelect;
+          tx.exec(tx.db2.insert(this.t.tags).values(tag));
         }
-        tx.insert(s.itemTags)
-          .values({ itemId, tagId: tag.id, confidence: 0.8 })
-          .onConflictDoNothing()
-          .run();
+        tx.exec(
+          tx.db2
+            .insert(this.t.itemTags)
+            .values({
+              itemId,
+              tagId: tag.id,
+              confidence: 0.8,
+              ...this.stamp(ctx),
+            } as Insert<typeof s.itemTags.$inferInsert>)
+            .onConflictDoNothing(),
+        );
       }
     });
   }
 
-  listTags(itemId: string): string[] {
-    return this.db
-      .select({ name: s.tags.name })
-      .from(s.itemTags)
-      .innerJoin(s.tags, eq(s.tags.id, s.itemTags.tagId))
-      .where(eq(s.itemTags.itemId, itemId))
-      .all()
-      .map((r) => r.name);
+  listTags(itemId: string, ctx?: TenantCtx): string[] {
+    return this.many<{ name: string }>(
+      this.db
+        .select({ name: this.t.tags.name })
+        .from(this.t.itemTags)
+        .innerJoin(this.t.tags, eq(this.t.tags.id, this.t.itemTags.tagId))
+        .where(and(eq(this.t.itemTags.itemId, itemId), ...this.scope('item_tags', ctx))),
+    ).map((r) => r.name);
   }
 
   /** Owner-added tag. Reuses an existing tag row of any kind; the link has no confidence. */
-  addManualTag(itemId: string, rawName: string): string | null {
+  addManualTag(itemId: string, rawName: string, ctx?: TenantCtx): string | null {
     const name = normalizeTag(rawName);
     if (!name) return null;
-    this.db.transaction((tx) => {
-      let tag = tx.select().from(s.tags).where(eq(s.tags.name, name)).get();
+    this.transaction(async (tx) => {
+      let tag = tx.one<typeof s.tags.$inferSelect>(
+        tx.db2.select().from(this.t.tags).where(eq(this.t.tags.name, name)),
+      );
       if (!tag) {
-        tag = { id: newId(), name, kind: 'manual' };
-        tx.insert(s.tags).values(tag).run();
+        tag = {
+          id: newId(),
+          name,
+          kind: 'manual',
+          ...this.stamp(ctx),
+        } as typeof s.tags.$inferSelect;
+        tx.exec(tx.db2.insert(this.t.tags).values(tag));
       }
-      tx.insert(s.itemTags).values({ itemId, tagId: tag.id }).onConflictDoNothing().run();
+      tx.exec(
+        tx.db2
+          .insert(this.t.itemTags)
+          .values({ itemId, tagId: tag.id, ...this.stamp(ctx) } as Insert<
+            typeof s.itemTags.$inferInsert
+          >)
+          .onConflictDoNothing(),
+      );
     });
     return name;
   }
 
   /** Unlink a tag from an item; drops the tag row when nothing else uses it. */
-  removeTag(itemId: string, rawName: string): boolean {
+  removeTag(itemId: string, rawName: string, ctx?: TenantCtx): boolean {
     const name = normalizeTag(rawName);
-    const tag = this.db.select().from(s.tags).where(eq(s.tags.name, name)).get();
+    const tag = this.one<typeof s.tags.$inferSelect>(
+      this.db.select().from(this.t.tags).where(eq(this.t.tags.name, name)),
+    );
     if (!tag) return false;
-    const r = this.db
-      .delete(s.itemTags)
-      .where(and(eq(s.itemTags.itemId, itemId), eq(s.itemTags.tagId, tag.id)))
-      .run();
-    const left = this.db
-      .select({ n: sql<number>`count(*)` })
-      .from(s.itemTags)
-      .where(eq(s.itemTags.tagId, tag.id))
-      .get();
-    if (!left || left.n === 0) this.db.delete(s.tags).where(eq(s.tags.id, tag.id)).run();
+    const r = this.exec(
+      this.db
+        .delete(this.t.itemTags)
+        .where(
+          and(
+            eq(this.t.itemTags.itemId, itemId),
+            eq(this.t.itemTags.tagId, tag.id),
+            ...this.scope('item_tags', ctx),
+          ),
+        ),
+    );
+    const left = this.one<{ n: number }>(
+      this.db
+        .select({ n: sql<number>`count(*)` })
+        .from(this.t.itemTags)
+        .where(eq(this.t.itemTags.tagId, tag.id)),
+    );
+    if (!left || left.n === 0)
+      this.exec(this.db.delete(this.t.tags).where(eq(this.t.tags.id, tag.id)));
     return r.changes > 0;
   }
 
   /** Every tag in use with how many items carry it, most used first. */
-  listAllTags(): { name: string; kind: 'auto' | 'manual'; count: number }[] {
-    return this.db
-      .select({
-        name: s.tags.name,
-        kind: s.tags.kind,
-        count: sql<number>`count(${s.itemTags.itemId})`,
-      })
-      .from(s.tags)
-      .innerJoin(s.itemTags, eq(s.itemTags.tagId, s.tags.id))
-      .groupBy(s.tags.id)
-      .orderBy(desc(sql`count(${s.itemTags.itemId})`), s.tags.name)
-      .all()
-      .map((r) => ({
-        name: r.name,
-        kind: r.kind === 'manual' ? 'manual' : 'auto',
-        count: r.count,
-      }));
+  listAllTags(ctx?: TenantCtx): { name: string; kind: 'auto' | 'manual'; count: number }[] {
+    return this.many<{ name: string; kind: string; count: number }>(
+      this.db
+        .select({
+          name: this.t.tags.name,
+          kind: this.t.tags.kind,
+          count: sql<number>`count(${this.t.itemTags.itemId})`,
+        })
+        .from(this.t.tags)
+        .innerJoin(this.t.itemTags, eq(this.t.itemTags.tagId, this.t.tags.id))
+        .where(and(...this.scope('item_tags', ctx)))
+        .groupBy(this.t.tags.id)
+        .orderBy(desc(sql`count(${this.t.itemTags.itemId})`), this.t.tags.name),
+    ).map((r) => ({
+      name: r.name,
+      kind: r.kind === 'manual' ? 'manual' : 'auto',
+      count: r.count,
+    }));
   }
 
   /** Item ids carrying the tag. */
-  itemIdsByTag(rawName: string): string[] {
+  itemIdsByTag(rawName: string, ctx?: TenantCtx): string[] {
     const name = normalizeTag(rawName);
-    return this.db
-      .select({ itemId: s.itemTags.itemId })
-      .from(s.itemTags)
-      .innerJoin(s.tags, eq(s.tags.id, s.itemTags.tagId))
-      .where(eq(s.tags.name, name))
-      .all()
-      .map((r) => r.itemId);
+    return this.many<{ itemId: string }>(
+      this.db
+        .select({ itemId: this.t.itemTags.itemId })
+        .from(this.t.itemTags)
+        .innerJoin(this.t.tags, eq(this.t.tags.id, this.t.itemTags.tagId))
+        .where(and(eq(this.t.tags.name, name), ...this.scope('item_tags', ctx))),
+    ).map((r) => r.itemId);
   }
 
   // ---- collections ----
 
-  listCollections(includeHidden = false) {
-    const rows = this.db.select().from(s.collections).orderBy(s.collections.name).all();
+  listCollections(includeHidden = false, ctx?: TenantCtx): (typeof s.collections.$inferSelect)[] {
+    const rows = this.many<typeof s.collections.$inferSelect>(
+      this.db
+        .select()
+        .from(this.t.collections)
+        .where(and(...this.scope('collections', ctx)))
+        .orderBy(this.t.collections.name),
+    );
     return includeHidden ? rows : rows.filter((c) => !c.hidden);
   }
 
-  getCollection(id: string) {
-    return this.db.select().from(s.collections).where(eq(s.collections.id, id)).get();
+  getCollection(id: string, ctx?: TenantCtx): typeof s.collections.$inferSelect | undefined {
+    return this.one<typeof s.collections.$inferSelect>(
+      this.db
+        .select()
+        .from(this.t.collections)
+        .where(and(eq(this.t.collections.id, id), ...this.scope('collections', ctx))),
+    );
   }
 
-  findCollectionByName(name: string) {
-    return this.db.select().from(s.collections).where(eq(s.collections.name, name)).get();
+  findCollectionByName(
+    name: string,
+    ctx?: TenantCtx,
+  ): typeof s.collections.$inferSelect | undefined {
+    return this.one<typeof s.collections.$inferSelect>(
+      this.db
+        .select()
+        .from(this.t.collections)
+        .where(and(eq(this.t.collections.name, name), ...this.scope('collections', ctx))),
+    );
   }
 
-  findCollectionByShareToken(token: string) {
-    return this.db.select().from(s.collections).where(eq(s.collections.shareToken, token)).get();
+  /**
+   * Share pages are unscoped on purpose: the random token in the URL is the whole credential
+   * (ADR 0025) and must resolve regardless of who created the collection.
+   */
+  findCollectionByShareToken(token: string): typeof s.collections.$inferSelect | undefined {
+    return this.one<typeof s.collections.$inferSelect>(
+      this.db.select().from(this.t.collections).where(eq(this.t.collections.shareToken, token)),
+    );
   }
 
-  findCollectionByQuery(query: string) {
-    return this.db.select().from(s.collections).where(eq(s.collections.query, query)).get();
+  findCollectionByQuery(
+    query: string,
+    ctx?: TenantCtx,
+  ): typeof s.collections.$inferSelect | undefined {
+    return this.one<typeof s.collections.$inferSelect>(
+      this.db
+        .select()
+        .from(this.t.collections)
+        .where(and(eq(this.t.collections.query, query), ...this.scope('collections', ctx))),
+    );
   }
 
-  createCollection(c: { name: string; query: string; manual: boolean; auto: boolean }) {
+  createCollection(
+    c: { name: string; query: string; manual: boolean; auto: boolean },
+    ctx?: TenantCtx,
+  ): string {
     const id = newId();
-    this.db
-      .insert(s.collections)
-      .values({ id, ...c, hidden: false })
-      .run();
+    this.exec(
+      this.db
+        .insert(this.t.collections)
+        .values({ id, ...c, hidden: false, ...this.stamp(ctx) } as Insert<
+          typeof s.collections.$inferInsert
+        >),
+    );
     return id;
   }
 
@@ -511,89 +1011,126 @@ export class Repo {
     patch: Partial<
       Pick<typeof s.collections.$inferInsert, 'name' | 'query' | 'hidden' | 'shareToken'>
     >,
-  ) {
-    this.db.update(s.collections).set(patch).where(eq(s.collections.id, id)).run();
-  }
-
-  deleteCollection(id: string): boolean {
-    return this.db.delete(s.collections).where(eq(s.collections.id, id)).run().changes > 0;
-  }
-
-  addCollectionItem(collectionId: string, itemId: string) {
-    this.db
-      .insert(s.collectionItems)
-      .values({ collectionId, itemId, addedAt: nowIso() })
-      .onConflictDoNothing()
-      .run();
-  }
-
-  removeCollectionItem(collectionId: string, itemId: string): boolean {
-    return (
+    ctx?: TenantCtx,
+  ): void {
+    this.exec(
       this.db
-        .delete(s.collectionItems)
-        .where(
-          and(
-            eq(s.collectionItems.collectionId, collectionId),
-            eq(s.collectionItems.itemId, itemId),
-          ),
-        )
-        .run().changes > 0
+        .update(this.t.collections)
+        .set(patch)
+        .where(and(eq(this.t.collections.id, id), ...this.scope('collections', ctx))),
     );
   }
 
-  collectionItemIds(collectionId: string): string[] {
-    return this.db
-      .select({ itemId: s.collectionItems.itemId })
-      .from(s.collectionItems)
-      .where(eq(s.collectionItems.collectionId, collectionId))
-      .orderBy(desc(s.collectionItems.addedAt))
-      .all()
-      .map((r) => r.itemId);
+  deleteCollection(id: string, ctx?: TenantCtx): boolean {
+    return (
+      this.exec(
+        this.db
+          .delete(this.t.collections)
+          .where(and(eq(this.t.collections.id, id), ...this.scope('collections', ctx))),
+      ).changes > 0
+    );
   }
 
-  collectionsForItem(itemId: string): string[] {
-    return this.db
-      .select({ collectionId: s.collectionItems.collectionId })
-      .from(s.collectionItems)
-      .where(eq(s.collectionItems.itemId, itemId))
-      .all()
-      .map((r) => r.collectionId);
+  addCollectionItem(collectionId: string, itemId: string, ctx?: TenantCtx): void {
+    this.exec(
+      this.db
+        .insert(this.t.collectionItems)
+        .values({
+          collectionId,
+          itemId,
+          addedAt: nowIso(),
+          ...this.stamp(ctx),
+        } as Insert<typeof s.collectionItems.$inferInsert>)
+        .onConflictDoNothing(),
+    );
   }
 
-  itemIdsByCategory(category: string): string[] {
-    return this.db
-      .select({ id: s.items.id })
-      .from(s.items)
-      .where(eq(s.items.category, category))
-      .all()
-      .map((r) => r.id);
+  removeCollectionItem(collectionId: string, itemId: string, ctx?: TenantCtx): boolean {
+    return (
+      this.exec(
+        this.db
+          .delete(this.t.collectionItems)
+          .where(
+            and(
+              eq(this.t.collectionItems.collectionId, collectionId),
+              eq(this.t.collectionItems.itemId, itemId),
+              ...this.scope('collection_items', ctx),
+            ),
+          ),
+      ).changes > 0
+    );
   }
 
-  itemIdsByEntityKind(kind: string): string[] {
-    return this.db
-      .selectDistinct({ itemId: s.entities.itemId })
-      .from(s.entities)
-      .where(eq(s.entities.kind, kind))
-      .all()
-      .map((r) => r.itemId);
+  collectionItemIds(collectionId: string, ctx?: TenantCtx): string[] {
+    return this.many<{ itemId: string }>(
+      this.db
+        .select({ itemId: this.t.collectionItems.itemId })
+        .from(this.t.collectionItems)
+        .where(
+          and(
+            eq(this.t.collectionItems.collectionId, collectionId),
+            ...this.scope('collection_items', ctx),
+          ),
+        )
+        .orderBy(desc(this.t.collectionItems.addedAt)),
+    ).map((r) => r.itemId);
+  }
+
+  collectionsForItem(itemId: string, ctx?: TenantCtx): string[] {
+    return this.many<{ collectionId: string }>(
+      this.db
+        .select({ collectionId: this.t.collectionItems.collectionId })
+        .from(this.t.collectionItems)
+        .where(
+          and(eq(this.t.collectionItems.itemId, itemId), ...this.scope('collection_items', ctx)),
+        ),
+    ).map((r) => r.collectionId);
+  }
+
+  itemIdsByCategory(category: string, ctx?: TenantCtx): string[] {
+    return this.many<{ id: string }>(
+      this.db
+        .select({ id: this.t.items.id })
+        .from(this.t.items)
+        .where(and(eq(this.t.items.category, category), ...this.scope('items', ctx))),
+    ).map((r) => r.id);
+  }
+
+  itemIdsByEntityKind(kind: string, ctx?: TenantCtx): string[] {
+    return this.many<{ itemId: string }>(
+      this.db
+        .selectDistinct({ itemId: this.t.entities.itemId })
+        .from(this.t.entities)
+        .where(and(eq(this.t.entities.kind, kind), ...this.scope('entities', ctx))),
+    ).map((r) => r.itemId);
   }
 
   /**
    * Every entity of one kind across the library, newest item first. `starred` narrows the list:
    * true for starred only, false for unstarred only, undefined for everything.
    */
-  listEntitiesByKind(kind: string, limit = 500, starred?: boolean) {
-    const filters = [eq(s.entities.kind, kind)];
-    if (starred !== undefined) filters.push(eq(s.entities.starred, starred));
-    return this.db
-      .select({ entity: s.entities, item: s.items, chatId: s.chats.id })
-      .from(s.entities)
-      .innerJoin(s.items, eq(s.items.id, s.entities.itemId))
-      .innerJoin(s.chats, eq(s.chats.itemId, s.items.id))
-      .where(and(...filters))
-      .orderBy(desc(s.items.createdAt))
-      .limit(limit)
-      .all();
+  listEntitiesByKind(
+    kind: string,
+    limit = 500,
+    starred?: boolean,
+    ctx?: TenantCtx,
+  ): { entity: typeof s.entities.$inferSelect; item: ItemRow; chatId: string }[] {
+    const filters = [eq(this.t.entities.kind, kind), ...this.scope('entities', ctx)];
+    if (starred !== undefined) filters.push(eq(this.t.entities.starred, starred));
+    return this.many<{
+      entity: typeof s.entities.$inferSelect;
+      item: ItemRow;
+      chatId: string;
+    }>(
+      this.db
+        .select({ entity: this.t.entities, item: this.t.items, chatId: this.t.chats.id })
+        .from(this.t.entities)
+        .innerJoin(this.t.items, eq(this.t.items.id, this.t.entities.itemId))
+        .innerJoin(this.t.chats, eq(this.t.chats.itemId, this.t.items.id))
+        .where(and(...filters))
+        .orderBy(desc(this.t.items.createdAt))
+        .limit(limit),
+    );
   }
 
   /**
@@ -602,22 +1139,31 @@ export class Repo {
    * Entities come newest first — ULID ids sort by creation time, so `id desc` is stable even
    * when rows share a `created_at`.
    */
-  graphData(itemIds: string[], entityLimit: number) {
+  graphData(
+    itemIds: string[],
+    entityLimit: number,
+    ctx?: TenantCtx,
+  ): {
+    entities: (typeof s.entities.$inferSelect)[];
+    tagLinks: { itemId: string; name: string }[];
+  } {
     if (itemIds.length === 0)
       return { entities: [], tagLinks: [] as { itemId: string; name: string }[] };
-    const entities = this.db
-      .select()
-      .from(s.entities)
-      .where(inArray(s.entities.itemId, itemIds))
-      .orderBy(desc(s.entities.id))
-      .limit(entityLimit)
-      .all();
-    const tagLinks = this.db
-      .select({ itemId: s.itemTags.itemId, name: s.tags.name })
-      .from(s.itemTags)
-      .innerJoin(s.tags, eq(s.tags.id, s.itemTags.tagId))
-      .where(inArray(s.itemTags.itemId, itemIds))
-      .all();
+    const entities = this.many<typeof s.entities.$inferSelect>(
+      this.db
+        .select()
+        .from(this.t.entities)
+        .where(and(inArray(this.t.entities.itemId, itemIds), ...this.scope('entities', ctx)))
+        .orderBy(desc(this.t.entities.id))
+        .limit(entityLimit),
+    );
+    const tagLinks = this.many<{ itemId: string; name: string }>(
+      this.db
+        .select({ itemId: this.t.itemTags.itemId, name: this.t.tags.name })
+        .from(this.t.itemTags)
+        .innerJoin(this.t.tags, eq(this.t.tags.id, this.t.itemTags.tagId))
+        .where(and(inArray(this.t.itemTags.itemId, itemIds), ...this.scope('item_tags', ctx))),
+    );
     return { entities, tagLinks };
   }
 
@@ -627,34 +1173,54 @@ export class Repo {
    * `all` = both; `suggested` = brain proposals awaiting the owner's approve/dismiss, which never
    * appear under `open`/`done`/`all`.
    */
-  listTodos(filter: 'open' | 'done' | 'all' | 'suggested' = 'open') {
+  listTodos(
+    filter: 'open' | 'done' | 'all' | 'suggested' = 'open',
+    ctx?: TenantCtx,
+  ): { todo: typeof s.todos.$inferSelect; chatTitle: string | null }[] {
     const where =
       filter === 'open'
-        ? and(eq(s.todos.status, 'open'), isNull(s.todos.doneAt))
+        ? and(
+            eq(this.t.todos.status, 'open'),
+            isNull(this.t.todos.doneAt),
+            ...this.scope('todos', ctx),
+          )
         : filter === 'done'
-          ? sql`${s.todos.doneAt} is not null`
+          ? and(sql`${this.t.todos.doneAt} is not null`, ...this.scope('todos', ctx))
           : filter === 'suggested'
-            ? eq(s.todos.status, 'suggested')
-            : eq(s.todos.status, 'open');
-    return this.db
-      .select({ todo: s.todos, chatTitle: s.items.title })
-      .from(s.todos)
-      .leftJoin(s.chats, eq(s.chats.id, s.todos.chatId))
-      .leftJoin(s.items, eq(s.items.id, s.chats.itemId))
-      .where(where)
-      .orderBy(desc(s.todos.createdAt))
-      .all();
-  }
-  getTodo(id: string) {
-    return this.db.select().from(s.todos).where(eq(s.todos.id, id)).get();
-  }
-  countOpenTodos() {
-    return (
+            ? and(eq(this.t.todos.status, 'suggested'), ...this.scope('todos', ctx))
+            : and(eq(this.t.todos.status, 'open'), ...this.scope('todos', ctx));
+    return this.many<{ todo: typeof s.todos.$inferSelect; chatTitle: string | null }>(
       this.db
-        .select({ n: sql<number>`count(*)` })
-        .from(s.todos)
-        .where(and(eq(s.todos.status, 'open'), isNull(s.todos.doneAt)))
-        .get()?.n ?? 0
+        .select({ todo: this.t.todos, chatTitle: this.t.items.title })
+        .from(this.t.todos)
+        .leftJoin(this.t.chats, eq(this.t.chats.id, this.t.todos.chatId))
+        .leftJoin(this.t.items, eq(this.t.items.id, this.t.chats.itemId))
+        .where(where)
+        .orderBy(desc(this.t.todos.createdAt)),
+    );
+  }
+  getTodo(id: string, ctx?: TenantCtx): typeof s.todos.$inferSelect | undefined {
+    return this.one<typeof s.todos.$inferSelect>(
+      this.db
+        .select()
+        .from(this.t.todos)
+        .where(and(eq(this.t.todos.id, id), ...this.scope('todos', ctx))),
+    );
+  }
+  countOpenTodos(ctx?: TenantCtx): number {
+    return (
+      this.one<{ n: number }>(
+        this.db
+          .select({ n: sql<number>`count(*)` })
+          .from(this.t.todos)
+          .where(
+            and(
+              eq(this.t.todos.status, 'open'),
+              isNull(this.t.todos.doneAt),
+              ...this.scope('todos', ctx),
+            ),
+          ),
+      )?.n ?? 0
     );
   }
   createTodo(
@@ -667,7 +1233,8 @@ export class Repo {
       chatId?: string | null | undefined;
     },
     status: 'open' | 'suggested' = 'open',
-  ) {
+    ctx?: TenantCtx,
+  ): typeof s.todos.$inferSelect {
     const row = {
       id: newId(),
       kind: input.kind,
@@ -679,9 +1246,10 @@ export class Repo {
       status,
       doneAt: null,
       createdAt: nowIso(),
-    };
-    this.db.insert(s.todos).values(row).run();
-    return row;
+      ...this.stamp(ctx),
+    } as Insert<typeof s.todos.$inferInsert>;
+    this.exec(this.db.insert(this.t.todos).values(row));
+    return row as typeof s.todos.$inferSelect;
   }
   updateTodo(
     id: string,
@@ -690,61 +1258,97 @@ export class Repo {
       title?: string | undefined;
       note?: string | null | undefined;
     },
-  ) {
+    ctx?: TenantCtx,
+  ): typeof s.todos.$inferSelect | undefined {
     const set: Partial<typeof s.todos.$inferInsert> = {};
     if (patch.done !== undefined) set.doneAt = patch.done ? nowIso() : null;
     if (patch.title !== undefined) set.title = patch.title;
     if (patch.note !== undefined) set.note = patch.note;
-    if (Object.keys(set).length) this.db.update(s.todos).set(set).where(eq(s.todos.id, id)).run();
-    return this.getTodo(id);
+    if (Object.keys(set).length)
+      this.exec(
+        this.db
+          .update(this.t.todos)
+          .set(set)
+          .where(and(eq(this.t.todos.id, id), ...this.scope('todos', ctx))),
+      );
+    return this.getTodo(id, ctx);
   }
   /** Move a brain suggestion onto the list; undefined when the row was not a suggestion. */
-  approveTodo(id: string) {
-    this.db
-      .update(s.todos)
-      .set({ status: 'open' })
-      .where(and(eq(s.todos.id, id), eq(s.todos.status, 'suggested')))
-      .run();
-    const row = this.getTodo(id);
+  approveTodo(id: string, ctx?: TenantCtx): typeof s.todos.$inferSelect | undefined {
+    this.exec(
+      this.db
+        .update(this.t.todos)
+        .set({ status: 'open' })
+        .where(
+          and(
+            eq(this.t.todos.id, id),
+            eq(this.t.todos.status, 'suggested'),
+            ...this.scope('todos', ctx),
+          ),
+        ),
+    );
+    const row = this.getTodo(id, ctx);
     return row?.status === 'open' ? row : undefined;
   }
-  deleteTodo(id: string) {
-    return this.db.delete(s.todos).where(eq(s.todos.id, id)).run().changes > 0;
+  deleteTodo(id: string, ctx?: TenantCtx): boolean {
+    return (
+      this.exec(
+        this.db
+          .delete(this.t.todos)
+          .where(and(eq(this.t.todos.id, id), ...this.scope('todos', ctx))),
+      ).changes > 0
+    );
   }
 
   // ---- place geocache (ADR 0022) ----
-  getPlaceGeo(query: string) {
-    return this.db.select().from(s.placeGeo).where(eq(s.placeGeo.query, query)).get();
+  getPlaceGeo(query: string, ctx?: TenantCtx): typeof s.placeGeo.$inferSelect | undefined {
+    return this.one<typeof s.placeGeo.$inferSelect>(
+      this.db
+        .select()
+        .from(this.t.placeGeo)
+        .where(and(eq(this.t.placeGeo.query, query), ...this.scope('place_geo', ctx))),
+    );
   }
-  putPlaceGeo(row: {
-    query: string;
-    lat: number | null;
-    lon: number | null;
-    label: string | null;
-    provider: string;
-  }) {
-    this.db
-      .insert(s.placeGeo)
-      .values({ ...row, resolvedAt: nowIso() })
-      .onConflictDoUpdate({
-        target: s.placeGeo.query,
-        set: {
-          lat: row.lat,
-          lon: row.lon,
-          label: row.label,
-          provider: row.provider,
-          resolvedAt: nowIso(),
-        },
-      })
-      .run();
+  putPlaceGeo(
+    row: {
+      query: string;
+      lat: number | null;
+      lon: number | null;
+      label: string | null;
+      provider: string;
+    },
+    ctx?: TenantCtx,
+  ): void {
+    this.exec(
+      this.db
+        .insert(this.t.placeGeo)
+        .values({ ...row, resolvedAt: nowIso(), ...this.stamp(ctx) } as Insert<
+          typeof s.placeGeo.$inferInsert
+        >)
+        .onConflictDoUpdate({
+          target: this.t.placeGeo.query,
+          set: {
+            lat: row.lat,
+            lon: row.lon,
+            label: row.label,
+            provider: row.provider,
+            resolvedAt: nowIso(),
+          },
+        }),
+    );
   }
   /** Forget cached misses so the next lookup asks the geocoder again; returns how many. */
   clearPlaceGeoMisses(): number {
-    return this.db.delete(s.placeGeo).where(isNull(s.placeGeo.lat)).run().changes;
+    return this.exec(this.db.delete(this.t.placeGeo).where(isNull(this.t.placeGeo.lat))).changes;
   }
   /** Every cached geocode, for joining onto place entities in one pass. */
-  listPlaceGeo() {
-    return this.db.select().from(s.placeGeo).all();
+  listPlaceGeo(ctx?: TenantCtx): (typeof s.placeGeo.$inferSelect)[] {
+    return this.many<typeof s.placeGeo.$inferSelect>(
+      this.db
+        .select()
+        .from(this.t.placeGeo)
+        .where(and(...this.scope('place_geo', ctx))),
+    );
   }
 
   // ---- FTS ----
@@ -760,7 +1364,11 @@ export class Repo {
       tags: string;
       entities: string;
     },
-  ) {
+    _ctx?: TenantCtx,
+  ): void {
+    // Postgres full-text search is a later hosted-mode step (see schema.pg.ts TODO); the FTS5
+    // table only exists on the SQLite path, so hosted mode indexes nothing here yet.
+    if (this.isPg || !this.sqlite) return;
     this.sqlite.prepare('DELETE FROM items_fts WHERE item_id = ?').run(itemId);
     this.sqlite
       .prepare(
@@ -778,7 +1386,33 @@ export class Repo {
       );
   }
 
-  searchFts(query: string, limit = 50): string[] {
+  /**
+   * SQLite: FTS5 `MATCH`. Postgres (hosted): a case-insensitive `ILIKE` stopgap over the item's
+   * own text until the tsvector port lands — both paths are tenant-scoped via `scope` when a
+   * context is given, so results never cross users in hosted mode.
+   */
+  searchFts(query: string, limit = 50, ctx?: TenantCtx): string[] {
+    if (this.isPg) {
+      const like = `%${query.replace(/[*"()%_]/g, ' ')}%`;
+      const rows = this.many<{ id: string }>(
+        this.db
+          .select({ id: this.t.items.id })
+          .from(this.t.items)
+          .where(
+            and(
+              or(
+                ilike(this.t.items.title, like),
+                ilike(this.t.items.note, like),
+                ilike(this.t.items.text, like),
+              ),
+              ...this.scope('items', ctx),
+            ),
+          )
+          .limit(limit),
+      );
+      return rows.map((r) => r.id);
+    }
+    if (!this.sqlite) return [];
     const rows = this.sqlite
       .prepare('SELECT item_id FROM items_fts WHERE items_fts MATCH ? ORDER BY rank LIMIT ?')
       .all(query, limit) as { item_id: string }[];
@@ -787,21 +1421,37 @@ export class Repo {
 
   // ---- cost ----
 
-  addCost(adapter: string, model: string | null, costUsd: number, runId: string) {
+  addCost(
+    adapter: string,
+    model: string | null,
+    costUsd: number,
+    runId: string,
+    ctx?: TenantCtx,
+    credentialId?: string | null,
+  ): void {
     const now = nowIso();
-    this.db
-      .insert(s.costLedger)
-      .values({ day: now.slice(0, 10), adapter, model, costUsd, runId, createdAt: now })
-      .run();
+    this.exec(
+      this.db.insert(this.t.costLedger).values({
+        day: now.slice(0, 10),
+        adapter,
+        model,
+        costUsd,
+        runId,
+        createdAt: now,
+        ...this.stamp(ctx),
+        ...(this.isPg && credentialId ? { credentialId } : {}),
+      } as Insert<typeof s.costLedger.$inferInsert>),
+    );
   }
 
-  spentToday(): number {
+  spentToday(ctx?: TenantCtx): number {
     const day = nowIso().slice(0, 10);
-    const r = this.db
-      .select({ total: sql<number>`coalesce(sum(${s.costLedger.costUsd}), 0)` })
-      .from(s.costLedger)
-      .where(eq(s.costLedger.day, day))
-      .get();
+    const r = this.one<{ total: number }>(
+      this.db
+        .select({ total: sql<number>`coalesce(sum(${this.t.costLedger.costUsd}), 0)` })
+        .from(this.t.costLedger)
+        .where(and(eq(this.t.costLedger.day, day), ...this.scope('cost_ledger', ctx))),
+    );
     return r?.total ?? 0;
   }
 
@@ -929,51 +1579,83 @@ export class Repo {
       .run();
   }
 
-  createDevice(name: string, platform: string, tokenHash: string) {
-    const row: typeof s.devices.$inferInsert = {
+  createDevice(name: string, platform: string, tokenHash: string, ctx?: TenantCtx) {
+    const row: Insert<typeof s.devices.$inferInsert> = {
       id: newId(),
       name,
       platform,
       tokenHash,
       createdAt: nowIso(),
+      ...this.stamp(ctx),
     };
-    this.db.insert(s.devices).values(row).run();
-    return row;
+    this.exec(this.db.insert(this.t.devices).values(row));
+    return row as typeof s.devices.$inferInsert;
   }
-  findDeviceByTokenHash(hash: string) {
-    return this.db
-      .select()
-      .from(s.devices)
-      .where(and(eq(s.devices.tokenHash, hash), sql`${s.devices.revokedAt} IS NULL`))
-      .get();
+  findDeviceByTokenHash(hash: string, ctx?: TenantCtx): typeof s.devices.$inferSelect | undefined {
+    return this.one<typeof s.devices.$inferSelect>(
+      this.db
+        .select()
+        .from(this.t.devices)
+        .where(
+          and(
+            eq(this.t.devices.tokenHash, hash),
+            sql`${this.t.devices.revokedAt} IS NULL`,
+            ...this.scope('devices', ctx),
+          ),
+        ),
+    );
   }
-  touchDevice(id: string) {
-    this.db.update(s.devices).set({ lastSeenAt: nowIso() }).where(eq(s.devices.id, id)).run();
+  touchDevice(id: string, ctx?: TenantCtx): void {
+    this.exec(
+      this.db
+        .update(this.t.devices)
+        .set({ lastSeenAt: nowIso() })
+        .where(and(eq(this.t.devices.id, id), ...this.scope('devices', ctx))),
+    );
   }
-  listDevices() {
-    return this.db.select().from(s.devices).orderBy(desc(s.devices.createdAt)).all();
+  listDevices(ctx?: TenantCtx): (typeof s.devices.$inferSelect)[] {
+    return this.many<typeof s.devices.$inferSelect>(
+      this.db
+        .select()
+        .from(this.t.devices)
+        .where(and(...this.scope('devices', ctx)))
+        .orderBy(desc(this.t.devices.createdAt)),
+    );
   }
-  revokeDevice(id: string) {
-    this.db.update(s.devices).set({ revokedAt: nowIso() }).where(eq(s.devices.id, id)).run();
+  revokeDevice(id: string, ctx?: TenantCtx): void {
+    this.exec(
+      this.db
+        .update(this.t.devices)
+        .set({ revokedAt: nowIso() })
+        .where(and(eq(this.t.devices.id, id), ...this.scope('devices', ctx))),
+    );
   }
 
   // ---- push subscriptions ----
 
-  upsertPushSubscription(deviceId: string, kind: string, endpoint: string, keys: string | null) {
-    const existing = this.db
-      .select()
-      .from(s.pushSubscriptions)
-      .where(eq(s.pushSubscriptions.endpoint, endpoint))
-      .get();
-    if (existing) {
+  upsertPushSubscription(
+    deviceId: string,
+    kind: string,
+    endpoint: string,
+    keys: string | null,
+    ctx?: TenantCtx,
+  ) {
+    const existing = this.one<typeof s.pushSubscriptions.$inferSelect>(
       this.db
-        .update(s.pushSubscriptions)
-        .set({ deviceId, kind, keys, failedCount: 0 })
-        .where(eq(s.pushSubscriptions.id, existing.id))
-        .run();
+        .select()
+        .from(this.t.pushSubscriptions)
+        .where(eq(this.t.pushSubscriptions.endpoint, endpoint)),
+    );
+    if (existing) {
+      this.exec(
+        this.db
+          .update(this.t.pushSubscriptions)
+          .set({ deviceId, kind, keys, failedCount: 0 })
+          .where(eq(this.t.pushSubscriptions.id, existing.id)),
+      );
       return { ...existing, deviceId, kind, keys, failedCount: 0 };
     }
-    const row: typeof s.pushSubscriptions.$inferInsert = {
+    const row: Insert<typeof s.pushSubscriptions.$inferInsert> = {
       id: newId(),
       deviceId,
       kind,
@@ -981,62 +1663,94 @@ export class Repo {
       keys,
       failedCount: 0,
       createdAt: nowIso(),
+      ...this.stamp(ctx),
     };
-    this.db.insert(s.pushSubscriptions).values(row).run();
-    return row;
+    this.exec(this.db.insert(this.t.pushSubscriptions).values(row));
+    return row as typeof s.pushSubscriptions.$inferInsert;
   }
-  listPushSubscriptions() {
+  listPushSubscriptions(ctx?: TenantCtx) {
     // Revoked devices keep their rows (cascade only on delete) but must not be notified.
-    return this.db
-      .select({
-        id: s.pushSubscriptions.id,
-        deviceId: s.pushSubscriptions.deviceId,
-        kind: s.pushSubscriptions.kind,
-        endpoint: s.pushSubscriptions.endpoint,
-        keys: s.pushSubscriptions.keys,
-        failedCount: s.pushSubscriptions.failedCount,
-      })
-      .from(s.pushSubscriptions)
-      .innerJoin(s.devices, eq(s.devices.id, s.pushSubscriptions.deviceId))
-      .where(sql`${s.devices.revokedAt} IS NULL`)
-      .all();
-  }
-  listPushSubscriptionsForDevice(deviceId: string) {
-    return this.db
-      .select()
-      .from(s.pushSubscriptions)
-      .where(eq(s.pushSubscriptions.deviceId, deviceId))
-      .all();
-  }
-  deletePushSubscription(id: string) {
-    this.db.delete(s.pushSubscriptions).where(eq(s.pushSubscriptions.id, id)).run();
-  }
-  deletePushSubscriptionByEndpoint(deviceId: string, endpoint: string): boolean {
-    const r = this.db
-      .delete(s.pushSubscriptions)
-      .where(
-        and(eq(s.pushSubscriptions.deviceId, deviceId), eq(s.pushSubscriptions.endpoint, endpoint)),
-      )
-      .run();
-    return r.changes > 0;
-  }
-  bumpPushFailure(id: string): number {
-    this.db
-      .update(s.pushSubscriptions)
-      .set({ failedCount: sql`${s.pushSubscriptions.failedCount} + 1` })
-      .where(eq(s.pushSubscriptions.id, id))
-      .run();
-    return (
-      this.db.select().from(s.pushSubscriptions).where(eq(s.pushSubscriptions.id, id)).get()
-        ?.failedCount ?? 0
+    return this.many<{
+      id: string;
+      deviceId: string;
+      kind: string;
+      endpoint: string;
+      keys: string | null;
+      failedCount: number;
+    }>(
+      this.db
+        .select({
+          id: this.t.pushSubscriptions.id,
+          deviceId: this.t.pushSubscriptions.deviceId,
+          kind: this.t.pushSubscriptions.kind,
+          endpoint: this.t.pushSubscriptions.endpoint,
+          keys: this.t.pushSubscriptions.keys,
+          failedCount: this.t.pushSubscriptions.failedCount,
+        })
+        .from(this.t.pushSubscriptions)
+        .innerJoin(this.t.devices, eq(this.t.devices.id, this.t.pushSubscriptions.deviceId))
+        .where(
+          and(sql`${this.t.devices.revokedAt} IS NULL`, ...this.scope('push_subscriptions', ctx)),
+        ),
     );
   }
-  resetPushFailures(id: string) {
-    this.db
-      .update(s.pushSubscriptions)
-      .set({ failedCount: 0 })
-      .where(eq(s.pushSubscriptions.id, id))
-      .run();
+  listPushSubscriptionsForDevice(deviceId: string, ctx?: TenantCtx) {
+    return this.many<typeof s.pushSubscriptions.$inferSelect>(
+      this.db
+        .select()
+        .from(this.t.pushSubscriptions)
+        .where(
+          and(
+            eq(this.t.pushSubscriptions.deviceId, deviceId),
+            ...this.scope('push_subscriptions', ctx),
+          ),
+        ),
+    );
+  }
+  deletePushSubscription(id: string, ctx?: TenantCtx): void {
+    this.exec(
+      this.db
+        .delete(this.t.pushSubscriptions)
+        .where(and(eq(this.t.pushSubscriptions.id, id), ...this.scope('push_subscriptions', ctx))),
+    );
+  }
+  deletePushSubscriptionByEndpoint(deviceId: string, endpoint: string, ctx?: TenantCtx): boolean {
+    const r = this.exec(
+      this.db
+        .delete(this.t.pushSubscriptions)
+        .where(
+          and(
+            eq(this.t.pushSubscriptions.deviceId, deviceId),
+            eq(this.t.pushSubscriptions.endpoint, endpoint),
+            ...this.scope('push_subscriptions', ctx),
+          ),
+        ),
+    );
+    return r.changes > 0;
+  }
+  bumpPushFailure(id: string, ctx?: TenantCtx): number {
+    this.exec(
+      this.db
+        .update(this.t.pushSubscriptions)
+        .set({ failedCount: sql`${this.t.pushSubscriptions.failedCount} + 1` })
+        .where(and(eq(this.t.pushSubscriptions.id, id), ...this.scope('push_subscriptions', ctx))),
+    );
+    return (
+      this.one<{ failedCount: number }>(
+        this.db
+          .select({ failedCount: this.t.pushSubscriptions.failedCount })
+          .from(this.t.pushSubscriptions)
+          .where(eq(this.t.pushSubscriptions.id, id)),
+      )?.failedCount ?? 0
+    );
+  }
+  resetPushFailures(id: string, ctx?: TenantCtx): void {
+    this.exec(
+      this.db
+        .update(this.t.pushSubscriptions)
+        .set({ failedCount: 0 })
+        .where(and(eq(this.t.pushSubscriptions.id, id), ...this.scope('push_subscriptions', ctx))),
+    );
   }
 }
 
