@@ -60,7 +60,7 @@ export const OUTPUT_TEMPLATES: Record<QuestionType, string> = {
     "Answer the owner's note directly. If there is no note, explain what this is and why it might be worth a second look.",
 };
 
-export function toolPolicyPreamble(policy: ToolPolicy, mode: Mode): string {
+export function toolPolicyPreamble(policy: ToolPolicy, mode: Mode, suggestTodo = false): string {
   const lines = [`Research mode: ${mode}.`];
   lines.push(
     policy.webSearch
@@ -82,12 +82,22 @@ export function toolPolicyPreamble(policy: ToolPolicy, mode: Mode): string {
       ? `You may save a report with write_sandbox_file under ${policy.writeRoot}.`
       : 'You may not write files in this mode.',
   );
+  if (suggestTodo)
+    lines.push(
+      'To do: when something from this answer belongs on the saved list (a place to visit, a tool to try, a task to do), propose it with suggest_todo. ' +
+        'Propose sparingly — only what the owner would plausibly want to act on later. Every proposal is a suggestion the owner approves or dismisses in the app; nothing is added to the list without them, so never say it was added.',
+    );
   return lines.join('\n');
 }
 
-export function renderBrief(brief: ResearchBrief, policy: ToolPolicy, mode: Mode): string {
+export function renderBrief(
+  brief: ResearchBrief,
+  policy: ToolPolicy,
+  mode: Mode,
+  suggestTodo = false,
+): string {
   const parts: string[] = [];
-  parts.push(toolPolicyPreamble(policy, mode));
+  parts.push(toolPolicyPreamble(policy, mode, suggestTodo));
   parts.push('');
   if (brief.kind === 'library') {
     parts.push('## Question about the library');
@@ -171,6 +181,7 @@ export function renderFollowUp(
   userMessage: string,
   hasNativeResume: boolean,
   policy: ToolPolicy = FOLLOWUP_POLICY,
+  suggestTodo = false,
 ): string {
   if (hasNativeResume) {
     return `Follow-up from the owner about the shared item above. ${FOLLOWUP_RULES}\n\n${userMessage}`;
@@ -178,5 +189,5 @@ export function renderFollowUp(
   const history = chat.history
     .map((h) => `${h.role === 'user' ? 'Owner' : 'You'}: ${h.content}`)
     .join('\n\n');
-  return `${renderBrief(chat.brief, policy, 'quick')}\n\n## Conversation so far\n${history}\n\n## New follow-up from the owner\n${userMessage}\n\n${FOLLOWUP_RULES}`;
+  return `${renderBrief(chat.brief, policy, 'quick', suggestTodo)}\n\n## Conversation so far\n${history}\n\n## New follow-up from the owner\n${userMessage}\n\n${FOLLOWUP_RULES}`;
 }

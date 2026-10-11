@@ -275,4 +275,38 @@ describe('claude-agent-sdk adapter', () => {
     expect((await can('WebSearch', { query: 'a' }, ctx))?.behavior).toBe('allow');
     expect((await can('WebSearch', { query: 'b' }, ctx))?.behavior).toBe('deny');
   });
+
+  it('suggest_todo is gated by the suggestTodo option, and canUseTool enforces it', async () => {
+    const calls: QueryParams[] = [];
+    const adapter = new ClaudeAgentSdkAdapter({
+      cwd: tmp,
+      query: fakeQuery(() => [init(), success('ok')], calls),
+    });
+    await adapter.run(sampleBrief(), sampleOptions(), { emit: () => {} });
+    expect(calls[0]?.options?.allowedTools).not.toContain('mcp__doubletake__suggest_todo');
+    const can = calls[0]?.options?.canUseTool;
+    expect(can).toBeDefined();
+    if (!can) return;
+    const ctx = { signal: new AbortController().signal, toolUseID: 'x', requestId: 'r' };
+    expect((await can('mcp__doubletake__suggest_todo', {}, ctx))?.behavior).toBe('deny');
+
+    const calls2: QueryParams[] = [];
+    const withDep = new ClaudeAgentSdkAdapter({
+      cwd: tmp,
+      query: fakeQuery(() => [init(), success('ok')], calls2),
+    });
+    let suggested = 0;
+    await withDep.run(
+      sampleBrief(),
+      sampleOptions({
+        suggestTodo: () => {
+          suggested += 1;
+          return { id: `todo-${suggested}` };
+        },
+      }),
+      { emit: () => {} },
+    );
+    expect(calls2[0]?.options?.allowedTools).toContain('mcp__doubletake__suggest_todo');
+    expect(String(calls2[0]?.prompt)).toContain('suggest_todo');
+  });
 });

@@ -103,7 +103,10 @@ export class OpenAICompatibleAdapter implements BrainAdapter {
   async run(brief: ResearchBrief, opts: RunOptions, sink: EventSink): Promise<RunResult> {
     const messages: ChatMessage[] = [
       { role: 'system', content: SYSTEM_FRAMING },
-      { role: 'user', content: renderBrief(brief, opts.tools, opts.mode) },
+      {
+        role: 'user',
+        content: renderBrief(brief, opts.tools, opts.mode, Boolean(opts.suggestTodo)),
+      },
     ];
     return this.loop(messages, opts, sink, opts.sessionId ?? newSessionId());
   }
@@ -117,13 +120,19 @@ export class OpenAICompatibleAdapter implements BrainAdapter {
     const stored = chat.sessionId ? this.loadSession(chat.sessionId) : null;
     if (stored) {
       const messages = condense(stored.messages, this.cfg.maxHistoryMessages ?? 60);
-      messages.push({ role: 'user', content: renderFollowUp(chat, userMessage, true, opts.tools) });
+      messages.push({
+        role: 'user',
+        content: renderFollowUp(chat, userMessage, true, opts.tools, Boolean(opts.suggestTodo)),
+      });
       return this.loop(messages, opts, sink, chat.sessionId as string);
     }
     // No stored session: the rendered transcript promises zero tools, so run with none.
     const messages: ChatMessage[] = [
       { role: 'system', content: SYSTEM_FRAMING },
-      { role: 'user', content: renderFollowUp(chat, userMessage, false, opts.tools) },
+      {
+        role: 'user',
+        content: renderFollowUp(chat, userMessage, false, opts.tools, Boolean(opts.suggestTodo)),
+      },
     ];
     const noTools: RunOptions = {
       ...opts,
@@ -209,7 +218,10 @@ export class OpenAICompatibleAdapter implements BrainAdapter {
     sink: EventSink,
     sessionId: string,
   ): Promise<RunResult> {
-    const tools = buildTools(opts.tools, this.deps);
+    const tools = buildTools(opts.tools, {
+      ...this.deps,
+      ...(opts.suggestTodo ? { suggestTodo: opts.suggestTodo } : {}),
+    });
     const usage = { inputTokens: 0, outputTokens: 0 };
     const price = this.cfg.prices?.[opts.model ?? this.cfg.model];
     const cost = () =>

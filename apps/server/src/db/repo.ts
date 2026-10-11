@@ -1,6 +1,6 @@
 import type { Answer, IngestRequest, Mode, Platform, RunKind } from '@doubletake/shared';
 import { newId, nowIso } from '@doubletake/shared';
-import { and, desc, eq, gte, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, isNull, sql } from 'drizzle-orm';
 import type { Db } from './index.js';
 import * as s from './schema.js';
 
@@ -369,6 +369,16 @@ export class Repo {
     return this.db.select().from(s.entities).where(eq(s.entities.itemId, itemId)).all();
   }
 
+  getEntity(id: string) {
+    return this.db.select().from(s.entities).where(eq(s.entities.id, id)).get();
+  }
+
+  /** Star (or unstar) one thing; undefined when the entity row does not exist. */
+  setEntityStarred(id: string, starred: boolean) {
+    this.db.update(s.entities).set({ starred }).where(eq(s.entities.id, id)).run();
+    return this.getEntity(id);
+  }
+
   setAutoTags(itemId: string, names: string[]) {
     const clean = [...new Set(names.map((n) => n.trim().toLowerCase()).filter(Boolean))].slice(
       0,
@@ -568,27 +578,64 @@ export class Repo {
       .map((r) => r.itemId);
   }
 
-  /** Every entity of one kind across the library, newest item first. */
-  listEntitiesByKind(kind: string, limit = 500) {
+  /**
+   * Every entity of one kind across the library, newest item first. `starred` narrows the list:
+   * true for starred only, false for unstarred only, undefined for everything.
+   */
+  listEntitiesByKind(kind: string, limit = 500, starred?: boolean) {
+    const filters = [eq(s.entities.kind, kind)];
+    if (starred !== undefined) filters.push(eq(s.entities.starred, starred));
     return this.db
       .select({ entity: s.entities, item: s.items, chatId: s.chats.id })
       .from(s.entities)
       .innerJoin(s.items, eq(s.items.id, s.entities.itemId))
       .innerJoin(s.chats, eq(s.chats.itemId, s.items.id))
-      .where(eq(s.entities.kind, kind))
+      .where(and(...filters))
       .orderBy(desc(s.items.createdAt))
       .limit(limit)
       .all();
   }
 
+  /**
+   * Bulk payload for the map-of-everything graph: entity rows and tag links for one set of
+   * items (the chats inside the graph cap). Two indexed selects instead of a per-item walk.
+   * Entities come newest first — ULID ids sort by creation time, so `id desc` is stable even
+   * when rows share a `created_at`.
+   */
+  graphData(itemIds: string[], entityLimit: number) {
+    if (itemIds.length === 0)
+      return { entities: [], tagLinks: [] as { itemId: string; name: string }[] };
+    const entities = this.db
+      .select()
+      .from(s.entities)
+      .where(inArray(s.entities.itemId, itemIds))
+      .orderBy(desc(s.entities.id))
+      .limit(entityLimit)
+      .all();
+    const tagLinks = this.db
+      .select({ itemId: s.itemTags.itemId, name: s.tags.name })
+      .from(s.itemTags)
+      .innerJoin(s.tags, eq(s.tags.id, s.itemTags.tagId))
+      .where(inArray(s.itemTags.itemId, itemIds))
+      .all();
+    return { entities, tagLinks };
+  }
+
   // ---- todos (ADR 0031) ----
-  listTodos(filter: 'open' | 'done' | 'all' = 'open') {
+  /**
+   * `open` = on the list and not ticked; `done` = ticked (a ticked entry keeps `status='open'`);
+   * `all` = both; `suggested` = brain proposals awaiting the owner's approve/dismiss, which never
+   * appear under `open`/`done`/`all`.
+   */
+  listTodos(filter: 'open' | 'done' | 'all' | 'suggested' = 'open') {
     const where =
       filter === 'open'
-        ? isNull(s.todos.doneAt)
+        ? and(eq(s.todos.status, 'open'), isNull(s.todos.doneAt))
         : filter === 'done'
           ? sql`${s.todos.doneAt} is not null`
-          : undefined;
+          : filter === 'suggested'
+            ? eq(s.todos.status, 'suggested')
+            : eq(s.todos.status, 'open');
     return this.db
       .select({ todo: s.todos, chatTitle: s.items.title })
       .from(s.todos)
@@ -603,18 +650,24 @@ export class Repo {
   }
   countOpenTodos() {
     return (
-      this.db.select({ n: sql<number>`count(*)` }).from(s.todos).where(isNull(s.todos.doneAt)).get()
-        ?.n ?? 0
+      this.db
+        .select({ n: sql<number>`count(*)` })
+        .from(s.todos)
+        .where(and(eq(s.todos.status, 'open'), isNull(s.todos.doneAt)))
+        .get()?.n ?? 0
     );
   }
-  createTodo(input: {
-    kind: string;
-    title: string;
-    url?: string | null | undefined;
-    note?: string | null | undefined;
-    attributes?: Record<string, unknown> | undefined;
-    chatId?: string | null | undefined;
-  }) {
+  createTodo(
+    input: {
+      kind: string;
+      title: string;
+      url?: string | null | undefined;
+      note?: string | null | undefined;
+      attributes?: Record<string, unknown> | undefined;
+      chatId?: string | null | undefined;
+    },
+    status: 'open' | 'suggested' = 'open',
+  ) {
     const row = {
       id: newId(),
       kind: input.kind,
@@ -623,6 +676,7 @@ export class Repo {
       note: input.note ?? null,
       attributes: JSON.stringify(input.attributes ?? {}),
       chatId: input.chatId ?? null,
+      status,
       doneAt: null,
       createdAt: nowIso(),
     };
@@ -643,6 +697,16 @@ export class Repo {
     if (patch.note !== undefined) set.note = patch.note;
     if (Object.keys(set).length) this.db.update(s.todos).set(set).where(eq(s.todos.id, id)).run();
     return this.getTodo(id);
+  }
+  /** Move a brain suggestion onto the list; undefined when the row was not a suggestion. */
+  approveTodo(id: string) {
+    this.db
+      .update(s.todos)
+      .set({ status: 'open' })
+      .where(and(eq(s.todos.id, id), eq(s.todos.status, 'suggested')))
+      .run();
+    const row = this.getTodo(id);
+    return row?.status === 'open' ? row : undefined;
   }
   deleteTodo(id: string) {
     return this.db.delete(s.todos).where(eq(s.todos.id, id)).run().changes > 0;

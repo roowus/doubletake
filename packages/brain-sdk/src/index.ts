@@ -14,6 +14,15 @@ export interface ToolPolicy {
   writeRoot: string | null;
 }
 
+/** A todo the brain wants to propose for the owner's saved list (ADR 0031). */
+export interface TodoSuggestion {
+  /** An entity kind (`place`, `tool`, …) or `task`. */
+  kind: string;
+  title: string;
+  url?: string | null;
+  note?: string | null;
+}
+
 export interface RunOptions {
   mode: Mode;
   maxTurns: number;
@@ -23,6 +32,12 @@ export interface RunOptions {
   sessionId?: string;
   tools: ToolPolicy;
   signal: AbortSignal;
+  /**
+   * When set, the brain may propose entries for the owner's saved list with its `suggest_todo`
+   * tool. Implementations must store every proposal as a *suggestion* the owner approves in the
+   * UI — a brain can never add an active todo itself — and are free to reject malformed ones.
+   */
+  suggestTodo?: (s: TodoSuggestion) => Promise<{ id: string }> | { id: string };
 }
 
 export interface ResearchBrief {

@@ -5,6 +5,7 @@ import type { Answer, Mode, QuestionType, RunEvent, UntrustedBlock } from '@doub
 import { FOLLOWUP_BUDGET, MODE_BUDGETS, pickModeByKeywords } from '@doubletake/shared';
 import { LIBRARY_TEMPLATE, OUTPUT_TEMPLATES, SYSTEM_FRAMING } from '../brains/prompts.js';
 import { BrainSet, type ModeBinding } from '../brains/registry.js';
+import { TODO_KINDS } from '../brains/tools/index.js';
 import type { Config } from '../config/index.js';
 import type { ItemRow, Repo, RunRow } from '../db/repo.js';
 import { exportItemMarkdown } from '../export/markdown.js';
@@ -311,6 +312,7 @@ export class QueueWorker extends EventEmitter {
     signal: AbortSignal,
     sessionId: string | null,
     model: string | null,
+    chatId: string,
   ): RunOptions {
     const b = MODE_BUDGETS[mode];
     const m = model ?? this.cfg.brainModel;
@@ -322,6 +324,30 @@ export class QueueWorker extends EventEmitter {
       ...(sessionId ? { sessionId } : {}),
       tools: this.policyFor(mode, kind),
       signal,
+      /**
+       * The brain's only path onto the saved list: every proposal is stored as `status='suggested'`
+       * and waits for the owner to approve it in the UI (ADR 0031). Nothing here accepts a status,
+       * so a run can never add an active todo, however the model phrases the tool call.
+       */
+      suggestTodo: (s) => {
+        const title = s.title.trim().slice(0, 300);
+        if (!title) throw new Error('title is required');
+        if (!TODO_KINDS.includes(s.kind as (typeof TODO_KINDS)[number]))
+          throw new Error(`kind must be one of: ${TODO_KINDS.join(', ')}`);
+        if (s.url && !/^https?:\/\//.test(s.url)) throw new Error('url must be an http(s) URL');
+        const row = this.repo.createTodo(
+          {
+            kind: s.kind,
+            title,
+            ...(s.url ? { url: s.url.slice(0, 2000) } : {}),
+            ...(s.note?.trim() ? { note: s.note.trim().slice(0, 2000) } : {}),
+            chatId,
+          },
+          'suggested',
+        );
+        this.emit('chat_updated', chatId);
+        return { id: row.id };
+      },
     };
   }
 
@@ -385,7 +411,7 @@ export class QueueWorker extends EventEmitter {
     this.emit('chat_updated', chatId);
 
     const brief = this.buildBrief(item, ctx.blocks, questionType, ctx.hints);
-    const opts = this.runOptions(mode, 'research', signal, null, bound.model);
+    const opts = this.runOptions(mode, 'research', signal, null, bound.model, chatId);
     const result = await bound.adapter.run(brief, opts, { emit: (e) => emit(e.type, e.payload) });
     return { ...result, mode, run: current, kind: 'research' as const };
   }
@@ -524,7 +550,7 @@ export class QueueWorker extends EventEmitter {
 
     // 3. Research.
     const brief = this.buildBrief(item, blocks, questionType);
-    const opts = this.runOptions(mode, 'research', signal, null, bound.model);
+    const opts = this.runOptions(mode, 'research', signal, null, bound.model, chatId);
     const result = await bound.adapter.run(brief, opts, { emit: (e) => emit(e.type, e.payload) });
     if (extraction?.warnings.length) {
       result.text = `${result.text}\n\n> Extraction notes: ${extraction.warnings.join('; ')}`;
@@ -562,7 +588,7 @@ export class QueueWorker extends EventEmitter {
         brief: this.buildBrief(item, blocks, questionType),
       },
       run.userMessage ?? '',
-      this.runOptions(mode, 'followup', signal, sessionId, model),
+      this.runOptions(mode, 'followup', signal, sessionId, model, chatId),
       { emit: (e) => emit(e.type, e.payload) },
     );
     return { ...result, mode, run, kind: 'followup' as const };

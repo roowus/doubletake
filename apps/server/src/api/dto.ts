@@ -147,9 +147,11 @@ export function toEntityHit(
   geo?: EntityGeo | null,
 ): EntityHit {
   return {
+    id: r.entity.id,
     kind: r.entity.kind as EntityHit['kind'],
     name: r.entity.name,
     attributes: safeJson(r.entity.attributes),
+    starred: r.entity.starred,
     ...(r.entity.url ? { url: r.entity.url } : {}),
     ...(geo ? { geo } : {}),
     confidence: r.entity.confidence ?? 0.7,
@@ -174,6 +176,7 @@ export function toTodoDto(
     attributes: safeJson(row.attributes),
     chatId: row.chatId,
     chatTitle: chatTitle ?? null,
+    status: row.status as TodoDto['status'],
     doneAt: row.doneAt,
     createdAt: row.createdAt,
   };

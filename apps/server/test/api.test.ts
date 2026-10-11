@@ -583,6 +583,177 @@ describe('API', () => {
     ).toBe(404);
   });
 
+  it('saved list: brain suggestions stay hidden until the owner approves or dismisses them', async () => {
+    const chatId = (
+      await app.inject({ method: 'GET', url: '/api/chats', headers: auth() })
+    ).json()[0].id as string;
+    // The worker's suggestTodo callback is the brain's only write path; it hard-codes 'suggested'.
+    const suggested = env.repo.createTodo(
+      { kind: 'tool', title: 'ripgrep', url: 'https://github.com/BurntSushi/ripgrep', chatId },
+      'suggested',
+    );
+    const other = env.repo.createTodo({ kind: 'task', title: 'Water the plants' }, 'suggested');
+
+    // Suggestions appear in no owner view (open, done, all)…
+    const ids = async (u: string) =>
+      (
+        (await app.inject({ method: 'GET', url: u, headers: auth() })).json() as {
+          id: string;
+        }[]
+      ).map((t) => t.id);
+    expect(await ids('/api/todos')).not.toContain(suggested.id);
+    expect(await ids('/api/todos?done=done')).not.toContain(suggested.id);
+    expect(await ids('/api/todos?done=all')).not.toContain(suggested.id);
+    // …but both are pending on the suggestions endpoint.
+    const pending = await ids('/api/todos/suggestions');
+    expect(pending).toHaveLength(2);
+    expect(pending).toContain(suggested.id);
+    expect(pending).toContain(other.id);
+
+    // The generic patch route refuses to tick a suggestion.
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: `/api/todos/${suggested.id}`,
+          headers: auth(),
+          payload: { done: true },
+        })
+      ).statusCode,
+    ).toBe(409);
+
+    // Approve moves it onto the list as an open entry.
+    const ok = await app.inject({
+      method: 'POST',
+      url: `/api/todos/${suggested.id}/approve`,
+      headers: auth(),
+    });
+    expect(ok.statusCode).toBe(200);
+    expect(ok.json()).toMatchObject({ id: suggested.id, status: 'open', doneAt: null });
+    expect(await ids('/api/todos')).toContain(suggested.id);
+    expect(await ids('/api/todos/suggestions')).toEqual([other.id]);
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: `/api/todos/${suggested.id}/approve`,
+          headers: auth(),
+        })
+      ).statusCode,
+    ).toBe(409);
+    expect(
+      (await app.inject({ method: 'POST', url: '/api/todos/nope/approve', headers: auth() }))
+        .statusCode,
+    ).toBe(404);
+
+    // Dismiss throws the other one away without it ever reaching the list.
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: `/api/todos/${other.id}/dismiss`,
+          headers: auth(),
+        })
+      ).statusCode,
+    ).toBe(204);
+    expect(await ids('/api/todos/suggestions')).toHaveLength(0);
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: `/api/todos/${other.id}/dismiss`,
+          headers: auth(),
+        })
+      ).statusCode,
+    ).toBe(404);
+
+    // An approved suggestion behaves like any other entry afterwards.
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: `/api/todos/${suggested.id}`,
+          headers: auth(),
+          payload: { done: true },
+        })
+      ).statusCode,
+    ).toBe(200);
+  });
+
+  it('staring: star a thing, read the flag back, filter the entity list by it', async () => {
+    const hits = (
+      await app.inject({ method: 'GET', url: '/api/entities?kind=tool', headers: auth() })
+    ).json();
+    expect(hits).toHaveLength(1);
+    expect(hits[0]).toMatchObject({ starred: false, name: 'Widget' });
+    const entityId = hits[0].id as string;
+
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: `/api/entities/${entityId}/star`,
+          payload: { starred: true },
+        })
+      ).statusCode,
+    ).toBe(401);
+
+    const bad = await app.inject({
+      method: 'POST',
+      url: `/api/entities/${entityId}/star`,
+      headers: auth(),
+      payload: { starred: 'yes' },
+    });
+    expect(bad.statusCode).toBe(400);
+
+    const unknown = await app.inject({
+      method: 'POST',
+      url: '/api/entities/nope/star',
+      headers: auth(),
+      payload: { starred: true },
+    });
+    expect(unknown.statusCode).toBe(404);
+
+    const on = await app.inject({
+      method: 'POST',
+      url: `/api/entities/${entityId}/star`,
+      headers: auth(),
+      payload: { starred: true },
+    });
+    expect(on.statusCode).toBe(200);
+    expect(on.json()).toEqual({ id: entityId, starred: true });
+
+    expect(
+      (await app.inject({ method: 'GET', url: '/api/entities?kind=tool', headers: auth() })).json(),
+    ).toMatchObject([{ id: entityId, starred: true, name: 'Widget' }]);
+
+    const starred = (
+      await app.inject({ method: 'GET', url: '/api/entities?kind=tool&starred=1', headers: auth() })
+    ).json();
+    expect(starred).toHaveLength(1);
+    const unstarred = (
+      await app.inject({ method: 'GET', url: '/api/entities?kind=tool&starred=0', headers: auth() })
+    ).json();
+    expect(unstarred).toHaveLength(0);
+
+    const off = await app.inject({
+      method: 'POST',
+      url: `/api/entities/${entityId}/star`,
+      headers: auth(),
+      payload: { starred: false },
+    });
+    expect(off.json()).toEqual({ id: entityId, starred: false });
+    expect(
+      (
+        await app.inject({
+          method: 'GET',
+          url: '/api/entities?kind=tool&starred=1',
+          headers: auth(),
+        })
+      ).json(),
+    ).toHaveLength(0);
+  });
+
   it('validation errors are 400 with issues', async () => {
     const res = await app.inject({
       method: 'POST',

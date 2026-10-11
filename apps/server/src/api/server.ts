@@ -22,6 +22,7 @@ import {
   resolveQuery,
   seedAutoCollections,
 } from '../library/collections.js';
+import { buildLibraryGraph } from '../library/graph.js';
 import {
   exportKarakeep,
   exportMemos,
@@ -393,6 +394,9 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
 
   app.get('/api/tags', async () => repo.listAllTags());
 
+  /** Map of everything: read-only graph over chats, things and tags (Library → Graph). */
+  app.get('/api/library/graph', async () => buildLibraryGraph(repo));
+
   // ---- collections + entity views (M6) ----
   const toShareUrl = (token: string) => shareUrl(cfg, token);
 
@@ -572,6 +576,11 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
     return reply.code(201).send(toTodoDto(row, item?.title));
   });
 
+  /** Brain suggestions waiting for the owner (ADR 0031); approve or dismiss each one. */
+  app.get('/api/todos/suggestions', async () => {
+    return repo.listTodos('suggested').map((r) => toTodoDto(r.todo, r.chatTitle));
+  });
+
   /** Tick, untick, retitle or annotate one entry. */
   app.post('/api/todos/:id', async (req, reply) => {
     const { id } = z.object({ id: z.string() }).parse(req.params);
@@ -582,13 +591,41 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
         note: z.string().max(2000).nullable().optional(),
       })
       .parse(req.body ?? {});
-    if (!repo.getTodo(id)) return reply.code(404).send({ error: 'not found' });
+    const existing = repo.getTodo(id);
+    if (!existing) return reply.code(404).send({ error: 'not found' });
+    if (existing.status === 'suggested')
+      return reply.code(409).send({ error: 'still a suggestion; approve or dismiss it first' });
     const row = repo.updateTodo(id, patch);
     if (!row) return reply.code(404).send({ error: 'not found' });
     const chat = row.chatId ? repo.getChat(row.chatId) : undefined;
     const item = chat ? repo.getItem(chat.itemId) : undefined;
     if (chat) worker.emit('chat_updated', chat.id);
     return toTodoDto(row, item?.title);
+  });
+
+  /** Move a suggestion onto the list. */
+  app.post('/api/todos/:id/approve', async (req, reply) => {
+    const { id } = z.object({ id: z.string() }).parse(req.params);
+    const row = repo.getTodo(id);
+    if (!row) return reply.code(404).send({ error: 'not found' });
+    if (row.status !== 'suggested') return reply.code(409).send({ error: 'not a suggestion' });
+    const approved = repo.approveTodo(id);
+    if (!approved) return reply.code(409).send({ error: 'not a suggestion' });
+    const chat = approved.chatId ? repo.getChat(approved.chatId) : undefined;
+    const item = chat ? repo.getItem(chat.itemId) : undefined;
+    if (chat) worker.emit('chat_updated', chat.id);
+    return toTodoDto(approved, item?.title);
+  });
+
+  /** Throw a suggestion away without adding it to the list. */
+  app.post('/api/todos/:id/dismiss', async (req, reply) => {
+    const { id } = z.object({ id: z.string() }).parse(req.params);
+    const row = repo.getTodo(id);
+    if (!row) return reply.code(404).send({ error: 'not found' });
+    if (row.status !== 'suggested') return reply.code(409).send({ error: 'not a suggestion' });
+    if (!repo.deleteTodo(id)) return reply.code(404).send({ error: 'not found' });
+    if (row.chatId) worker.emit('chat_updated', row.chatId);
+    return reply.code(204).send();
   });
 
   app.delete('/api/todos/:id', async (req, reply) => {
@@ -605,10 +642,15 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
       .object({
         kind: z.string().min(1),
         limit: z.coerce.number().int().min(1).max(1000).default(500),
+        starred: z.enum(['0', '1']).optional(),
       })
       .parse(req.query);
     const kind = q.kind.toLowerCase();
-    const rows = repo.listEntitiesByKind(kind, q.limit);
+    const rows = repo.listEntitiesByKind(
+      kind,
+      q.limit,
+      q.starred === undefined ? undefined : q.starred === '1',
+    );
     if (kind !== 'place') return rows.map((r) => toEntityHit(r));
     // Places carry coordinates when known: the brain's own lat/lon, else the geocoder cache (ADR 0022).
     const cache = new Map(repo.listPlaceGeo().map((g) => [g.query, g]));
@@ -623,6 +665,15 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
           : null;
       return toEntityHit(r, geo);
     });
+  });
+
+  /** Star (or unstar) one thing from the Library grid. */
+  app.post('/api/entities/:id/star', async (req, reply) => {
+    const { id } = z.object({ id: z.string() }).parse(req.params);
+    const body = z.object({ starred: z.boolean() }).parse(req.body);
+    const row = repo.setEntityStarred(id, body.starred);
+    if (!row) return reply.code(404).send({ error: 'not found' });
+    return { id: row.id, starred: row.starred };
   });
 
   /** Geocode every place that has no coordinates yet (backfill after enabling the geocoder). */
