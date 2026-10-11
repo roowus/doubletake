@@ -10,7 +10,7 @@
  */
 
 import type { UntrustedBlock } from '@doubletake/shared';
-import type { Repo } from '../db/repo.js';
+import type { Repo, TenantCtx } from '../db/repo.js';
 import { extractionText, parseExtraction } from '../extract/flatten.js';
 
 /** Extraction `tool` under which the retrieved context is stored on the asking item. */
@@ -83,6 +83,7 @@ export function libraryContext(
   repo: Repo,
   question: string,
   opts: AskOptions = {},
+  ctx?: TenantCtx | undefined,
 ): LibraryContext {
   const limit = opts.limit ?? 8;
   const perHit = opts.perHitChars ?? 3000;
@@ -95,20 +96,20 @@ export function libraryContext(
 
   let used = 0;
   // Over-fetch a little so excluding the asking item and other library questions still fills `limit`.
-  for (const itemId of repo.searchFts(query, limit * 2 + 2)) {
+  for (const itemId of repo.searchFts(query, limit * 2 + 2, ctx)) {
     if (hits.length >= limit || used >= total) break;
     if (itemId === opts.excludeItemId) continue;
-    const item = repo.getItem(itemId);
-    const chat = repo.getChatByItem(itemId);
+    const item = repo.getItem(itemId, ctx);
+    const chat = repo.getChatByItem(itemId, ctx);
     if (!item || !chat || item.channel === 'library') continue;
 
     const parts: string[] = [];
     if (item.note?.trim()) parts.push(`Note: ${item.note.trim()}`);
     const url = item.canonicalUrl ?? item.sourceUrl;
     if (url) parts.push(`Source: ${url}`);
-    const tags = repo.listTags(itemId);
+    const tags = repo.listTags(itemId, ctx);
     if (tags.length) parts.push(`Tags: ${tags.join(', ')}`);
-    const entities = repo.listEntities(itemId);
+    const entities = repo.listEntities(itemId, ctx);
     if (entities.length) {
       parts.push(
         `Entities: ${entities

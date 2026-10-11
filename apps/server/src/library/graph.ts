@@ -16,7 +16,7 @@
  */
 
 import type { GraphEdge, GraphNode, LibraryGraph } from '@doubletake/shared';
-import type { Repo } from '../db/repo.js';
+import type { Repo, TenantCtx } from '../db/repo.js';
 
 export interface GraphCaps {
   chats: number;
@@ -26,8 +26,12 @@ export interface GraphCaps {
 /** Newest ~150 chats, ~200 distinct things; tags are uncapped but only linked ones survive. */
 export const GRAPH_CAPS: GraphCaps = { chats: 150, entities: 200 };
 
-export function buildLibraryGraph(repo: Repo, caps: GraphCaps = GRAPH_CAPS): LibraryGraph {
-  const chatRows = repo.listChats(caps.chats);
+export function buildLibraryGraph(
+  repo: Repo,
+  caps: GraphCaps = GRAPH_CAPS,
+  ctx?: TenantCtx | undefined,
+): LibraryGraph {
+  const chatRows = repo.listChats(caps.chats, ctx);
   const chatIdByItem = new Map(chatRows.map((r) => [r.item.id, r.chat.id]));
 
   const nodes: GraphNode[] = [];
@@ -41,7 +45,7 @@ export function buildLibraryGraph(repo: Repo, caps: GraphCaps = GRAPH_CAPS): Lib
     });
   }
 
-  const { entities, tagLinks } = repo.graphData([...chatIdByItem.keys()], caps.entities);
+  const { entities, tagLinks } = repo.graphData([...chatIdByItem.keys()], caps.entities, ctx);
 
   // Distinct things first (newest rows win the slot), each with an edge to every capped chat
   // that mentions them — that is what makes hubs the visual centres of the graph.

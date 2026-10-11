@@ -9,10 +9,15 @@ import type {
   RunDto,
   TodoDto,
 } from '@doubletake/shared';
-import type { ChatRow, ItemRow, MessageRow, Repo, RunRow } from '../db/repo.js';
+import type { ChatRow, ItemRow, MessageRow, Repo, RunRow, TenantCtx } from '../db/repo.js';
 import { extractionText, parseExtraction } from '../extract/flatten.js';
 
-export function toChatSummary(repo: Repo, chat: ChatRow, item: ItemRow): ChatSummary {
+export function toChatSummary(
+  repo: Repo,
+  chat: ChatRow,
+  item: ItemRow,
+  ctx?: TenantCtx | undefined,
+): ChatSummary {
   return {
     id: chat.id,
     itemId: item.id,
@@ -25,7 +30,7 @@ export function toChatSummary(repo: Repo, chat: ChatRow, item: ItemRow): ChatSum
     lastMessageAt: chat.lastMessageAt,
     createdAt: chat.createdAt,
     sourceUrl: item.canonicalUrl ?? item.sourceUrl,
-    tags: repo.listTags(item.id),
+    tags: repo.listTags(item.id, ctx),
   };
 }
 
@@ -65,9 +70,14 @@ export function toRunDto(r: RunRow): RunDto {
   };
 }
 
-export function toChatDetail(repo: Repo, chat: ChatRow, item: ItemRow): ChatDetail {
+export function toChatDetail(
+  repo: Repo,
+  chat: ChatRow,
+  item: ItemRow,
+  ctx?: TenantCtx | undefined,
+): ChatDetail {
   return {
-    chat: toChatSummary(repo, chat, item),
+    chat: toChatSummary(repo, chat, item, ctx),
     item: {
       note: item.note,
       focus: item.focus,
@@ -77,18 +87,18 @@ export function toChatDetail(repo: Repo, chat: ChatRow, item: ItemRow): ChatDeta
       canonicalUrl: item.canonicalUrl,
       sourceUrl: item.sourceUrl,
       title: item.title,
-      preview: pickPreview(repo.listMediaAssets(item.id)),
+      preview: pickPreview(repo.listMediaAssets(item.id, ctx)),
     },
-    messages: repo.listMessages(chat.id).map(toMessageDto),
-    runs: repo.listRuns(chat.id).map(toRunDto),
-    entities: repo.listEntities(item.id).map((e) => ({
+    messages: repo.listMessages(chat.id, ctx).map(toMessageDto),
+    runs: repo.listRuns(chat.id, ctx).map(toRunDto),
+    entities: repo.listEntities(item.id, ctx).map((e) => ({
       kind: e.kind as ChatDetail['entities'][number]['kind'],
       name: e.name,
       attributes: safeJson(e.attributes),
       ...(e.url ? { url: e.url } : {}),
       confidence: e.confidence ?? 0.7,
     })),
-    extractions: latestExtractions(repo.listExtractions(item.id)),
+    extractions: latestExtractions(repo.listExtractions(item.id, ctx)),
   };
 }
 

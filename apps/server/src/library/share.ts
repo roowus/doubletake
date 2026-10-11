@@ -8,7 +8,7 @@
 
 import { randomBytes } from 'node:crypto';
 import type { Config } from '../config/index.js';
-import type { Repo } from '../db/repo.js';
+import type { Repo, TenantCtx } from '../db/repo.js';
 import { resolveCollection } from './collections.js';
 
 export const SHARE_PATH_PREFIX = '/s/';
@@ -95,14 +95,15 @@ export interface SharedItemView {
 export function sharedItems(
   repo: Repo,
   c: { id: string; query: string; manual: boolean },
+  ctx?: TenantCtx | undefined,
 ): SharedItemView[] {
   const out: SharedItemView[] = [];
-  for (const itemId of resolveCollection(repo, c)) {
-    const item = repo.getItem(itemId);
+  for (const itemId of resolveCollection(repo, c, ctx)) {
+    const item = repo.getItem(itemId, ctx);
     if (!item) continue;
-    const chat = repo.getChatByItem(item.id);
+    const chat = repo.getChatByItem(item.id, ctx);
     const answer = chat
-      ? (repo.listMessages(chat.id).find((m) => m.role === 'assistant' && m.kind === 'answer')
+      ? (repo.listMessages(chat.id, ctx).find((m) => m.role === 'assistant' && m.kind === 'answer')
           ?.content ?? null)
       : null;
     out.push({
@@ -110,7 +111,7 @@ export function sharedItems(
       url: item.canonicalUrl ?? item.sourceUrl ?? null,
       platform: item.platform,
       savedAt: item.createdAt,
-      tags: repo.listTags(item.id),
+      tags: repo.listTags(item.id, ctx),
       answer,
     });
   }
