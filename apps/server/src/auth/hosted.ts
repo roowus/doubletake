@@ -88,12 +88,25 @@ export class HostedAuth {
 
   // ---- accounts ----
 
-  async registerEmail(email: string, password: string): Promise<HostedUser> {
+  async registerEmail(
+    email: string,
+    password: string,
+    /** Required once DOUBLETAKE_INVITE_CODE is set — except for the bootstrap first user. */
+    inviteCode?: string | undefined,
+  ): Promise<HostedUser> {
     const norm = normalizeEmail(email);
     if (!EMAIL_RE.test(norm)) throw new HostedAuthError('invalid email address');
     if (password.length < 8) throw new HostedAuthError('password must be at least 8 characters');
     const existing = await this.findUserByEmail(norm);
     if (existing) throw new HostedAuthError('email already registered');
+    // Registration invite gate (ADR 0032): when an invite code is configured, every
+    // registration after the bootstrap first user must present the matching code.
+    const expected = process.env.DOUBLETAKE_INVITE_CODE;
+    if (expected) {
+      const first = await this.db.select({ id: users.id }).from(users).limit(1);
+      if (first.length > 0 && inviteCode !== expected)
+        throw new HostedAuthError('a valid invite code is required');
+    }
     const row = {
       id: ulid(),
       email: norm,

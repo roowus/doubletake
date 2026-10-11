@@ -72,6 +72,8 @@ const RegisterBody = z.object({
   email: z.string().min(3).max(254),
   password: z.string().min(8).max(200),
   displayName: z.string().max(100).optional(),
+  /** Required when the server sets DOUBLETAKE_INVITE_CODE (first user bootstraps without one). */
+  invite_code: z.string().max(200).optional(),
 });
 
 const LoginBody = z.object({ email: z.string().min(3).max(254), password: z.string() });
@@ -99,7 +101,7 @@ export function registerHostedRoutes(app: FastifyInstance, hosted: HostedAuth | 
 
   app.post('/api/auth/register', async (req, reply) => {
     const body = RegisterBody.parse(req.body);
-    const user = await hosted.registerEmail(body.email, body.password);
+    const user = await hosted.registerEmail(body.email, body.password, body.invite_code);
     const { token } = await hosted.createSession(user.id, 'browser', body.displayName);
     return reply
       .code(200)
