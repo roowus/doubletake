@@ -8,6 +8,13 @@
       "when": 1791687099840,
       "tag": "0000_magical_purifiers",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1792000000000,
+      "tag": "0001_hosted_accounts",
+      "breakpoints": true
     }
   ]
 }

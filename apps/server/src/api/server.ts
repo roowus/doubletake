@@ -10,9 +10,11 @@ import fastifyStatic from '@fastify/static';
 import fastifyWebsocket from '@fastify/websocket';
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import { z } from 'zod';
+import { createHostedAuthFromEnv, type HostedAuth, HostedAuthError } from '../auth/hosted.js';
 import { Auth, AuthError } from '../auth/index.js';
 import type { InstagramChannel } from '../channels/instagram/index.js';
 import type { Config } from '../config/index.js';
+import { openPgDb } from '../db/pg.js';
 import type { Repo } from '../db/repo.js';
 import { brainCoords, type Geocoder, geocodeQuery } from '../geo/index.js';
 import { IngestError, ingest, ingestUpload } from '../ingest/index.js';
@@ -42,6 +44,7 @@ import { type DigestGate, parseHHMM, validTimeZone } from '../notify/quiet.js';
 import type { QueueWorker } from '../queue/worker.js';
 import { safeJson, toChatDetail, toChatSummary, toEntityHit, toRunDto, toTodoDto } from './dto.js';
 import { ftsQuery } from './fts.js';
+import { HOSTED_PUBLIC_PATHS, isHostedMode, registerHostedRoutes } from './hosted.js';
 import { hostAllowed, IG_PUBLIC_PATHS, registerInstagramRoutes } from './instagram.js';
 
 export interface ServerDeps {
@@ -105,8 +108,17 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
   const { cfg, repo, worker } = deps;
   seedAutoCollections(repo);
   const auth = deps.auth ?? new Auth(repo);
+  // Hosted mode (ADR 0032): Postgres accounts + sessions. Null (and no hosted routes) unless
+  // DOUBLETAKE_HOSTED=1 and DOUBLETAKE_DATABASE_URL + DOUBLETAKE_MASTER_KEY_FILE are set.
+  const hostedStack = isHostedMode()
+    ? await createHostedAuthFromEnv((url) => openPgDb(url, { max: 5 }))
+    : null;
+  if (isHostedMode() && !hostedStack)
+    throw new Error('DOUBLETAKE_HOSTED=1 but hosted auth could not be initialised');
+  const hostedAuth: HostedAuth | null = hostedStack?.hosted ?? null;
   const app = Fastify({ logger: { level: cfg.logLevel }, bodyLimit: 1024 * 1024 });
   await app.register(fastifyWebsocket);
+  app.addHook('onClose', async () => hostedStack?.close());
   // Share sheets post photos/videos as the raw request body (`POST /api/ingest/upload`); the
   // route streams it to disk, so no parser buffers it. Other routes never see these types.
   app.addContentTypeParser(/^(image|video)\//, (_req, payload, done) => done(null, payload));
@@ -133,8 +145,16 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
     if (!req.url.startsWith('/api/') && !req.url.startsWith(MCP_PATH)) return;
     const pathOnly = req.url.split('?')[0] ?? req.url;
     if (PUBLIC_PATHS.has(pathOnly)) return;
+    if (hostedAuth && HOSTED_PUBLIC_PATHS.has(pathOnly)) return;
     const header = req.headers.authorization;
     const bearer = header?.startsWith('Bearer ') ? header.slice(7) : tokenFromQuery(req);
+    // Hosted mode (ADR 0032): `dth_` tokens authenticate against the hosted sessions table.
+    if (hostedAuth && bearer?.startsWith('dth_')) {
+      const hosted = await hostedAuth.authenticate(bearer);
+      if (!hosted) return reply.code(401).send({ error: 'unauthorized' });
+      (req as FastifyRequest & { hosted?: typeof hosted }).hosted = hosted;
+      return;
+    }
     const session = auth.authenticate(bearer);
     if (!session) return reply.code(401).send({ error: 'unauthorized' });
     req.session = session;
@@ -143,7 +163,7 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
   app.setErrorHandler((err: unknown, _req, reply) => {
     if (err instanceof z.ZodError)
       return reply.code(400).send({ error: 'invalid request', issues: err.issues });
-    if (err instanceof AuthError || err instanceof IngestError)
+    if (err instanceof AuthError || err instanceof IngestError || err instanceof HostedAuthError)
       return reply.code(400).send({ error: err.message });
     const e = err as Error & { statusCode?: number };
     app.log.error(e);
@@ -978,6 +998,8 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
       return reply.sendFile('index.html');
     });
   }
+
+  registerHostedRoutes(app, hostedAuth ?? undefined); // ADR 0032: no-op unless hosted mode is on
 
   return app;
 }

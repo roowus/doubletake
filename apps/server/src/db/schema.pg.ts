@@ -345,6 +345,81 @@ export const todos = pgTable(
 // (drizzle/0001_fts.sql triggers + content tables); design the pg equivalent (tsvector column
 // + GIN index) when the hosted mode lands.
 
+// ---- hosted mode (ADR 0032): accounts, sessions, BYOK vault, OAuth state ----
+
+/** Hosted-mode end user. Self-hosted mode never touches this table (the owner password lives in settings). */
+export const users = pgTable('users', {
+  id: text('id').primaryKey(),
+  email: text('email').notNull().unique(),
+  emailVerifiedAt: text('email_verified_at'),
+  passwordHash: text('password_hash'),
+  googleSub: text('google_sub').unique(),
+  displayName: text('display_name'),
+  createdAt: text('created_at').notNull(),
+  disabledAt: text('disabled_at'),
+});
+
+/**
+ * Bearer sessions, hashed like self-hosted device tokens. `kind` distinguishes browser
+ * sign-ins from device pairings and MCP clients; the raw token is returned once and never stored.
+ */
+export const sessions = pgTable(
+  'sessions',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    tokenHash: text('token_hash').notNull().unique(),
+    kind: text('kind').notNull().default('browser'), // browser | device | mcp
+    label: text('label'),
+    createdAt: text('created_at').notNull(),
+    lastUsedAt: text('last_used_at'),
+    revokedAt: text('revoked_at'),
+  },
+  (t) => [index('sessions_user_idx').on(t.userId)],
+);
+
+/**
+ * Per-user BYOK credential vault (ADR 0032): only SecretBox-sealed key material is stored.
+ * `kind` is openrouter | api_key | harness; caps are enforced in the run loop against cost_ledger.
+ */
+export const credentials = pgTable(
+  'credentials',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    kind: text('kind').notNull(),
+    provider: text('provider'),
+    label: text('label'),
+    /** `v1.<nonce>.<ct>.<tag>` SecretBox envelope; wiped to '' when the credential is revoked. */
+    sealedKey: text('sealed_key').notNull(),
+    meta: text('meta'), // JSON (e.g. base_url for harness credentials)
+    monthlyCapUsd: doublePrecision('monthly_cap_usd'),
+    perRunCapUsd: doublePrecision('per_run_cap_usd'),
+    lastUsedAt: text('last_used_at'),
+    revokedAt: text('revoked_at'),
+    createdAt: text('created_at').notNull(),
+  },
+  (t) => [index('credentials_user_idx').on(t.userId)],
+);
+
+/** Short-lived PKCE/OAuth flow state; swept by age. */
+export const oauthStates = pgTable(
+  'oauth_states',
+  {
+    state: text('state').primaryKey(),
+    purpose: text('purpose').notNull(),
+    userId: text('user_id').references(() => users.id, { onDelete: 'cascade' }),
+    returnTo: text('return_to'),
+    codeVerifier: text('code_verifier'),
+    createdAt: text('created_at').notNull(),
+  },
+  (t) => [index('oauth_states_created_idx').on(t.createdAt)],
+);
+
 export const pgSchema = {
   items,
   extractions,
@@ -368,4 +443,8 @@ export const pgSchema = {
   igAccounts,
   igEvents,
   todos,
+  users,
+  sessions,
+  credentials,
+  oauthStates,
 };
