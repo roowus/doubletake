@@ -14,6 +14,7 @@ import { TagEditor } from '../components/TagEditor';
 import { TaskForm } from '../components/TaskForm';
 import { toast } from '../components/Toast';
 import { useLive } from '../live';
+import { failureCopy } from '../lib/hosted';
 import { navigate } from '../router';
 import { CollectionPicker } from './Entities';
 
@@ -128,7 +129,9 @@ export function Chat({ id }: { id: string }) {
     : 100;
   const hasAnswer = messages.some((m) => m.role === 'assistant');
 
-  const fail = (ex: unknown) => setErr(ex instanceof ApiError ? ex.message : String(ex));
+  // Hosted run failures carry a reason (ADR 0032); map it to copy that names the fix.
+  const fail = (ex: unknown) =>
+    setErr(failureCopy(ex instanceof ApiError ? ex.message : String(ex)));
   async function send(content: string) {
     try {
       await api.sendMessage(id, content);
