@@ -75,7 +75,7 @@ export function mapsUrl(hit: Pick<EntityHit, 'kind' | 'name' | 'attributes'>): s
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`;
 }
 
-function EntityCard({ hit }: { hit: EntityHit }) {
+function EntityCard({ hit, onStar }: { hit: EntityHit; onStar: (hit: EntityHit) => void }) {
   const spec = KINDS[hit.kind];
   const shown = spec.attrs
     .map((k) => [k, attrText(hit.attributes[k])] as const)
@@ -89,6 +89,15 @@ function EntityCard({ hit }: { hit: EntityHit }) {
       <div className="row top">
         <span className="name clamp-2">{hit.name}</span>
         <span className="links">
+          <button
+            type="button"
+            className="icon-link"
+            aria-label={`${hit.starred ? 'Unstar' : 'Star'} ${hit.name}`}
+            title={hit.starred ? 'Unstar' : 'Star'}
+            onClick={() => onStar(hit)}
+          >
+            <Icon name="star" fill={hit.starred ? 'currentColor' : 'none'} />
+          </button>
           {hit.url && (
             <a
               href={hit.url}
@@ -140,6 +149,7 @@ export function Entities({ kind }: { kind: EntityKind }) {
   const [hits, setHits] = useState<EntityHit[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [filter, setFilter] = useState('');
+  const [starredOnly, setStarredOnly] = useState(false);
   const load = () => {
     api
       .entities(kind)
@@ -153,10 +163,24 @@ export function Entities({ kind }: { kind: EntityKind }) {
   useLive((e) => {
     if (e.kind === 'chat_updated') load();
   });
+  /** Optimistic star toggle; a failure puts the card back and surfaces the page's error banner. */
+  const toggleStar = (hit: EntityHit) => {
+    const starred = !hit.starred;
+    const setStar = (v: boolean) =>
+      setHits((hs) => (hs ?? []).map((h) => (h.id === hit.id ? { ...h, starred: v } : h)));
+    setStar(starred);
+    api.starEntity(hit.id, starred).catch(() => {
+      setStar(!starred);
+      setErr('Could not save the star. Check the connection and try again.');
+    });
+  };
   const spec = KINDS[kind];
   const f = filter.trim().toLowerCase();
+  const starredCount = (hits ?? []).filter((h) => h.starred).length;
   const shown = (hits ?? []).filter(
-    (h) => !f || h.name.toLowerCase().includes(f) || h.itemTitle.toLowerCase().includes(f),
+    (h) =>
+      (!f || h.name.toLowerCase().includes(f) || h.itemTitle.toLowerCase().includes(f)) &&
+      (!starredOnly || h.starred),
   );
   return (
     <div className="page stack loose entities-page">
@@ -196,6 +220,18 @@ export function Entities({ kind }: { kind: EntityKind }) {
           onChange={(e) => setFilter(e.target.value)}
         />
       </div>
+      <div className="chips">
+        <button
+          type="button"
+          className="chip"
+          aria-pressed={starredOnly}
+          onClick={() => setStarredOnly((v) => !v)}
+        >
+          <Icon name="star" size={14} fill={starredOnly ? 'currentColor' : 'none'} />
+          Starred
+          {starredCount > 0 && <span className="count">{starredCount}</span>}
+        </button>
+      </div>
       {err && (
         <div className="banner error" role="alert">
           <Icon name="alert" />
@@ -205,13 +241,17 @@ export function Entities({ kind }: { kind: EntityKind }) {
       {!hits && !err && <ListSkeleton rows={5} label={`Loading ${spec.title.toLowerCase()}`} />}
       {hits && shown.length === 0 && (
         <div className="card quiet empty">
-          <Icon name="inbox" className="icon-lg" />
-          <p>{spec.empty}</p>
+          <Icon name={starredOnly ? 'star' : 'inbox'} className="icon-lg" />
+          <p>
+            {starredOnly
+              ? 'Nothing starred yet. Use the star on a card to keep it here.'
+              : spec.empty}
+          </p>
         </div>
       )}
       <div className="entities">
         {shown.map((h) => (
-          <EntityCard hit={h} key={`${h.chatId}:${h.name}`} />
+          <EntityCard hit={h} key={h.id} onStar={toggleStar} />
         ))}
       </div>
     </div>

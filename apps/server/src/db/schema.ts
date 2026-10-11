@@ -162,6 +162,8 @@ export const entities = sqliteTable(
     attributes: text('attributes').notNull().default('{}'),
     url: text('url'),
     confidence: real('confidence'),
+    /** Owner-starred thing; re-runs replace entities, so a star lives on the current row only. */
+    starred: integer('starred', { mode: 'boolean' }).notNull().default(false),
     createdAt: text('created_at').notNull(),
   },
   (t) => [index('entities_kind_name').on(t.kind, t.name)],
@@ -322,6 +324,8 @@ export const todos = sqliteTable(
     note: text('note'),
     attributes: text('attributes').notNull().default('{}'), // JSON snapshot of the entity's attributes
     chatId: text('chat_id').references(() => chats.id, { onDelete: 'set null' }),
+    /** `open` (the owner's list, `done_at` set once ticked) or `suggested` (brain proposal, ADR 0031). */
+    status: text('status').notNull().default('open'),
     doneAt: text('done_at'),
     createdAt: text('created_at').notNull(),
   },

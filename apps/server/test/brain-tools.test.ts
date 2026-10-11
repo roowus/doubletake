@@ -66,6 +66,40 @@ describe('buildTools', () => {
     );
     fs.rmSync(root, { recursive: true, force: true });
   });
+
+  it('suggest_todo exists only with the dep, and every call is a proposal (never an active todo)', async () => {
+    const quiet = { ...OPEN_POLICY, webSearch: false, webFetch: false };
+    const suggestions: unknown[] = [];
+    const t = buildTools(quiet, {
+      search: null,
+      suggestTodo: (s) => {
+        suggestions.push(s);
+        return { id: 'todo-1' };
+      },
+    });
+    expect(t.specs.map((s) => s.name)).toEqual(['suggest_todo']);
+    const ok = await t.call('suggest_todo', {
+      kind: 'tool',
+      title: 'ripgrep',
+      url: 'https://rg.example',
+    });
+    expect(ok.ok).toBe(true);
+    expect(ok.text).toContain('suggestion');
+    expect(suggestions).toEqual([{ kind: 'tool', title: 'ripgrep', url: 'https://rg.example' }]);
+
+    // Bad kinds, empty titles and non-http urls are refused before the callback runs.
+    expect((await t.call('suggest_todo', { kind: 'weapon', title: 'x' })).ok).toBe(false);
+    expect((await t.call('suggest_todo', { kind: 'task', title: '' })).ok).toBe(false);
+    expect((await t.call('suggest_todo', { kind: 'task', title: 'x', url: 'ftp://x' })).ok).toBe(
+      false,
+    );
+    expect(suggestions).toHaveLength(1);
+
+    // No dep, no tool — and a direct call is refused by the loop, not the model's good manners.
+    const without = buildTools(quiet, { search: null });
+    expect(without.specs).toEqual([]);
+    expect((await without.call('suggest_todo', { kind: 'task', title: 'x' })).ok).toBe(false);
+  });
 });
 
 describe('createSearchProvider', () => {

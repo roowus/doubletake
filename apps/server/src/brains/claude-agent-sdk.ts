@@ -15,6 +15,7 @@ import { parseAnswerBlock } from '@doubletake/shared';
 import { z } from 'zod';
 import { listDirChecked, readFileChecked, writeFileChecked } from './fs-policy.js';
 import { renderBrief, renderFollowUp, SYSTEM_FRAMING } from './prompts.js';
+import { TODO_KINDS } from './tools/index.js';
 
 type Query = typeof sdk.query;
 type SDKMessage = sdk.SDKMessage;
@@ -38,6 +39,7 @@ const VISION_BATCH = 6;
 const MCP_NAME = 'doubletake';
 const READ_TOOLS = ['mcp__doubletake__read_file', 'mcp__doubletake__list_dir'];
 const WRITE_TOOL = 'mcp__doubletake__write_sandbox_file';
+const SUGGEST_TOOL = 'mcp__doubletake__suggest_todo';
 
 /**
  * Brain adapter over the Claude Agent SDK. Tools are our own MCP tools (path-policy enforced in code)
@@ -56,7 +58,7 @@ export class ClaudeAgentSdkAdapter implements BrainAdapter {
   }
 
   async run(brief: ResearchBrief, opts: RunOptions, sink: EventSink): Promise<RunResult> {
-    const prompt = renderBrief(brief, opts.tools, opts.mode);
+    const prompt = renderBrief(brief, opts.tools, opts.mode, Boolean(opts.suggestTodo));
     return this.execute(prompt, opts, sink, { fresh: true });
   }
 
@@ -67,7 +69,13 @@ export class ClaudeAgentSdkAdapter implements BrainAdapter {
     sink: EventSink,
   ): Promise<RunResult> {
     const canResume = Boolean(chat.sessionId ?? opts.sessionId);
-    const prompt = renderFollowUp(chat, userMessage, canResume, opts.tools);
+    const prompt = renderFollowUp(
+      chat,
+      userMessage,
+      canResume,
+      opts.tools,
+      Boolean(opts.suggestTodo),
+    );
     const sessionId = chat.sessionId ?? opts.sessionId;
     return this.execute(prompt, sessionId ? { ...opts, sessionId } : opts, sink, {
       fresh: !canResume,
@@ -190,58 +198,88 @@ export class ClaudeAgentSdkAdapter implements BrainAdapter {
 
   // ---- internals ----
 
-  private mcpServer(policy: ToolPolicy) {
+  private mcpServer(policy: ToolPolicy, suggestTodo?: RunOptions['suggestTodo']) {
     const text = (s: string) => ({ content: [{ type: 'text' as const, text: s }] });
     const err = (s: string) => ({
       content: [{ type: 'text' as const, text: `Refused: ${s}` }],
       isError: true,
     });
-    return sdk.createSdkMcpServer({
-      name: MCP_NAME,
-      version: '0.1.0',
-      tools: [
+    const tools: sdk.SdkMcpToolDefinition<any>[] = [
+      sdk.tool(
+        'read_file',
+        "Read a text file from the owner's computer. Secrets folders and files are blocked; large files are truncated.",
+        { path: z.string().describe('Absolute path or ~/relative path') },
+        async ({ path }) => {
+          const r = readFileChecked(path, policy);
+          if (!r.ok) return err(r.reason);
+          return text(
+            r.truncated ? `${r.content}\n\n[truncated to ${policy.maxReadBytes} bytes]` : r.content,
+          );
+        },
+        { annotations: { readOnlyHint: true } },
+      ),
+      sdk.tool(
+        'list_dir',
+        "List a directory on the owner's computer (blocked entries are hidden).",
+        { path: z.string() },
+        async ({ path }) => {
+          const r = listDirChecked(path, policy);
+          if (!r.ok) return err(r.reason);
+          return text(
+            r.entries
+              .map((e) => `${e.kind === 'dir' ? 'd' : e.kind === 'file' ? 'f' : '?'} ${e.name}`)
+              .join('\n') || '(empty)',
+          );
+        },
+        { annotations: { readOnlyHint: true } },
+      ),
+      sdk.tool(
+        'write_sandbox_file',
+        "Save a markdown report or note into the owner's Doubletake notes folder. Only that folder is writable.",
+        { path: z.string().describe('Path inside the notes folder'), content: z.string() },
+        async ({ path, content }) => {
+          const r = writeFileChecked(path, content, policy);
+          if (!r.ok) return err(r.reason);
+          return text(`Saved ${r.realPath}`);
+        },
+      ),
+    ];
+    // Only exposed when the worker passed a suggestion callback; it stores every proposal as a
+    // `suggested` row, so there is no input (and no path) that creates an active todo.
+    if (suggestTodo) {
+      tools.push(
         sdk.tool(
-          'read_file',
-          "Read a text file from the owner's computer. Secrets folders and files are blocked; large files are truncated.",
-          { path: z.string().describe('Absolute path or ~/relative path') },
-          async ({ path }) => {
-            const r = readFileChecked(path, policy);
-            if (!r.ok) return err(r.reason);
+          'suggest_todo',
+          "Propose one entry for the owner's saved To do list (a place to visit, a tool to try, a task). " +
+            'It is only a suggestion: the owner reviews it in the app and approves or dismisses it, so never ' +
+            'tell them the thing was added to the list.',
+          {
+            kind: z.enum(TODO_KINDS).describe('What kind of thing it is'),
+            title: z.string().min(1).max(300),
+            url: z.string().url().optional().describe('http(s) URL of the thing, when it has one'),
+            note: z.string().max(2000).optional(),
+          },
+          async ({ kind, title, url, note }) => {
+            if (!suggestTodo) return err('suggesting todos is not available in this run');
+            try {
+              await suggestTodo({
+                kind,
+                title,
+                ...(url ? { url } : {}),
+                ...(note ? { note } : {}),
+              });
+            } catch (e) {
+              return err((e as Error).message);
+            }
             return text(
-              r.truncated
-                ? `${r.content}\n\n[truncated to ${policy.maxReadBytes} bytes]`
-                : r.content,
+              `Proposed "${title.slice(0, 100)}" for the owner's list. It is a suggestion they still have to approve.`,
             );
           },
-          { annotations: { readOnlyHint: true } },
+          { annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false } },
         ),
-        sdk.tool(
-          'list_dir',
-          "List a directory on the owner's computer (blocked entries are hidden).",
-          { path: z.string() },
-          async ({ path }) => {
-            const r = listDirChecked(path, policy);
-            if (!r.ok) return err(r.reason);
-            return text(
-              r.entries
-                .map((e) => `${e.kind === 'dir' ? 'd' : e.kind === 'file' ? 'f' : '?'} ${e.name}`)
-                .join('\n') || '(empty)',
-            );
-          },
-          { annotations: { readOnlyHint: true } },
-        ),
-        sdk.tool(
-          'write_sandbox_file',
-          "Save a markdown report or note into the owner's Doubletake notes folder. Only that folder is writable.",
-          { path: z.string().describe('Path inside the notes folder'), content: z.string() },
-          async ({ path, content }) => {
-            const r = writeFileChecked(path, content, policy);
-            if (!r.ok) return err(r.reason);
-            return text(`Saved ${r.realPath}`);
-          },
-        ),
-      ],
-    });
+      );
+    }
+    return sdk.createSdkMcpServer({ name: MCP_NAME, version: '0.1.0', tools });
   }
 
   private async execute(
@@ -257,6 +295,7 @@ export class ClaudeAgentSdkAdapter implements BrainAdapter {
     if (policy.webFetch) allowed.push('WebFetch');
     if (policy.readRoots.length) allowed.push(...READ_TOOLS);
     if (policy.writeRoot) allowed.push(WRITE_TOOL);
+    if (opts.suggestTodo) allowed.push(SUGGEST_TOOL);
 
     const ac = new AbortController();
     const onAbort = () => ac.abort();
@@ -332,7 +371,7 @@ export class ClaudeAgentSdkAdapter implements BrainAdapter {
             'KillShell',
             'BashOutput',
           ],
-          mcpServers: { [MCP_NAME]: this.mcpServer(policy) },
+          mcpServers: { [MCP_NAME]: this.mcpServer(policy, opts.suggestTodo) },
           canUseTool,
           hooks: { PreToolUse: [{ hooks: [preToolUse] }] },
           abortController: ac,

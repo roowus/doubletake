@@ -255,6 +255,10 @@ export const EntityGeo = z.object({
 export type EntityGeo = z.infer<typeof EntityGeo>;
 
 export const EntityHit = Entity.extend({
+  /** Row id, used by `POST /api/entities/:id/star`. */
+  id: z.string(),
+  /** The owner starred this thing from the Library. */
+  starred: z.boolean(),
   chatId: z.string(),
   itemTitle: z.string(),
   platform: Platform,
@@ -269,6 +273,13 @@ export const TodoKind = z.enum([...EntityKind.options, 'task']);
 export type TodoKind = z.infer<typeof TodoKind>;
 
 /**
+ * Where a saved-list entry sits: `open` on the owner's list (`doneAt` set once ticked), or
+ * `suggested` — proposed by the brain, waiting for the owner to approve or dismiss it.
+ */
+export const TodoStatus = z.enum(['open', 'suggested']);
+export type TodoStatus = z.infer<typeof TodoStatus>;
+
+/**
  * One entry of the owner's saved list. Entities are replaced on every re-run, so an entry
  * snapshots the thing it came from (title, url, attributes) instead of pointing at an entity id.
  */
@@ -281,6 +292,7 @@ export const TodoDto = z.object({
   attributes: z.record(z.string(), z.unknown()),
   chatId: z.string().nullable(),
   chatTitle: z.string().nullable(),
+  status: TodoStatus,
   doneAt: z.string().nullable(),
   createdAt: z.string(),
 });
@@ -302,6 +314,37 @@ export const TagDto = z.object({
   count: z.number().int(),
 });
 export type TagDto = z.infer<typeof TagDto>;
+
+/** Map-of-everything graph (Library → Graph): chats, things and tags with their relations. */
+export const GraphNodeKind = z.enum(['chat', 'entity', 'tag']);
+export type GraphNodeKind = z.infer<typeof GraphNodeKind>;
+
+/**
+ * One node of the library graph. `id` is namespaced (`chat:<id>`, `entity:<kind>:<name>`,
+ * `tag:<name>`) so kinds never collide; `kindDetail` carries the raw fields the client needs
+ * to build a route (`/chat/:id`, `/entities/:kind`, `/?tag=`).
+ */
+export const GraphNode = z.object({
+  id: z.string(),
+  kind: GraphNodeKind,
+  label: z.string(),
+  kindDetail: z
+    .object({
+      chatId: z.string().optional(),
+      itemId: z.string().optional(),
+      entityKind: z.string().optional(),
+      name: z.string().optional(),
+    })
+    .optional(),
+});
+export type GraphNode = z.infer<typeof GraphNode>;
+
+/** Undirected relation between two nodes; both endpoints are ids of nodes in the same payload. */
+export const GraphEdge = z.object({ source: z.string(), target: z.string() });
+export type GraphEdge = z.infer<typeof GraphEdge>;
+
+export const LibraryGraph = z.object({ nodes: z.array(GraphNode), edges: z.array(GraphEdge) });
+export type LibraryGraph = z.infer<typeof LibraryGraph>;
 
 /** Pointer to a still image under `GET /api/chats/:id/media/:mediaId` (device token required). */
 export const PreviewDto = z.object({

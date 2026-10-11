@@ -7,11 +7,25 @@ import path from 'node:path';
  * as untrusted content before the model sees them.
  */
 
-import type { ToolPolicy } from '@doubletake/brain-sdk';
+import type { TodoSuggestion, ToolPolicy } from '@doubletake/brain-sdk';
 import { renderUntrusted } from '@doubletake/shared';
 import { listDirChecked, readFileChecked, writeFileChecked } from '../fs-policy.js';
 import type { SearchProvider } from './search.js';
 import { fetchPage, type PageFetcher } from './web-fetch.js';
+
+/** Valid `suggest_todo` kinds: every entity kind plus the free-form `task` (ADR 0031). */
+export const TODO_KINDS = [
+  'place',
+  'recipe',
+  'product',
+  'tool',
+  'tip',
+  'media',
+  'person',
+  'event',
+  'other',
+  'task',
+] as const;
 
 export interface ToolSpec {
   name: string;
@@ -33,6 +47,11 @@ export interface ToolRunner {
 export interface ToolDeps {
   search: SearchProvider | null;
   fetchPage?: PageFetcher;
+  /**
+   * Present only when the run may propose saved-list entries. The suggestion is stored with
+   * status `suggested` by the caller; nothing here can create an active todo.
+   */
+  suggestTodo?: (s: TodoSuggestion) => Promise<{ id: string }> | { id: string };
 }
 
 const obj = (props: Record<string, unknown>, required: string[]) => ({
@@ -104,6 +123,24 @@ export function buildTools(policy: ToolPolicy, deps: ToolDeps): ToolRunner {
           content: { type: 'string' },
         },
         ['path', 'content'],
+      ),
+    });
+  }
+  if (deps.suggestTodo) {
+    specs.push({
+      name: 'suggest_todo',
+      description:
+        "Propose one entry for the owner's saved To do list (a place to visit, a tool to try, a task). " +
+        'It is only a suggestion: the owner reviews it in the app and approves or dismisses it, so never ' +
+        'tell them the thing was added to the list.',
+      parameters: obj(
+        {
+          kind: { type: 'string', enum: [...TODO_KINDS] },
+          title: { type: 'string', maxLength: 300 },
+          url: { type: 'string', description: 'http(s) URL of the thing, when it has one' },
+          note: { type: 'string', maxLength: 2000 },
+        },
+        ['kind', 'title'],
       ),
     });
   }
@@ -186,6 +223,27 @@ export function buildTools(policy: ToolPolicy, deps: ToolDeps): ToolRunner {
             const r = writeFileChecked(target, content, policy);
             if (!r.ok) return refused(r.reason);
             return { ok: true, text: `Saved ${r.realPath}` };
+          }
+          case 'suggest_todo': {
+            if (!deps.suggestTodo) return refused('suggesting todos is not available in this run');
+            const title = argString(args, 'title');
+            const kind = argString(args, 'kind');
+            if (!title) return refused('title is required');
+            if (!kind || !TODO_KINDS.includes(kind as (typeof TODO_KINDS)[number]))
+              return refused(`kind must be one of: ${TODO_KINDS.join(', ')}`);
+            const url = argString(args, 'url');
+            if (url && !/^https?:\/\//.test(url)) return refused('url must be an http(s) URL');
+            const note = argString(args, 'note');
+            await deps.suggestTodo({
+              kind,
+              title: title.slice(0, 300),
+              ...(url ? { url: url.slice(0, 2000) } : {}),
+              ...(note ? { note: note.slice(0, 2000) } : {}),
+            });
+            return {
+              ok: true,
+              text: `Proposed "${title.slice(0, 100)}" for the owner's list. It is a suggestion they still have to approve.`,
+            };
           }
           default:
             return refused(`${name} is not available in this run`);

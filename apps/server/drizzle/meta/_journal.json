@@ -78,6 +78,20 @@
       "when": 1788920000000,
       "tag": "0010_todos",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1788930000000,
+      "tag": "0011_entity_starred",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1788940000000,
+      "tag": "0011_todo_suggested",
+      "breakpoints": true
     }
   ]
 }

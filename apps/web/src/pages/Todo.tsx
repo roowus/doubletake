@@ -42,6 +42,7 @@ function attrLine(t: TodoDto): string {
  */
 export function Todo() {
   const [todos, setTodos] = useState<TodoDto[] | null>(null);
+  const [suggestions, setSuggestions] = useState<TodoDto[]>([]);
   const [err, setErr] = useState<string | null>(null);
   const [showDone, setShowDone] = useState(false);
   const [adding, setAdding] = useState(false);
@@ -56,9 +57,20 @@ export function Todo() {
       })
       .catch((e) => setErr(e instanceof ApiError ? e.message : String(e)));
   };
+  const loadSuggestions = () => {
+    // A server without the suggestions endpoint (or a fixture) just means no block.
+    api
+      .suggestions()
+      .then(setSuggestions)
+      .catch(() => setSuggestions([]));
+  };
   useEffect(load, []);
+  useEffect(loadSuggestions, []);
   useLive((e) => {
-    if (e.kind === 'chat_updated') load();
+    if (e.kind === 'chat_updated') {
+      load();
+      loadSuggestions();
+    }
   });
   const fail = (ex: unknown) => setErr(ex instanceof ApiError ? ex.message : String(ex));
 
@@ -85,9 +97,85 @@ export function Todo() {
       fail(ex);
     }
   }
+  async function approve(t: TodoDto) {
+    try {
+      await api.approveSuggestion(t.id);
+      load();
+      loadSuggestions();
+    } catch (ex) {
+      fail(ex);
+    }
+  }
+  async function dismiss(t: TodoDto) {
+    try {
+      await api.dismissSuggestion(t.id);
+      loadSuggestions();
+    } catch (ex) {
+      fail(ex);
+    }
+  }
 
   const open = (todos ?? []).filter((t) => !t.doneAt);
   const done = (todos ?? []).filter((t) => t.doneAt);
+
+  /** A brain proposal (ADR 0031): the thing, plus Approve / Dismiss where the tick would be. */
+  const suggestionRow = (t: TodoDto) => {
+    const maps =
+      t.kind === 'place'
+        ? mapsUrl({ kind: 'place', name: t.title, attributes: t.attributes })
+        : null;
+    return (
+      <li key={t.id} className="todo">
+        <div className="todo-body">
+          <div className="todo-title">
+            <Icon name={KIND_ICON[t.kind]} size={14} className="todo-kind" />
+            {t.url ? (
+              <a href={t.url} target="_blank" rel="noopener noreferrer">
+                {t.title}
+                <Icon name="external-link" size={12} />
+              </a>
+            ) : (
+              <span>{t.title}</span>
+            )}
+          </div>
+          {t.note && (
+            <div className="todo-meta">
+              <span className="todo-note">{t.note}</span>
+            </div>
+          )}
+          <div className="todo-foot">
+            {t.chatId && (
+              <Link to={`/chat/${t.chatId}`} className="truncate">
+                {t.chatTitle || 'Open the answer'}
+              </Link>
+            )}
+            {maps && (
+              <a href={maps} target="_blank" rel="noopener noreferrer">
+                Map
+              </a>
+            )}
+            <time dateTime={t.createdAt}>{ago(t.createdAt)}</time>
+          </div>
+        </div>
+        <button
+          type="button"
+          className="todo-check"
+          aria-label={`Approve "${t.title}"`}
+          onClick={() => void approve(t)}
+        >
+          <Icon name="check" size={20} />
+        </button>
+        <button
+          type="button"
+          className="ghost icon"
+          aria-label={`Dismiss "${t.title}"`}
+          onClick={() => void dismiss(t)}
+        >
+          <Icon name="x" size={16} />
+        </button>
+      </li>
+    );
+  };
 
   const row = (t: TodoDto) => {
     const maps =
@@ -194,6 +282,19 @@ export function Todo() {
           <Icon name="alert" />
           <span>{err}</span>
         </div>
+      )}
+
+      {suggestions.length > 0 && (
+        <section className="stack tight" aria-label="Suggestions from your assistant">
+          <div className="row">
+            <span className="label">Suggestions</span>
+            <span className="count-badge">{suggestions.length}</span>
+          </div>
+          <p className="help">
+            Your assistant proposed these while answering. Approve to put them on the list.
+          </p>
+          <ul className="todos">{suggestions.map(suggestionRow)}</ul>
+        </section>
       )}
 
       {!todos ? (

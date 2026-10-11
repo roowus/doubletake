@@ -22,6 +22,8 @@ import { navigate, usePath } from './router';
 
 // Leaflet is only needed on the map, so it ships as its own chunk.
 const MapView = lazy(() => import('./pages/MapView').then((m) => ({ default: m.MapView })));
+// Same for the graph simulation (Library → Map of everything).
+const GraphMap = lazy(() => import('./components/GraphMap').then((m) => ({ default: m.GraphMap })));
 
 export function App() {
   const path = usePath();
@@ -90,6 +92,18 @@ export function App() {
         }
       >
         <MapView />
+      </Suspense>
+    );
+  else if (url.pathname === '/graph')
+    page = (
+      <Suspense
+        fallback={
+          <div className="page muted" aria-busy="true">
+            Loading map…
+          </div>
+        }
+      >
+        <GraphMap />
       </Suspense>
     );
   else if (url.pathname.startsWith('/entities/')) {

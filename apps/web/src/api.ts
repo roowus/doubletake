@@ -5,6 +5,7 @@ import type {
   EntityHit,
   EntityKind,
   IngestRequest,
+  LibraryGraph,
   Mode,
   RunEvent,
   TagDto,
@@ -234,6 +235,10 @@ export const api = {
     call<{ collectionIds: string[] }>('GET', `/api/chats/${chatId}/collections`),
   entities: (kind: EntityKind, limit = 200) =>
     call<EntityHit[]>('GET', `/api/entities?kind=${kind}&limit=${limit}`),
+  starEntity: (id: string, starred: boolean) =>
+    call<{ id: string; starred: boolean }>('POST', `/api/entities/${id}/star`, { starred }),
+  /** Map of everything: nodes/edges over chats, things and tags (Library → Graph). */
+  graph: () => call<LibraryGraph>('GET', '/api/library/graph'),
   // Saved list (ADR 0031)
   todos: (done: 'open' | 'done' | 'all' = 'open') =>
     call<TodoDto[]>('GET', done === 'open' ? '/api/todos' : `/api/todos?done=${done}`),
@@ -241,6 +246,10 @@ export const api = {
   updateTodo: (id: string, patch: { done?: boolean; title?: string; note?: string | null }) =>
     call<TodoDto>('POST', `/api/todos/${id}`, patch),
   deleteTodo: (id: string) => call<void>('DELETE', `/api/todos/${id}`),
+  /** Brain suggestions waiting for the owner's approve/dismiss. */
+  suggestions: () => call<TodoDto[]>('GET', '/api/todos/suggestions'),
+  approveSuggestion: (id: string) => call<TodoDto>('POST', `/api/todos/${id}/approve`),
+  dismissSuggestion: (id: string) => call<void>('POST', `/api/todos/${id}/dismiss`),
   /** Geocode every place without coordinates (409 when the server's geocoder is off). */
   geocodePlaces: () =>
     call<{ places: number; located: number; unknown: number; retried: number }>(

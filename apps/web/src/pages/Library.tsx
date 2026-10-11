@@ -12,8 +12,9 @@ import { Link } from '../router';
 /**
  * Library tab: where the chip rows of the old list went. Collections as tiles, entity kinds
  * as tiles with counts (taken from the seeded `entity:<kind>` auto collections, so no extra
- * requests), the map, then every tag in use. Tapping a tile opens the same filtered views as
- * before (`/?collection=`, `/entities/<kind>`, `/?tag=`).
+ * requests), the map, the graph ("Map of everything", lazy-loaded on `/graph`), then every
+ * tag in use. Tapping a tile opens the same filtered views as before (`/?collection=`,
+ * `/entities/<kind>`, `/?tag=`).
  */
 
 const KIND_TILES: { kind: EntityKind; label: string; icon: IconName }[] = [
@@ -238,6 +239,12 @@ export function Library() {
               <Icon name="map" size={22} />
               <span className="tile-label">Map</span>
               <span className="tile-count">{entityCount('place')}</span>
+            </Link>
+          </li>
+          <li>
+            <Link to="/graph" className="tile">
+              <Icon name="compass" size={22} />
+              <span className="tile-label">Map of everything</span>
             </Link>
           </li>
         </ul>
