@@ -376,7 +376,7 @@ footer{border-top:1px solid var(--line);padding:56px 0 64px;background:linear-gr
 
       <!-- 3D showcase: phone share sheet -> answer window -->
       <div class="stage reveal" style="--d:380ms">
-        <div class="showcase" id="tilt">
+        <div class="showcase" id="tilt" data-tilt>
           <div class="phone" aria-hidden="true">
             <div class="phone-screen">
               <div class="phone-island"></div>
