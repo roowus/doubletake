@@ -72,7 +72,7 @@ export function App() {
   useEffect(() => {
     if (hosted?.hosted !== true) return;
     if (!authed && !path.startsWith('/login')) navigate('/login', true);
-    if (authed && path === '/login') navigate('/library', true);
+    if (authed && (path === '/login' || path === '/')) navigate('/library', true);
   }, [hosted, authed, path]);
 
   // A share received by the native sheet while unpaired is replayed once we are signed in.
