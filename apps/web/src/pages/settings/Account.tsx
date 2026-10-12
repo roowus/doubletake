@@ -1,9 +1,17 @@
+import { AlertDialog } from '@base-ui/react/alert-dialog';
 import { useEffect, useState } from 'react';
-import { type AccountInfo, type AccountSession, api, type CredentialRow } from '../../api';
+import {
+  type AccountInfo,
+  type AccountSession,
+  api,
+  type CredentialRow,
+  setToken,
+} from '../../api';
 import { Confirm } from '../../components/Confirm';
 import { Icon } from '../../components/Icon';
 import { toast } from '../../components/Toast';
 import { seen } from '../../format';
+import { navigate } from '../../router';
 import { errText, Group, Note, Row, SettingsPage } from './parts';
 
 const PROVIDERS = ['anthropic', 'openai', 'deepseek', 'gemini', 'other'] as const;
@@ -141,6 +149,26 @@ export function AccountSettings() {
   const [mcpToken, setMcpToken] = useState<{ token: string; label: string } | null>(null);
   const [revokeCred, setRevokeCred] = useState<CredentialRow | null>(null);
   const [revokeSess, setRevokeSess] = useState<AccountSession | null>(null);
+  const [delOpen, setDelOpen] = useState(false);
+  const [delWord, setDelWord] = useState('');
+  const [deleting, setDeleting] = useState(false);
+
+  /** Deletes the hosted account for real: everything is wiped, so sign out locally too. */
+  async function deleteAccount() {
+    setDeleting(true);
+    try {
+      await api.deleteAccount();
+      api.hostedLogout().catch(() => {});
+      setToken(null);
+      toast('Account deleted', 'Everything saved in it has been removed.');
+      navigate('/', true);
+      location.reload();
+    } catch (e) {
+      setDelOpen(false);
+      setDeleting(false);
+      setMsg(errText(e));
+    }
+  }
 
   const load = () =>
     api
@@ -309,6 +337,21 @@ export function AccountSettings() {
           </>
         )}
       </Group>
+      <Group
+        title="Danger zone"
+        foot="Deletion is immediate and permanent: items, chats, answers, agent tokens and stored keys are all wiped. See doubletake.gg/delete for the full list."
+      >
+        <button
+          type="button"
+          className="ghost danger"
+          onClick={() => {
+            setDelWord('');
+            setDelOpen(true);
+          }}
+        >
+          Delete my account
+        </button>
+      </Group>
       <Note error>{msg}</Note>
 
       <Confirm
@@ -347,6 +390,40 @@ export function AccountSettings() {
             : undefined
         }
       />
+      {/* The Confirm idiom has no text input; account deletion needs the typed-DELETE gate. */}
+      <AlertDialog.Root open={delOpen} onOpenChange={setDelOpen}>
+        <AlertDialog.Portal>
+          <AlertDialog.Backdrop className="sheet-backdrop" />
+          <AlertDialog.Popup className="sheet confirm">
+            <AlertDialog.Title className="sheet-title">Delete your account?</AlertDialog.Title>
+            <AlertDialog.Description className="sheet-desc muted">
+              Immediate and permanent: every saved item, chat, answer, to-do, session, agent token
+              and stored key is wiped. There is no undo and no recovery.
+            </AlertDialog.Description>
+            <div className="field">
+              <label htmlFor="a-del-confirm">Type DELETE to confirm</label>
+              <input
+                id="a-del-confirm"
+                value={delWord}
+                onChange={(e) => setDelWord(e.target.value)}
+                autoComplete="off"
+                spellCheck={false}
+              />
+            </div>
+            <div className="sheet-foot">
+              <AlertDialog.Close className="ghost">Cancel</AlertDialog.Close>
+              <button
+                type="button"
+                className="danger solid"
+                disabled={delWord !== 'DELETE' || deleting}
+                onClick={() => void deleteAccount()}
+              >
+                Delete my account
+              </button>
+            </div>
+          </AlertDialog.Popup>
+        </AlertDialog.Portal>
+      </AlertDialog.Root>
     </SettingsPage>
   );
 }

@@ -227,6 +227,13 @@ export function SettingsIndex() {
           ))}
         </Group>
       ))}
+      {/* Legal pages are server-rendered (hosted only); plain anchors, full page loads. */}
+      {hostedOn && (
+        <p className="help">
+          <a href="/privacy">Privacy</a> · <a href="/terms">Terms</a> ·{' '}
+          <a href="/delete">Delete account</a>
+        </p>
+      )}
       {hostedOn && (
         <Confirm
           open={signOut}
