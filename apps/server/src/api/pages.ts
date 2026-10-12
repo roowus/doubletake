@@ -80,7 +80,7 @@ function privacyPage(): string {
 </ul>
 
 <h2>What we never store in readable form</h2>
-<p>Your AI provider API keys (OpenRouter, Anthropic, or any other provider you connect) are <strong>encrypted at rest</strong> with a server master key (AES-GCM envelope encryption) and are <strong>only decrypted in memory, for the duration of one of your runs</strong>. They never appear in logs, error messages, API responses or backups. Revoking a credential wipes the stored key material immediately.</p>
+<p>Your AI provider API keys (OpenRouter, Anthropic, or any other provider you connect) are <strong>encrypted at rest</strong> with a server master key (ChaCha20-Poly1305 authenticated encryption) and are <strong>only decrypted in memory, for the duration of one of your runs</strong>. They never appear in logs, error messages, API responses or backups. Revoking a credential wipes the stored key material immediately.</p>
 
 <h2>Third parties</h2>
 <ul>
