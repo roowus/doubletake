@@ -237,7 +237,7 @@ section{padding:110px 0}
 .chat{display:flex;flex-direction:column;gap:12px}
 .msg{max-width:85%;padding:11px 15px;border-radius:16px;font-size:.86rem;line-height:1.5}
 .msg.you{align-self:flex-end;background:var(--ink);color:var(--paper);border-bottom-right-radius:4px}
-.msg.agent{align-self:flex-start;background:linear-gradient(150deg,#FFFDF7 20%,#F0E9D7);border:1px solid var(--line);border-bottom-left-radius:4px;box-shadow:0 16px 32px -14px rgba(28,27,24,.4),0 3px 8px -3px rgba(28,27,24,.18),inset 0 1px 0 rgba(255,255,255,.8)}
+.msg.agent{align-self:flex-start;background:linear-gradient(150deg,#FFFDF7 20%,#F0E9D7);border:1px solid var(--line);border-bottom-left-radius:4px;inset 0 1px 0 rgba(255,255,255,.8)}
 .msg .who{display:block;font-family:var(--mono);font-size:.6rem;text-transform:uppercase;letter-spacing:.12em;margin-bottom:4px;opacity:.65}
 .tool-call{font-family:var(--mono);font-size:.7rem;color:var(--rail);background:var(--rail-soft);border-radius:8px;padding:6px 10px;align-self:flex-start}
 .trust-line{margin-top:44px;font-family:var(--serif);font-style:italic;font-size:clamp(1.15rem,2.4vw,1.45rem);max-width:52ch}
