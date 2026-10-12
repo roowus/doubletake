@@ -175,8 +175,12 @@ async function rootPage(app: FastifyInstance, hosted: HostedAuth): Promise<void>
     const bearer = header?.startsWith('Bearer ') ? header.slice(7) : undefined;
     const cookie = cookieValue(req.headers.cookie, HOSTED_SESSION_COOKIE);
     const token = bearer ?? cookie;
-    if (token && (await hosted.authenticate(token))) return; // signed in: the PWA owns /
-    return reply.code(200).type('text/html; charset=utf-8').send(LANDING_HTML);
+    const signedIn = Boolean(token && (await hosted.authenticate(token)));
+    // The landing owns / for everyone; signed-in visitors get a pill into the app.
+    const html = signedIn
+      ? LANDING_HTML.replace('</body>', '<a class="open-pill" href="/library">Open your library</a></body>')
+      : LANDING_HTML;
+    return reply.code(200).type('text/html; charset=utf-8').send(html);
   });
 }
 
