@@ -145,6 +145,22 @@ export function registerHostedRoutes(app: FastifyInstance, hosted: HostedAuth | 
     };
   });
 
+  /**
+   * Self-serve account deletion (Google "Delete Account" requirement; privacy policy
+   * promises it is immediate). Deletes the user row and everything cascading from it via
+   * HostedAuth.deleteUser — the calling session dies with the account, so the next
+   * authenticated call answers 401. The browser cookie is cleared on the way out.
+   */
+  app.delete('/api/account', async (req, reply) => {
+    const userId = requireUser(req);
+    await hosted.deleteUser(userId);
+    reply.header(
+      'set-cookie',
+      `${HOSTED_SESSION_COOKIE}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0`,
+    );
+    return { deleted: true };
+  });
+
   app.post('/api/account/credentials', async (req, reply) => {
     const userId = requireUser(req);
     const body = CredentialBody.parse(req.body);

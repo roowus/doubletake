@@ -1,10 +1,23 @@
 import { createHash, randomBytes } from 'node:crypto';
 import fs from 'node:fs';
 import { hash as argonHash, verify as argonVerify } from '@node-rs/argon2';
-import { and, eq, gte, isNull, lt } from 'drizzle-orm';
+import { and, eq, gte, isNull, lt, sql } from 'drizzle-orm';
 import { ulid } from 'ulid';
 import type { PgDb } from '../db/pg.js';
-import { costLedger, credentials, oauthStates, sessions, users } from '../db/schema.pg.js';
+import {
+  chats,
+  collections,
+  costLedger,
+  credentials,
+  devices,
+  items,
+  oauthStates,
+  placeGeo,
+  sessions,
+  tags,
+  todos,
+  users,
+} from '../db/schema.pg.js';
 import { SecretBox } from '../secrets/box.js';
 
 /** `kind` for `sessions` rows (ADR 0032). */
@@ -296,7 +309,35 @@ export class HostedAuth {
     };
   }
 
-  /** Month-to-date spend for one user from cost_ledger (monthly cap enforcement). */
+  /**
+   * Delete an account and everything it owns (self-serve GDPR/Google deletion, DELETE
+   * /api/account). Tenant content hangs off plain `user_id` text columns with no FK to
+   * `users`, so the big tables are wiped explicitly; everything referencing items, chats,
+   * runs, collections, tags or devices cascades from those deletes. The `users` row goes
+   * last — its FKs cascade `sessions`, `credentials` (sealed key material included) and
+   * `oauth_states` away with it. One transaction: half-deleted accounts never exist.
+   */
+  async deleteUser(userId: string): Promise<void> {
+    await this.db.transaction(async (tx) => {
+      // Parked digest notifications reference chats by plain id (no FK); sweep them first.
+      await tx.execute(
+        sql`delete from pending_notifications where chat_id in (select id from chats where user_id = ${userId})`,
+      );
+      await tx.delete(items).where(eq(items.userId, userId));
+      await tx.delete(chats).where(eq(chats.userId, userId));
+      await tx.delete(todos).where(eq(todos.userId, userId));
+      await tx.delete(tags).where(eq(tags.userId, userId));
+      await tx.delete(collections).where(eq(collections.userId, userId));
+      await tx.delete(devices).where(eq(devices.userId, userId));
+      await tx.delete(placeGeo).where(eq(placeGeo.userId, userId));
+      await tx.delete(costLedger).where(eq(costLedger.userId, userId));
+      await tx.delete(users).where(eq(users.id, userId));
+    });
+  }
+
+  /**
+   * Month-to-date spend for one user from cost_ledger (monthly cap enforcement).
+   */
   async monthSpend(userId: string): Promise<number> {
     const monthStart = new Date();
     monthStart.setUTCDate(1);
