@@ -19,7 +19,22 @@ if ('serviceWorker' in navigator) {
       .then((ks) => Promise.all(ks.map((k) => caches.delete(k))))
       .catch(() => undefined);
   } else {
-    void import('virtual:pwa-register').then(({ registerSW }) => registerSW({ immediate: true }));
+    void import('virtual:pwa-register').then(({ registerSW }) =>
+      registerSW({
+        immediate: true,
+        // When an updated worker takes control (first load after a deploy), reload once so
+        // the page runs the new bundle instead of a stale cached shell.
+        onRegisteredSW(_url, registration) {
+          if (!registration) return;
+          let reloading = false;
+          registration.addEventListener('controllerchange', () => {
+            if (reloading) return;
+            reloading = true;
+            location.reload();
+          });
+        },
+      }),
+    );
   }
 }
 
