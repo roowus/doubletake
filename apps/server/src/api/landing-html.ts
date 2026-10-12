@@ -1,20 +1,12 @@
 /* eslint-disable */
-// The public landing page (built externally, brief: doubletake-cloud docs/LANDING-BRIEF.md).
-// Served verbatim to anonymous visitors on /. Links point at /login, /privacy, /terms, /delete.
+// The public landing page. SOURCE OF TRUTH: doubletake-cloud/website/landing.html
+// (sync via scripts/sync-website.mjs). Edits belong there, not here.
 export const LANDING_HTML = String.raw`<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Doubletake — save it now, get a researched answer later</title>
-<!-- Google tag (gtag.js) -->
-<script async src="https://www.googletagmanager.com/gtag/js?id=G-RHRM7L97LD"></script>
-<script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){dataLayer.push(arguments);}
-  gtag('js', new Date());
-  gtag('config', 'G-RHRM7L97LD');
-</script>
 <meta name="description" content="Share a reel, a TikTok, a Reddit thread. Doubletake transcribes it, checks the claim, and hands you a sourced answer. Your AI agents can read all of it back as memory.">
 <link rel="canonical" href="https://doubletake.gg/">
 <meta property="og:title" content="Doubletake — save it now, get a researched answer later">
@@ -594,7 +586,7 @@ footer{border-top:1px solid var(--line);padding:56px 0 64px;background:linear-gr
         <a href="/privacy">Privacy</a>
         <a href="/terms">Terms</a>
         <a href="/delete">Delete account</a>
-        <a href="mailto:roowus.dev@gmail.com">Contact</a>
+        <a href="/contact">Contact</a>
       </nav>
       <p class="foot-note">Self-hosted? The core is open source. <a href="https://github.com/roowus/doubletake" rel="noopener">github.com/roowus/doubletake</a></p>
     </div>
