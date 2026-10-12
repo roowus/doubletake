@@ -10,7 +10,7 @@ cleanupOutdatedCaches();
 registerRoute(
   new NavigationRoute(
     async () => (await caches.match('/index.html')) ?? (await fetch('/index.html')),
-    { denylist: [/^\/api\//, /^\/s\//] },
+    { denylist: [/^\/api\//, /^\/s\//, /^\/$/, /^\/privacy/, /^\/terms/, /^\/delete/, /^\/welcome/] },
   ),
 );
 
