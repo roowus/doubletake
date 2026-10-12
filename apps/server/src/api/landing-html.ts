@@ -7,6 +7,14 @@ export const LANDING_HTML = String.raw`<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Doubletake — save it now, get a researched answer later</title>
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-RHRM7L97LD"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'G-RHRM7L97LD');
+</script>
 <meta name="description" content="Share a reel, a TikTok, a Reddit thread. Doubletake transcribes it, checks the claim, and hands you a sourced answer. Your AI agents can read all of it back as memory.">
 <link rel="canonical" href="https://doubletake.gg/">
 <meta property="og:title" content="Doubletake — save it now, get a researched answer later">
