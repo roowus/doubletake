@@ -7,6 +7,7 @@
  */
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { HostedAuth } from '../auth/hosted.js';
+import { LANDING_HTML } from './landing-html.js';
 import { cookieValue, HOSTED_SESSION_COOKIE, isHostedMode } from './hosted.js';
 
 const FOOTER = `<footer><p><a href="/privacy">Privacy</a> · <a href="/terms">Terms</a> · <a href="/delete">Delete account</a> · <a href="/login">Sign in</a></p><p>Doubletake · contact: <a href="mailto:roowus.dev@gmail.com">roowus.dev@gmail.com</a></p></footer>`;
@@ -175,7 +176,7 @@ async function rootPage(app: FastifyInstance, hosted: HostedAuth): Promise<void>
     const cookie = cookieValue(req.headers.cookie, HOSTED_SESSION_COOKIE);
     const token = bearer ?? cookie;
     if (token && (await hosted.authenticate(token))) return; // signed in: the PWA owns /
-    return reply.code(200).type('text/html; charset=utf-8').send(landingPage());
+    return reply.code(200).type('text/html; charset=utf-8').send(LANDING_HTML);
   });
 }
 
