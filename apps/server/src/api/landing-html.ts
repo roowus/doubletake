@@ -499,13 +499,12 @@ footer{border-top:1px solid var(--line);padding:56px 0 64px;background:linear-gr
           </ul>
         </div>
         <div class="reveal" style="--d:120ms">
-          <div class="mock" role="img" aria-label="Mock chat window where an agent answers from saved research">
+          <div class="mock" id="chatMock" data-tilt role="img" aria-label="Mock chat window where an agent answers from saved research">
             <div class="win-bar"><span class="win-dot"></span><span class="win-dot"></span><span class="win-dot"></span><span class="win-title">claude code · your library</span></div>
             <div class="mock-body chat" id="chat">
               <div class="msg you" id="mYou"><span class="who">You</span><span class="txt">What was that tool from the reel I saved last week?</span></div>
               <div class="tool-call" id="mTool">search_library("tool from reel") → 1 hit</div>
               <div class="msg agent" id="mAgent"><span class="who">Agent</span><span class="txt">It was Brushline, a free color-grading tool. Your saved answer notes it's web-only and the $9 tier unlocks 4K export. Want the link?</span></div>
-              <button type="button" class="chat-replay" id="chatReplay">Replay ▸</button>
             </div>
           </div>
         </div>
@@ -617,23 +616,21 @@ footer{border-top:1px solid var(--line);padding:56px 0 64px;background:linear-gr
     els.forEach(function(e){ io.observe(e); });
   }
 
-  /* single cursor effect: 3d tilt on hero showcase */
-  var tilt = document.getElementById('tilt');
-  if (tilt && !reduced && matchMedia('(pointer:fine)').matches) {
-    var stage = tilt.parentElement;
-    var raf = null;
-    stage.addEventListener('pointermove', function(e){
-      if (raf) return;
-      raf = requestAnimationFrame(function(){
-        var r = stage.getBoundingClientRect();
-        var x = (e.clientX - r.left) / r.width - .5;
-        var y = (e.clientY - r.top) / r.height - .5;
-        tilt.style.transform = 'rotateY(' + (x*6) + 'deg) rotateX(' + (-y*4) + 'deg)';
-        raf = null;
+  /* cursor effect: 3d tilt on every [data-tilt] showcase (hero, agent chat window) */
+  if (!reduced && matchMedia('(pointer:fine)').matches) {
+    Array.prototype.forEach.call(document.querySelectorAll('[data-tilt]'), function(tilt){
+      var stage = tilt.parentElement, raf = null;
+      stage.addEventListener('pointermove', function(e){
+        if (raf) return;
+        raf = requestAnimationFrame(function(){
+          var r = stage.getBoundingClientRect();
+          var x = (e.clientX - r.left) / r.width - .5;
+          var y = (e.clientY - r.top) / r.height - .5;
+          tilt.style.transform = 'rotateY(' + (x*6) + 'deg) rotateX(' + (-y*4) + 'deg)';
+          raf = null;
+        });
       });
-    });
-    stage.addEventListener('pointerleave', function(){
-      tilt.style.transform = '';
+      stage.addEventListener('pointerleave', function(){ tilt.style.transform = ''; });
     });
   }
 
@@ -777,10 +774,19 @@ var IC = function(paths, fill){
        agent:'Yes. Verdict: overstated. The answer cites two reviews finding modest effects at best. Receipts are in the saved run.'},
       {you:'Queue that salmon recipe from yesterday for tonight.',
        tool:'queue_save("hot honey salmon · tiktok") → queued',
-       agent:'Queued. It\'ll be transcribed and checked before dinner, and your library will have the answer waiting.'}
+       agent:'Queued. It\'ll be transcribed and checked before dinner, and your library will have the answer waiting.'},
+      {you:'Save this ramen place for my Tokyo trip.',
+       tool:'save("ramen kurosawa · maps") → place saved',
+       agent:'Saved to Places, tagged Tokyo. Want it on the trip list next to your hotel?'},
+      {you:'Research this password manager. If it\'s safe, get me the download.',
+       tool:'web_search × 4 · verdict: safe, open source',
+       agent:'Checked: open source, audited, no telemetry. Download page saved to your tools list.'},
+      {you:'Find a B&B near the conference and see if it\'s any good.',
+       tool:'save("harbor view b&b") + verdict: solid',
+       agent:'Solid reviews, free cancellation. Saved with the booking link — say the word and I\'ll queue the details.'}
     ];
     var yEl = document.getElementById('mYou'), tEl = document.getElementById('mTool'),
-        aEl = document.getElementById('mAgent'), btn = document.getElementById('chatReplay'),
+        aEl = document.getElementById('mAgent'),
         yTxt = yEl.querySelector('.txt'), aTxt = aEl.querySelector('.txt'), tTxt = tEl;
     var si = 0, playing = false, timers = [];
     function later(fn, ms){ timers.push(setTimeout(fn, ms)); }
@@ -835,7 +841,6 @@ var IC = function(paths, fill){
     }, {threshold:.3}).observe(chat);
     chat.style.cursor = 'pointer';
     chat.addEventListener('click', function(){ if (!playing){ si = (si + 1) % scenes.length; play(); } });
-    btn.addEventListener('click', function(e){ e.stopPropagation(); if (!playing){ si = (si + 1) % scenes.length; play(); } });
   })();
 })();
 </script>
