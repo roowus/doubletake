@@ -66,8 +66,25 @@ export function App() {
   }, []);
 
   // Hosted and anonymous: every view is the login page. Hosted and signed in: never the login.
+  // Public pages (/privacy /terms /delete /welcome) and the server-served landing (/) are exempt:
+  // the server answers them for anonymous visitors, so the gate must never bounce them to /login
+  // even when a cached SPA shell boots at that URL.
   useEffect(() => {
     if (hosted?.hosted !== true) return;
+    if (PUBLIC_APP_PATHS.some((p) => path === p || path.startsWith(p + '/'))) {
+      if (!authed && path === '/') {
+        // The shell booted at the landing URL without a session: reload so the server's
+        // static landing (not this shell) is served. Guarded so it happens at most once.
+        if (!sessionStorage.getItem('dt:landing-reload')) {
+          sessionStorage.setItem('dt:landing-reload', '1');
+          location.reload();
+        } else {
+          sessionStorage.removeItem('dt:landing-reload');
+          navigate('/login', true);
+        }
+      }
+      return;
+    }
     if (!authed && !path.startsWith('/login')) navigate('/login', true);
     if (authed && path === '/login') navigate('/', true);
   }, [hosted, authed, path]);
