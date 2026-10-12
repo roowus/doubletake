@@ -313,9 +313,6 @@ section{padding:110px 0}
 .js .chat .show{opacity:1;transform:none}
 .chat-caret{display:inline-block;width:8px;height:.95em;background:var(--rail);margin-left:2px;vertical-align:-2px;animation:caretBlink 1s steps(1) infinite}
 @keyframes caretBlink{50%{opacity:0}}
-.chat-replay{margin-top:14px;font-family:var(--mono);font-size:.7rem;letter-spacing:.1em;text-transform:uppercase;color:var(--rail);background:none;border:1px dashed rgba(196,90,60,.4);border-radius:999px;padding:6px 14px;cursor:pointer;transition:background .2s ease,transform .18s ease}
-.chat-replay:hover{background:var(--rail-soft)}
-.chat-replay:active{transform:scale(.97)}
 
 /* footer */
 footer{border-top:1px solid var(--line);padding:56px 0 64px;background:linear-gradient(180deg,var(--paper),var(--paper-2))}
