@@ -52,6 +52,7 @@ import {
   registerHostedRoutes,
 } from './hosted.js';
 import { hostAllowed, IG_PUBLIC_PATHS, registerInstagramRoutes } from './instagram.js';
+import { registerHostedPages } from './pages.js';
 
 export interface ServerDeps {
   cfg: Config;
@@ -1076,6 +1077,8 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
   }
 
   registerHostedRoutes(app, hostedAuth ?? undefined); // ADR 0032: no-op unless hosted mode is on
+  // Landing + legal pages (privacy/terms/delete), and the anonymous-`/` landing hook.
+  registerHostedPages(app, hostedAuth ?? undefined);
 
   return app;
 }
