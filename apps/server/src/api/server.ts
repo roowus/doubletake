@@ -168,6 +168,17 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
       (req as FastifyRequest & { hosted?: typeof hosted }).hosted = hosted;
       return;
     }
+    // Hosted browser sessions may also present the dt_session cookie (full page loads).
+    if (hostedAuth && !bearer) {
+      const cookie = cookieValue(req.headers.cookie, 'dt_session');
+      if (cookie) {
+        const hosted = await hostedAuth.authenticate(cookie);
+        if (hosted) {
+          (req as FastifyRequest & { hosted?: typeof hosted }).hosted = hosted;
+          return;
+        }
+      }
+    }
     // Hosted mode, cookie transport: the OAuth callbacks set `dt_session` (HttpOnly) so browser
     // navigations authenticate without a bearer header. Hosted-only; flag off leaves this inert.
     if (hostedAuth && !bearer) {
@@ -1063,6 +1074,28 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
       worker.off('chat_updated', onChat);
     });
   });
+
+  // ---- Hosted app shell: the SERVER decides who gets the shell (real redirects, no client gate) ----
+  if (hostedAuth) {
+    const hostedShell = async (req: FastifyRequest, reply: FastifyReply) => {
+      const cookie = cookieValue(req.headers.cookie, HOSTED_SESSION_COOKIE);
+      const header = req.headers.authorization;
+      const bearer = header?.startsWith('Bearer ') ? header.slice(7) : undefined;
+      let ok = false;
+      const token = bearer ?? cookie;
+      if (token) {
+        try { ok = Boolean(await hostedAuth.authenticate(token)); } catch { ok = false; }
+      }
+      if (!ok && req.url.split('?')[0] !== '/login') return reply.redirect('/login');
+      reply.header('cache-control', 'no-store');
+      return reply.sendFile('index.html');
+    };
+    for (const p of ['/library', '/todo', '/map', '/settings', '/settings/*', '/chat/*']) {
+      app.get(p, hostedShell);
+    }
+    // /login serves the shell to everyone; the SPA renders the form (and bounces authed users).
+    app.get('/login', hostedShell);
+  }
 
   // ---- PWA ----
   if (cfg.webDist && fs.existsSync(cfg.webDist)) {
