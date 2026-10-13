@@ -15,7 +15,7 @@ export const LANDING_HTML = String.raw`<!doctype html>
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://doubletake.gg/">
 <meta name="twitter:card" content="summary_large_image">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 120 120%22%3E%3Crect width=%22120%22 height=%22120%22 rx=%2226%22 fill=%22%23F7F3E9%22/%3E%3Crect x=%2216%22 y=%2218%22 width=%228%22 height=%2284%22 rx=%224%22 fill=%22%23C45A3C%22/%3E%3Ctext x=%2264%22 y=%2288%22 font-family=%22Georgia%22 font-size=%2268%22 fill=%22%231C1B18%22 text-anchor=%22middle%22%3ED%3C/text%3E%3C/svg%3E" type="image/svg+xml">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='118' fill='%23C45A3C'/%3E%3Crect x='128' y='372' width='256' height='40' rx='20' fill='%23F7F3E9'/%3E%3Crect x='196' y='118' width='40' height='194' rx='20' fill='%23F7F3E9'/%3E%3Cpath d='M178 296h76l-38 64z' fill='%23F7F3E9'/%3E%3Crect x='276' y='118' width='40' height='194' rx='20' fill='%23F7F3E9'/%3E%3Cpath d='M258 296h76l-38 64z' fill='%23F7F3E9'/%3E%3C/svg%3E" type="image/svg+xml">
 <script>document.documentElement.classList.add('js')</script>
 <style>
 :root{
