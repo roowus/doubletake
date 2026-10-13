@@ -19,6 +19,10 @@ if ('serviceWorker' in navigator) {
       .then((ks) => Promise.all(ks.map((k) => caches.delete(k))))
       .catch(() => undefined);
   } else {
+    navigator.serviceWorker.addEventListener('message', (e) => {
+      // The worker purges caches once per deploy; reload so this page runs the new bundle.
+      if ((e.data as { type?: string } | undefined)?.type === 'dt:updated') location.reload();
+    });
     void import('virtual:pwa-register').then(({ registerSW }) =>
       registerSW({
         immediate: true,
