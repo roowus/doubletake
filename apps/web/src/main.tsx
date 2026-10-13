@@ -22,6 +22,7 @@ if ('serviceWorker' in navigator) {
     void import('virtual:pwa-register').then(({ registerSW }) =>
       registerSW({
         immediate: true,
+        registrationOptions: { updateViaCache: 'none' },
         // When an updated worker takes control (first load after a deploy), reload once so
         // the page runs the new bundle instead of a stale cached shell.
         onRegisteredSW(_url, registration) {

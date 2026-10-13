@@ -71,8 +71,11 @@ export function App() {
   // Signed-in visitors entering via /login go to their library (the landing owns /).
   useEffect(() => {
     if (hosted?.hosted !== true) return;
-    if (!authed && !path.startsWith('/login')) navigate('/login', true);
-    if (authed && (path === '/login' || path === '/')) navigate('/library', true);
+    // Guard ONLY real app views. Public pages (/, /privacy, /terms, /delete, /welcome) and
+    // unknown paths must never bounce to /login, no matter what a cached service worker
+    // serves — this is the fix for the stuck-in-the-login-loop bug.
+    if (!authed && APP_ROUTE_RE.test(path)) navigate('/login', true);
+    if (authed && path === '/login') navigate('/library', true);
   }, [hosted, authed, path]);
 
   // A share received by the native sheet while unpaired is replayed once we are signed in.
