@@ -15,7 +15,15 @@ export const LANDING_HTML = String.raw`<!doctype html>
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://doubletake.gg/">
 <meta name="twitter:card" content="summary_large_image">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='118' fill='%23C45A3C'/%3E%3Crect x='128' y='372' width='256' height='40' rx='20' fill='%23F7F3E9'/%3E%3Crect x='196' y='118' width='40' height='194' rx='20' fill='%23F7F3E9'/%3E%3Cpath d='M178 296h76l-38 64z' fill='%23F7F3E9'/%3E%3Crect x='276' y='118' width='40' height='194' rx='20' fill='%23F7F3E9'/%3E%3Cpath d='M258 296h76l-38 64z' fill='%23F7F3E9'/%3E%3C/svg%3E" type="image/svg+xml">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-RHRM7L97LD"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'G-RHRM7L97LD');
+</script>
 <script>document.documentElement.classList.add('js')</script>
 <style>
 :root{
