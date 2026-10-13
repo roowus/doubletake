@@ -86,7 +86,7 @@ img{display:block}
 .hero .wordmark{font-family:var(--serif);font-size:clamp(1.5rem,3vw,1.9rem);font-weight:600;letter-spacing:.01em;color:var(--ink);margin-bottom:14px}
 .hero p.lede{margin:26px auto 0;font-size:clamp(1.1rem,2.2vw,1.35rem);color:var(--graphite)}
 #hero-h{display:flex;align-items:center;justify-content:center;gap:.28em;flex-wrap:wrap}
-.rotator{display:inline-grid;overflow:hidden;height:1.3em;text-align:center;color:var(--rail);font-weight:600}
+.rotator{display:inline-grid;justify-items:center;overflow:hidden;height:1.3em;text-align:center;color:var(--rail);font-weight:600;transition:width .45s cubic-bezier(.22,.9,.3,1)}
 .rotator span{grid-area:1/1;align-self:center;white-space:nowrap;transition:transform .5s ease,opacity .5s ease}
 .rotator span:not(.on){transform:translateY(115%);opacity:0}
 .rotator span.prev{transform:translateY(-115%)!important}
@@ -634,12 +634,15 @@ footer{border-top:1px solid var(--line);padding:56px 0 64px;background:linear-gr
     var rotor = document.getElementById('rotor');
     if (!rotor || reduced) return;
     var words = rotor.children, k = 0;
+    var fit = function(){ rotor.style.width = words[k].offsetWidth + 'px'; };
+    fit();
     setInterval(function(){
       var prev = k;
       k = (k + 1) % words.length;
       words[prev].classList.add('prev');
       words[prev].classList.remove('on');
       words[k].classList.add('on');
+      fit();
       setTimeout(function(){ words[prev].classList.remove('prev'); }, 520);
     }, 3200);
   })();
