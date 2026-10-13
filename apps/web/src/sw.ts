@@ -9,6 +9,13 @@ declare const self: ServiceWorkerGlobalScope;
 // shells after deploys and trapped users on the login page - never again.) The denylist
 // exempts the API, share-pages, and the hosted public pages (/, /privacy, /terms, /delete),
 // which the server answers fresh.
+// Build stamp: every deploy activates a worker whose stamp differs, so the activate handler
+// below purges ALL caches once per deploy. Legacy cache-first workers left poisoned entries
+// inside the same-named precache cache (dead shells, login redirects); name-based cleanup
+// cannot see those, so we hard-reset instead of trusting them.
+declare const __DT_VERSION__: string;
+const CACHE_STAMP = `dt-cache-stamp:${typeof __DT_VERSION__ === 'string' ? __DT_VERSION__ : 'dev'}`;
+
 precacheAndRoute(self.__WB_MANIFEST);
 cleanupOutdatedCaches();
 registerRoute(
@@ -28,7 +35,24 @@ registerRoute(
 );
 
 self.addEventListener('install', () => void self.skipWaiting());
-self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
+self.addEventListener('activate', (e) =>
+  e.waitUntil(
+    (async () => {
+      // Once per deploy: drop every cache so no legacy entry survives the update, then
+      // re-fetch the current precache. Clients are claimed and an out-of-date page reloads.
+      const stamp = await caches.match(CACHE_STAMP);
+      const current = await stamp?.text();
+      if (current !== CACHE_STAMP) {
+        await Promise.all((await caches.keys()).map((k) => caches.delete(k)));
+        await caches.open('dt-cache-stamp').then((c) => c.put(CACHE_STAMP, new Response(CACHE_STAMP)));
+      }
+      await self.clients.claim();
+      for (const client of await self.clients.matchAll({ type: 'window' })) {
+        client.postMessage({ type: 'dt:updated' });
+      }
+    })(),
+  ),
+);
 
 interface PushPayload {
   title: string;

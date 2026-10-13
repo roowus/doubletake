@@ -853,16 +853,33 @@ var IC = function(paths, fill){
 <script>
 (function(){
   if (!('serviceWorker' in navigator)) return;
+  // Self-heal: a stale worker or poisoned cache is the login-loop bug. Drop both, then
+  // register the current worker; reload once when it takes control.
+  var once = function(){
+    if (sessionStorage.getItem('dt:healed')) return;
+    sessionStorage.setItem('dt:healed', '1');
+    location.reload();
+  };
+  caches.keys().then(function(keys){
+    if (!keys.length) return;
+    // Precache caches from an older deploy are the hazard; the worker reinstalls what it needs.
+    Promise.all(keys.filter(function(k){ return k.indexOf('workbox') === 0; }).map(function(k){ return caches.delete(k); })).then(once);
+  });
+  navigator.serviceWorker.getRegistrations().then(function(regs){
+    if (regs.length > 1) { Promise.all(regs.slice(1).map(function(r){ return r.unregister(); })).then(once); }
+  });
   navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).then(function(reg){
-    function refresh(){ location.reload(); }
-    if (reg.waiting && navigator.serviceWorker.controller) { refresh(); return; }
+    if (reg.waiting && navigator.serviceWorker.controller) { once(); return; }
     reg.addEventListener('updatefound', function(){
       var nw = reg.installing; if (!nw) return;
       nw.addEventListener('statechange', function(){
-        if (nw.state === 'activated' && navigator.serviceWorker.controller) refresh();
+        if (nw.state === 'activated' && navigator.serviceWorker.controller) once();
       });
     });
   }).catch(function(){});
+  navigator.serviceWorker.addEventListener('message', function(e){
+    if (e.data && e.data.type === 'dt:updated') once();
+  });
 })();
 </script>
 </body>
