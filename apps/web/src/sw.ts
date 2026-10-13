@@ -4,32 +4,28 @@ import { NavigationRoute, registerRoute } from 'workbox-routing';
 
 declare const self: ServiceWorkerGlobalScope;
 
-// App shell handling is build-time switched (ADR 0032):
-// - Self-hosted builds (default): precache + cache-first shell for offline use.
-// - Hosted builds (SW_SHELL_CACHE=0): NO shell caching at all. Every navigation goes to the
-//   network, so a deploy can never leave anyone on a dead cached shell. The public pages
-//   (/, /privacy, /terms, /delete) are server-rendered and must always be fresh.
-declare const SW_SHELL_CACHE: boolean;
-if (SW_SHELL_CACHE) {
-  precacheAndRoute(self.__WB_MANIFEST);
-  cleanupOutdatedCaches();
-  registerRoute(
-    new NavigationRoute(
-      async () => (await caches.match('/index.html')) ?? (await fetch('/index.html')),
-      { denylist: [/^\/api\//, /^\/s\//] },
-    ),
-  );
-} else {
-  cleanupOutdatedCaches();
-  registerRoute(
-    new NavigationRoute(async (params) => {
+// Navigations are NETWORK-FIRST for every build: users always get the deployed shell when
+// online; the precached shell is only the OFFLINE fallback. (Cache-first here served dead
+// shells after deploys and trapped users on the login page - never again.) The denylist
+// exempts the API, share-pages, and the hosted public pages (/, /privacy, /terms, /delete),
+// which the server answers fresh.
+precacheAndRoute(self.__WB_MANIFEST);
+cleanupOutdatedCaches();
+registerRoute(
+  new NavigationRoute(
+    async (params) => {
       // fetch(navigationRequest) THROWS (navigate mode). Fetch by URL instead, and on
-      // failure fail the navigation: never fall back to a cached shell (login loop).
+      // failure fall back to the precached shell (offline) - never to a stale one.
       const req = (params.event as FetchEvent | undefined)?.request ?? params.request;
-      return fetch(req.url, { method: 'GET', headers: { accept: 'text/html' } });
-    }, { denylist: [/^\/api\//, /^\/s\//] }),
-  );
-}
+      try {
+        return await fetch(req.url, { method: 'GET', headers: { accept: 'text/html' } });
+      } catch {
+        return (await caches.match(req)) ?? (await caches.match('/index.html')) ?? Response.error();
+      }
+    },
+    { denylist: [/^\/api\//, /^\/s\//, /^\/$/, /^\/privacy/, /^\/terms/, /^\/delete/, /^\/welcome/] },
+  ),
+);
 
 self.addEventListener('install', () => void self.skipWaiting());
 self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));

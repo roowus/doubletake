@@ -22,7 +22,6 @@ export default defineConfig({
   // Build-time flag: the hosted deploy sets SW_SHELL_CACHE=0 so the SW never serves the
   // app shell from cache (self-hosted builds keep the offline precache).
   define: {
-    SW_SHELL_CACHE: JSON.stringify(process.env.SW_SHELL_CACHE !== '0'),
     __DT_VERSION__: JSON.stringify(buildVersion()),
   },
   plugins: [
