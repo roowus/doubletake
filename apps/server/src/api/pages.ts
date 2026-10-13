@@ -180,7 +180,7 @@ async function rootPage(app: FastifyInstance, hosted: HostedAuth): Promise<void>
     const html = signedIn
       ? LANDING_HTML.replace('</body>', '<a class="open-pill" href="/library">Open your library</a></body>')
       : LANDING_HTML;
-    return reply.code(200).type('text/html; charset=utf-8').send(html);
+    return reply.code(200).type('text/html; charset=utf-8').header('cache-control', 'no-store').send(html);
   });
 }
 
@@ -188,16 +188,16 @@ async function rootPage(app: FastifyInstance, hosted: HostedAuth): Promise<void>
 export function registerHostedPages(app: FastifyInstance, hosted: HostedAuth | undefined): void {
   if (!isHostedMode() || !hosted) return;
   app.get('/welcome', async (_req, reply) =>
-    reply.code(200).type('text/html; charset=utf-8').send(landingPage()),
+    reply.code(200).type('text/html; charset=utf-8').header('cache-control', 'no-store').send(landingPage()),
   );
   app.get('/privacy', async (_req, reply) =>
-    reply.code(200).type('text/html; charset=utf-8').send(privacyPage()),
+    reply.code(200).type('text/html; charset=utf-8').header('cache-control', 'no-store').send(privacyPage()),
   );
   app.get('/terms', async (_req, reply) =>
-    reply.code(200).type('text/html; charset=utf-8').send(termsPage()),
+    reply.code(200).type('text/html; charset=utf-8').header('cache-control', 'no-store').send(termsPage()),
   );
   app.get('/delete', async (_req, reply) =>
-    reply.code(200).type('text/html; charset=utf-8').send(deletePage()),
+    reply.code(200).type('text/html; charset=utf-8').header('cache-control', 'no-store').send(deletePage()),
   );
   void rootPage(app, hosted);
 }
