@@ -23,12 +23,10 @@ if (SW_SHELL_CACHE) {
   cleanupOutdatedCaches();
   registerRoute(
     new NavigationRoute(async (params) => {
+      // fetch(navigationRequest) THROWS (navigate mode). Fetch by URL instead, and on
+      // failure fail the navigation: never fall back to a cached shell (login loop).
       const req = (params.event as FetchEvent | undefined)?.request ?? params.request;
-      try {
-        return await fetch(req);
-      } catch {
-        return (await caches.match('/index.html')) ?? Response.error();
-      }
+      return fetch(req.url, { method: 'GET', headers: { accept: 'text/html' } });
     }, { denylist: [/^\/api\//, /^\/s\//] }),
   );
 }
