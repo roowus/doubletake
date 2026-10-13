@@ -77,8 +77,12 @@ export function App() {
     // Guard ONLY real app views. Public pages (/, /privacy, /terms, /delete, /welcome) and
     // unknown paths must never bounce to /login, no matter what a cached service worker
     // serves — this is the fix for the stuck-in-the-login-loop bug.
-    if (!authed && APP_ROUTE_RE.test(path)) navigate('/login', true);
-    if (authed && path === '/login') navigate('/library', true);
+    // The dt_session cookie counts as a session too: after a 401 the bearer is cleared but
+    // the cookie may still be valid, and a reload must recover the session, not bounce.
+    const cookieAuthed = document.cookie.includes('dt_session=');
+    const signed = authed || cookieAuthed;
+    if (!signed && APP_ROUTE_RE.test(path)) navigate('/login', true);
+    if (signed && path === '/login') navigate('/library', true);
   }, [hosted, authed, path]);
 
   // A share received by the native sheet while unpaired is replayed once we are signed in.
