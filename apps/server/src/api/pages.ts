@@ -19,7 +19,7 @@ function page(title: string, body: string): string {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${title} · Doubletake</title>
+<title>Doubletake</title>
 <style>
   :root { color-scheme: light; }
   * { box-sizing: border-box; }
