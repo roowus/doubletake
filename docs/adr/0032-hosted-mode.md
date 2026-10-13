@@ -64,3 +64,7 @@ the flag boundary if hosted settings grow beyond what `config` can multiplex.
   Hosted credential resolution is most-recent-active; an explicit "default credential" flag
   is future work.
 - **Registration** behind `DOUBLETAKE_INVITE_CODE` (first user bootstraps without it).
+- **Instagram pairing** (2026-10-13): hosted DMs are ingested only from senders paired via a
+  single-use code (Settings → Instagram); `ingestForUser()` in the channel replicates DM-share
+  ingest per user on the pg dialect (plain `ingest()` remains a sync call-site of the
+  documented async sweep).

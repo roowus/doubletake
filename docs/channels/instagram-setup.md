@@ -199,3 +199,19 @@ yet; call them with `curl` and a device token.
    = Live, the post owner being a public account, and (unresolved) the "Complete app review"
    checklist item.
 Remove the **unverified** markers above in the same commit as the observed behaviour.
+
+
+## Hosted service: pairing your Instagram account (ADR 0032)
+
+On the hosted service, saves must belong to an account, so DMs are only ingested from
+**paired** senders:
+
+1. Sign in at the service, open **Settings → Instagram → Connect**: you get a single-use
+   pairing code, valid 15 minutes.
+2. DM that code to the service's Instagram account. It reacts and replies
+   "Linked to your Doubletake account."
+3. From then on, anything you DM or share from that Instagram account is saved to your
+   library. Unlink in Settings to stop ingestion immediately.
+
+Unknown senders are never ingested; they get one prompt per hour pointing at Settings.
+Self-hosted instances have no pairing: everything lands in the single owner's library.
