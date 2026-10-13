@@ -389,7 +389,7 @@ footer{border-top:1px solid var(--line);padding:56px 0 64px;background:linear-gr
               <div class="sf-title">Share to</div>
               <div class="sf-prev"><span class="sf-thumb"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></span><span><span class="sf-tline l1"></span><span class="sf-tline l2"></span></span></div>
               <div class="sf-apps">
-                <span class="sf-app"><span class="sf-ic msg"><svg viewBox="-1 -1 26 26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-8 8H5l-2 2V12a8 8 0 0 1 8-8h2a8 8 0 0 1 8 8z"/></svg></span>Message</span>
+                <span class="sf-app"><span class="sf-ic msg"><svg viewBox="-1.5 -0.5 28 28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-8 8H5l-2 2V12a8 8 0 0 1 8-8h2a8 8 0 0 1 8 8z"/></svg></span>Message</span>
                 <span class="sf-app"><span class="sf-ic mail"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg></span>Mail</span>
                 <span class="sf-app on"><span class="sf-ic dt"><svg viewBox="0 0 512 512" style="width:100%;height:100%" aria-hidden="true"><rect x="128" y="372" width="256" height="40" rx="20" fill="#F7F3E9"/><rect x="196" y="118" width="40" height="194" rx="20" fill="#F7F3E9"/><path d="M178 296h76l-38 64z" fill="#F7F3E9"/><rect x="276" y="118" width="40" height="194" rx="20" fill="#F7F3E9"/><path d="M258 296h76l-38 64z" fill="#F7F3E9"/></svg></span>Doubletake</span>
               </div>
@@ -844,4 +844,37 @@ var IC = function(paths, fill){
 </script>
 </body>
 </html>
+
+/* ---------- mobile (dedicated layer: phones first, then small phones) ---------- */
+@media (max-width:760px){
+  .wrap{padding:0 18px}
+  .head-in{height:62px}
+  .head-nav{gap:14px}
+  .head-nav a:not(.btn){display:none}
+  section{padding:64px 0}
+  .section-head{max-width:100%;margin-bottom:32px}
+  .section-head p{font-size:1rem}
+  .hero{padding:48px 0 28px}
+  h1{font-size:clamp(1.9rem,8.4vw,2.6rem)}
+  .hero-cta{margin-top:24px;gap:14px}
+  .hero-bullets{margin-top:20px;gap:8px}
+  .chip{padding:6px 12px;font-size:.8rem}
+  .showcase{gap:12px}
+  .phone{width:158px}
+  .phone-screen{min-height:320px}
+  .answer-win{width:min(320px,92vw)}
+  .stage-flow{width:100%;justify-content:center}
+  .sf-sheet{width:140px}
+  .mock{width:min(360px,100%)}
+  .chat{gap:10px;padding:14px}
+  .chat .txt{font-size:.92rem}
+  .flow{grid-template-columns:1fr;gap:16px}
+}
+@media (max-width:420px){
+  .wrap{padding:0 14px}
+  .phone{width:142px}
+  .phone-screen{min-height:300px}
+  .answer-win{width:94vw}
+  .mock{width:100%}
+}
 `;
