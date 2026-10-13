@@ -355,7 +355,7 @@ footer{border-top:1px solid var(--line);padding:56px 0 64px;background:linear-gr
   <section class="hero" aria-labelledby="hero-h">
     <div class="wrap">
       <p class="wordmark reveal">Doubletake</p>
-      <h1 id="hero-h" class="reveal" style="--d:60ms">Send <span class="rotator" id="rotor"><span class="on">reels</span><span>videos</span><span>posts</span><span>comments</span><span>replies</span><span>threads</span><span>links</span></span> to your agent.</h1>
+      <h1 id="hero-h" class="reveal" style="--d:60ms">Send <span class="rotator" id="rotor"><span class="on">reels</span><span>shorts</span><span>tiktoks</span><span>tweets</span><span>videos</span><span>posts</span><span>comments</span><span>replies</span><span>threads</span><span>links</span></span> to your agent.</h1>
       <p class="lede reveal" style="--d:140ms">Save it now. Get a researched answer for when you need.</p>
 
       <div class="hero-cta reveal" style="--d:220ms">
