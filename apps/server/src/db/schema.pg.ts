@@ -469,6 +469,40 @@ export const oauthStates = pgTable(
   (t) => [index('oauth_states_created_idx').on(t.createdAt)],
 );
 
+/**
+ * Hosted Instagram account pairing (ADR 0032 + ADR 0018): a user generates a short-lived code
+ * in settings, DMs it to the service's Instagram account, and the sender's IGSID is linked to
+ * their account. Self-hosted mode never touches these tables (single owner, no pairing).
+ */
+export const igPairingCodes = pgTable(
+  'ig_pairing_codes',
+  {
+    code: text('code').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    createdAt: text('created_at').notNull(),
+    expiresAt: text('expires_at').notNull(),
+  },
+  (t) => [index('ig_pairing_codes_user_idx').on(t.userId)],
+);
+
+/** One active Instagram sender (IGSID) per user account; `revoked_at` soft-revokes. */
+export const igLinks = pgTable(
+  'ig_links',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    senderId: text('sender_id').notNull().unique(),
+    igUsername: text('ig_username'),
+    createdAt: text('created_at').notNull(),
+    revokedAt: text('revoked_at'),
+  },
+  (t) => [index('ig_links_user_idx').on(t.userId)],
+);
+
 export const pgSchema = {
   items,
   extractions,
@@ -496,4 +530,6 @@ export const pgSchema = {
   sessions,
   credentials,
   oauthStates,
+  igPairingCodes,
+  igLinks,
 };
