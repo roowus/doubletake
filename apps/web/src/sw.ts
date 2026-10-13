@@ -4,31 +4,34 @@ import { NavigationRoute, registerRoute } from 'workbox-routing';
 
 declare const self: ServiceWorkerGlobalScope;
 
-// App shell precache (injected by vite-plugin-pwa). The API is never cached.
-precacheAndRoute(self.__WB_MANIFEST);
-cleanupOutdatedCaches();
-// Navigations are NETWORK-FIRST: users always get the deployed shell when online; the cache
-// is only the offline fallback. Cache-first here served dead shells after every deploy
-// (orphaned hashed assets) and trapped users on the login page - never again.
-registerRoute(
-  new NavigationRoute(
-    async (params) => {
-      // Network-first: fresh shell when online; cache only as the offline fallback.
+// App shell handling is build-time switched (ADR 0032):
+// - Self-hosted builds (default): precache + cache-first shell for offline use.
+// - Hosted builds (SW_SHELL_CACHE=0): NO shell caching at all. Every navigation goes to the
+//   network, so a deploy can never leave anyone on a dead cached shell. The public pages
+//   (/, /privacy, /terms, /delete) are server-rendered and must always be fresh.
+declare const SW_SHELL_CACHE: boolean;
+if (SW_SHELL_CACHE) {
+  precacheAndRoute(self.__WB_MANIFEST);
+  cleanupOutdatedCaches();
+  registerRoute(
+    new NavigationRoute(
+      async () => (await caches.match('/index.html')) ?? (await fetch('/index.html')),
+      { denylist: [/^\/api\//, /^\/s\//] },
+    ),
+  );
+} else {
+  cleanupOutdatedCaches();
+  registerRoute(
+    new NavigationRoute(async (params) => {
       const req = (params.event as FetchEvent | undefined)?.request ?? params.request;
       try {
-        const res = await fetch(req);
-        if (res && res.status === 200 && res.type === 'basic') {
-          const cache = await caches.open('navigation-cache');
-          void cache.put(req, res.clone());
-        }
-        return res;
+        return await fetch(req);
       } catch {
-        return (await caches.match(req)) ?? (await caches.match('/index.html')) ?? Response.error();
+        return (await caches.match('/index.html')) ?? Response.error();
       }
-    },
-    { denylist: [/^\/api\//, /^\/s\//, /^\/$/, /^\/privacy/, /^\/terms/, /^\/delete/, /^\/welcome/] },
-  ),
-);
+    }, { denylist: [/^\/api\//, /^\/s\//] }),
+  );
+}
 
 self.addEventListener('install', () => void self.skipWaiting());
 self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
