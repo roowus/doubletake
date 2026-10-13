@@ -347,7 +347,7 @@ footer{border-top:1px solid var(--line);padding:56px 0 64px;background:linear-gr
 <header class="site-head" id="siteHead">
   <div class="wrap head-in">
     <a class="brand" href="/" aria-label="Doubletake home">
-      <img src="/icon-192.png" width="40" height="40" alt="Doubletake logo" style="border-radius:22px">
+      <img src="/icon-192.png" width="40" height="40" alt="Doubletake logo">
     </a>
     <nav class="head-nav" aria-label="Primary">
       <a href="/privacy">Privacy</a>
