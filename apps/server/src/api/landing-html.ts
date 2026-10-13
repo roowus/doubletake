@@ -149,7 +149,7 @@ img{display:block}
 .sf-ic svg{width:14px;height:14px}
 .sf-ic.msg{background:linear-gradient(135deg,#45d052,#2bb83a)}
 .sf-ic.mail{background:linear-gradient(135deg,#4aa3ff,#2b7de9)}
-.sf-ic.dt{background:var(--rail);font-family:var(--serif);font-weight:700;box-shadow:0 0 0 1.5px var(--paper),0 0 0 3px var(--rail)}
+.sf-ic.dt{background:var(--rail);box-shadow:0 0 0 1.5px var(--paper),0 0 0 3px var(--rail)}.sf-ic.dt svg{width:20px;height:20px}
 .sf-app.on{color:var(--ink);font-weight:600}
 .sf-check{position:absolute;top:-4px;right:-4px;width:13px;height:13px;border-radius:50%;background:#3E7A4E;color:#fff;display:grid;place-items:center;border:1.5px solid #FBF8F0}
 .sf-check svg{width:7px;height:7px}
@@ -341,7 +341,7 @@ footer{border-top:1px solid var(--line);padding:56px 0 64px;background:linear-gr
 <header class="site-head" id="siteHead">
   <div class="wrap head-in">
     <a class="brand" href="/" aria-label="Doubletake home">
-      <svg width="40" height="40" viewBox="0 0 120 120" role="img" aria-label="Doubletake logo, a cream square with a red rail and a serif D"><rect width="120" height="120" rx="26" fill="#F7F3E9"/><rect x="16" y="18" width="8" height="84" rx="4" fill="#C45A3C"/><text x="64" y="88" font-family="Georgia,serif" font-size="68" fill="#1C1B18" text-anchor="middle">D</text></svg>
+      <svg width="40" height="40" viewBox="0 0 512 512" role="img" aria-label="Doubletake logo: a red rounded square with two arrows dropping into a tray"><rect x="16" y="16" width="480" height="480" rx="118" fill="#C45A3C"/><rect x="128" y="372" width="256" height="40" rx="20" fill="#F7F3E9"/><rect x="196" y="118" width="40" height="194" rx="20" fill="#F7F3E9"/><path d="M178 296h76l-38 64z" fill="#F7F3E9"/><rect x="276" y="118" width="40" height="194" rx="20" fill="#F7F3E9"/><path d="M258 296h76l-38 64z" fill="#F7F3E9"/></svg>
     </a>
     <nav class="head-nav" aria-label="Primary">
       <a href="/privacy">Privacy</a>
@@ -391,9 +391,9 @@ footer{border-top:1px solid var(--line);padding:56px 0 64px;background:linear-gr
               <div class="sf-title">Share to</div>
               <div class="sf-prev"><span class="sf-thumb"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></span><span><span class="sf-tline l1"></span><span class="sf-tline l2"></span></span></div>
               <div class="sf-apps">
-                <span class="sf-app"><span class="sf-ic msg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-8 8H5l-2 2V12a8 8 0 0 1 8-8h2a8 8 0 0 1 8 8z"/></svg></span>Message</span>
+                <span class="sf-app"><span class="sf-ic msg"><svg viewBox="-1 -1 26 26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-8 8H5l-2 2V12a8 8 0 0 1 8-8h2a8 8 0 0 1 8 8z"/></svg></span>Message</span>
                 <span class="sf-app"><span class="sf-ic mail"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg></span>Mail</span>
-                <span class="sf-app on"><span class="sf-ic dt">D<span class="sf-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span></span>Doubletake</span>
+                <span class="sf-app on"><span class="sf-ic dt"><svg viewBox="0 0 512 512" style="width:100%;height:100%" aria-hidden="true"><rect x="128" y="372" width="256" height="40" rx="20" fill="#F7F3E9"/><rect x="196" y="118" width="40" height="194" rx="20" fill="#F7F3E9"/><path d="M178 296h76l-38 64z" fill="#F7F3E9"/><rect x="276" y="118" width="40" height="194" rx="20" fill="#F7F3E9"/><path d="M258 296h76l-38 64z" fill="#F7F3E9"/></svg><span class="sf-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span></span>Doubletake</span>
               </div>
             </div>
             <span class="sf-arrow">→</span>
@@ -428,7 +428,7 @@ footer{border-top:1px solid var(--line);padding:56px 0 64px;background:linear-gr
       <div class="flow">
         <article class="flow-step reveal" style="--d:0ms">
           <div class="flow-node"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7"/><path d="M12 3v13"/><path d="M7 8l5-5 5 5"/></svg><span class="n-num">1</span></div>
-          <div class="flow-ui" aria-hidden="true"><span class="fu-card"><span class="fu-thumb"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></span><span class="fu-lines"><i></i><i></i></span></span><span class="fu-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg></span><span class="fu-card"><span class="fu-app">D</span><span class="fu-ok"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span></span></div>
+          <div class="flow-ui" aria-hidden="true"><span class="fu-card"><span class="fu-thumb"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></span><span class="fu-lines"><i></i><i></i></span></span><span class="fu-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg></span><span class="fu-card"><span class="fu-app"><svg viewBox="0 0 512 512" style="width:100%;height:100%" aria-hidden="true"><rect x="128" y="372" width="256" height="40" rx="20" fill="#F7F3E9"/><rect x="196" y="118" width="40" height="194" rx="20" fill="#F7F3E9"/><path d="M178 296h76l-38 64z" fill="#F7F3E9"/><rect x="276" y="118" width="40" height="194" rx="20" fill="#F7F3E9"/><path d="M258 296h76l-38 64z" fill="#F7F3E9"/></svg></span><span class="fu-ok"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span></span></div>
           <p class="when">While you scroll</p>
           <h3>Share</h3>
           <p>Send any post to Doubletake from your phone's share sheet, or paste a URL. Optionally add a question, or just say nothing and let it figure the post out.</p>
@@ -442,7 +442,7 @@ footer{border-top:1px solid var(--line);padding:56px 0 64px;background:linear-gr
         </article>
         <article class="flow-step reveal" style="--d:240ms">
           <div class="flow-node"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a8 8 0 0 1-8 8H5l-2 2V12a8 8 0 0 1 8-8h2a8 8 0 0 1 8 8z"/><path d="M8 11h8"/><path d="M8 15h5"/></svg><span class="n-num">3</span></div>
-          <div class="flow-ui" aria-hidden="true"><span class="fu-bubble q"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>what was that tool?</span><span class="fu-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg></span><span class="fu-bubble a"><span class="fu-app" style="width:16px;height:16px;font-size:.5rem">D</span><span><b>Brushline</b>, free · <span class="fu-cost">saved 3w ago</span></span></span></div>
+          <div class="flow-ui" aria-hidden="true"><span class="fu-bubble q"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>what was that tool?</span><span class="fu-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg></span><span class="fu-bubble a"><span class="fu-app" style="width:16px;height:16px"><svg viewBox="0 0 512 512" style="width:100%;height:100%" aria-hidden="true"><rect x="128" y="372" width="256" height="40" rx="20" fill="#F7F3E9"/><rect x="196" y="118" width="40" height="194" rx="20" fill="#F7F3E9"/><path d="M178 296h76l-38 64z" fill="#F7F3E9"/><rect x="276" y="118" width="40" height="194" rx="20" fill="#F7F3E9"/><path d="M258 296h76l-38 64z" fill="#F7F3E9"/></svg></span><span><b>Brushline</b>, free · <span class="fu-cost">saved 3w ago</span></span></span></div>
           <p class="when">Weeks later, ask your agent</p>
           <h3>Remember</h3>
           <p>Every save becomes searchable memory. Connect Claude Code or any MCP agent and ask it what you saved, weeks later. It knows.</p>
