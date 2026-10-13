@@ -40,7 +40,10 @@ export default defineConfig({
         background_color: '#f7f4ee',
         display: 'standalone',
         start_url: '/',
-        icons: [{ src: '/icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' }],
+        icons: [
+          { src: '/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+          { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+        ],
         // Web Share Target: installed PWAs (Android Chrome, desktop Chrome) show up in the share sheet.
         share_target: {
           action: '/share',

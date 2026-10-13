@@ -339,7 +339,7 @@ footer{border-top:1px solid var(--line);padding:56px 0 64px;background:linear-gr
 <header class="site-head" id="siteHead">
   <div class="wrap head-in">
     <a class="brand" href="/" aria-label="Doubletake home">
-      <svg width="40" height="40" viewBox="0 0 512 512" role="img" aria-label="Doubletake logo: a red rounded square with two arrows dropping into a tray"><rect x="16" y="16" width="480" height="480" rx="118" fill="#C45A3C"/><rect x="128" y="372" width="256" height="40" rx="20" fill="#F7F3E9"/><rect x="196" y="118" width="40" height="194" rx="20" fill="#F7F3E9"/><path d="M178 296h76l-38 64z" fill="#F7F3E9"/><rect x="276" y="118" width="40" height="194" rx="20" fill="#F7F3E9"/><path d="M258 296h76l-38 64z" fill="#F7F3E9"/></svg>
+      <img src="/icon-192.png" width="40" height="40" alt="Doubletake logo" style="border-radius:22px">
     </a>
     <nav class="head-nav" aria-label="Primary">
       <a href="/privacy">Privacy</a>
@@ -840,6 +840,21 @@ var IC = function(paths, fill){
     chat.style.cursor = 'pointer';
     chat.addEventListener('click', function(){ if (!playing){ si = (si + 1) % scenes.length; play(); } });
   })();
+})();
+</script>
+<script>
+(function(){
+  if (!('serviceWorker' in navigator)) return;
+  navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).then(function(reg){
+    function refresh(){ location.reload(); }
+    if (reg.waiting && navigator.serviceWorker.controller) { refresh(); return; }
+    reg.addEventListener('updatefound', function(){
+      var nw = reg.installing; if (!nw) return;
+      nw.addEventListener('statechange', function(){
+        if (nw.state === 'activated' && navigator.serviceWorker.controller) refresh();
+      });
+    });
+  }).catch(function(){});
 })();
 </script>
 </body>
