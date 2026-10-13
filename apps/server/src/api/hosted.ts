@@ -24,6 +24,8 @@ import {
 
 /** Hosted-only paths the server-wide token gate lets through unauthenticated. */
 export const HOSTED_PUBLIC_PATHS = new Set([
+  '/',
+  '/welcome',
   '/api/auth/register',
   '/api/auth/login',
   // OAuth start + callbacks (ADR 0032): the state parameter is the proof, not a bearer token.
