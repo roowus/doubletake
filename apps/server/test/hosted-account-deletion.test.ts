@@ -135,14 +135,16 @@ describe.skipIf(!url)('DELETE /api/account + hosted public pages (Postgres)', ()
     }
   });
 
-  it('serves the PWA at / when a valid session cookie is present', async () => {
+  it('serves the landing with an open-library pill at / for a signed-in user', async () => {
     const res = await app.inject({
       method: 'GET',
       url: '/',
       headers: { cookie: `dt_session=${token}` },
     });
     expect(res.statusCode).toBe(200);
-    expect(res.body).toContain('PWA-MARKER');
+    // Since f0d52e5 the landing owns / for signed-in visitors too; the pill is the give-away.
+    expect(res.body).toContain('Doubletake');
+    expect(res.body).toContain('"/library"');
   });
 
   it('deletes the account, cascades everything, and orphans the tokens (401)', async () => {
