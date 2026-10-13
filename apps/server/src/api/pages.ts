@@ -168,26 +168,28 @@ document.getElementById('del-btn').addEventListener('click', async function () {
  * rather than a 401: `/` is a page, not an API.
  */
 async function rootPage(app: FastifyInstance, hosted: HostedAuth): Promise<void> {
-  app.addHook('onRequest', async (req: FastifyRequest, reply: FastifyReply) => {
-    const pathOnly = req.url.split('?')[0];
-    if (pathOnly !== '/') return;
+  // The landing owns / for EVERYONE, signed in or not. This is an explicit route (not a
+  // request hook) so it is registered before the static plugin and the not-found shell
+  // fallback: GET / can never fall through to the app shell, whatever the auth state.
+  const OPEN_PILL = `<a class="open-pill" href="/library">Open your library</a>`;
+  app.get('/', async (req: FastifyRequest, reply: FastifyReply) => {
     const header = req.headers.authorization;
     const bearer = header?.startsWith('Bearer ') ? header.slice(7) : undefined;
     const cookie = cookieValue(req.headers.cookie, HOSTED_SESSION_COOKIE);
     const token = bearer ?? cookie;
-    const signedIn = Boolean(token && (await hosted.authenticate(token)));
-    // The landing owns / for everyone; signed-in visitors get a pill into the app.
+    let signedIn = false;
+    if (token) {
+      try {
+        signedIn = Boolean(await hosted.authenticate(token));
+      } catch {
+        signedIn = false; // a malformed cookie/token must never break the landing
+      }
+    }
+    reply.header('cache-control', 'no-store');
     const html = signedIn
-      ? LANDING_HTML.replace(
-          '</body>',
-          '<a class="open-pill" href="/library">Open your library</a></body>',
-        )
+      ? LANDING_HTML.replace('</body>', `${OPEN_PILL}</body>`)
       : LANDING_HTML;
-    return reply
-      .code(200)
-      .type('text/html; charset=utf-8')
-      .header('cache-control', 'no-store')
-      .send(html);
+    return reply.code(200).type('text/html; charset=utf-8').send(html);
   });
 }
 
