@@ -151,8 +151,6 @@ img{display:block}
 .sf-ic.mail{background:linear-gradient(135deg,#4aa3ff,#2b7de9)}
 .sf-ic.dt{background:var(--rail);box-shadow:0 0 0 1.5px var(--paper),0 0 0 3px var(--rail)}.sf-ic.dt svg{width:20px;height:20px}
 .sf-app.on{color:var(--ink);font-weight:600}
-.sf-check{position:absolute;top:-4px;right:-4px;width:13px;height:13px;border-radius:50%;background:#3E7A4E;color:#fff;display:grid;place-items:center;border:1.5px solid #FBF8F0}
-.sf-check svg{width:7px;height:7px}
 .sf-arrow{color:var(--rail);font-size:1.8rem;line-height:1}
 .sf-arrow{color:var(--rail);font-size:1.8rem;line-height:1}
 @media (max-width:760px){
