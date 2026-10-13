@@ -127,10 +127,17 @@ describe.skipIf(!url)('DELETE /api/account + hosted public pages (Postgres)', ()
     expect(del.body).toContain('Delete');
     expect(del.body).toContain('/api/account');
 
+    process.stdout.write('\nROUTEDUMP\n' + app.printRoutes({ commonPrefix: false }) + '\nENDDUMP\n');
+    process.stdout.write('\nDIAG hosted=' + process.env.DOUBLETAKE_HOSTED +
+      ' hasRoute(/)=' + (() => { try { return app.hasRoute({ method: 'GET', url: '/' }); } catch { return 'ERR'; } })() +
+      ' hasRoute(/welcome)=' + (() => { try { return app.hasRoute({ method: 'GET', url: '/welcome' }); } catch { return 'ERR'; } })() +
+      '\n');
     for (const path of ['/', '/welcome']) {
       const landing = await app.inject({ method: 'GET', url: path });
+      process.stdout.write('\nDIAG ' + path + ' status=' + landing.statusCode + ' first100=' + landing.body.slice(0, 100) + '\n');
       expect(landing.statusCode).toBe(200);
       expect(landing.body).toContain('Doubletake');
+      process.stdout.write('\nBODY[' + path + '] status=' + landing.statusCode + ' first80=' + landing.body.slice(0, 80) + '\n');
       expect(landing.body).toContain('/privacy');
     }
   });

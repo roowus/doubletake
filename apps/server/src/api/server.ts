@@ -1066,7 +1066,13 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
 
   // ---- PWA ----
   if (cfg.webDist && fs.existsSync(cfg.webDist)) {
-    await app.register(fastifyStatic, { root: cfg.webDist, wildcard: false });
+    // Hosted mode: the explicit GET / landing route owns '/', so the static plugin must not
+    // also register an index route there (FST_ERR_DUPLICATED_ROUTE would crash the boot).
+    await app.register(fastifyStatic, {
+      root: cfg.webDist,
+      wildcard: false,
+      index: hostedAuth ? false : ['index.html'],
+    });
     app.setNotFoundHandler((req, reply) => {
       if (req.url.startsWith('/api/')) return reply.code(404).send({ error: 'not found' });
       // Hashed bundles are registered as routes at boot; one built after boot must 404, not
