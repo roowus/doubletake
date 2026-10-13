@@ -27,6 +27,9 @@ const MapView = lazy(() => import('./pages/MapView').then((m) => ({ default: m.M
 // Same for the graph simulation (Library → Map of everything).
 const GraphMap = lazy(() => import('./components/GraphMap').then((m) => ({ default: m.GraphMap })));
 
+// Routes that show the app itself; the only paths the hosted gate may guard.
+const APP_ROUTE_RE = /^(\/|\/library|\/chat\b|\/todo|\/settings|\/map)/;
+
 export function App() {
   const path = usePath();
   const [authed, setAuthed] = useState(!!getToken());
