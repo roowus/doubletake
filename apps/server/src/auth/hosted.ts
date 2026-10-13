@@ -10,6 +10,8 @@ import {
   costLedger,
   credentials,
   devices,
+  igLinks,
+  igPairingCodes,
   items,
   oauthStates,
   placeGeo,
@@ -51,6 +53,26 @@ export interface AuthContext {
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const OAUTH_STATE_TTL_MS = 10 * 60_000;
 const OAUTH_STATE_SWEEP_MS = 60 * 60_000;
+
+// Instagram pairing codes (ADR 0018, hosted mode): 8 chars, unambiguous set (no 0/O/1/I),
+// 15-minute TTL. 32 alphabet chars so a byte modulo maps evenly.
+const IG_CODE_LENGTH = 8;
+const IG_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+const IG_PAIRING_TTL_MS = 15 * 60_000;
+
+export interface IgPairingCode {
+  code: string;
+  expiresAt: string;
+}
+
+export interface IgLink {
+  id: string;
+  userId: string;
+  senderId: string;
+  igUsername: string | null;
+  createdAt: string;
+  revokedAt: string | null;
+}
 
 /** postgres unique-violation (23505), thrown on the registerEmail race path. */
 function isUniqueViolation(e: unknown): boolean {
@@ -449,6 +471,92 @@ export class HostedAuth {
       throw e;
     }
     return toUser({ ...created, displayName: null, disabledAt: null });
+  }
+
+  // ---- Instagram account pairing (ADR 0018 in hosted mode, ADR 0032) ----
+
+  async createIgPairingCode(userId: string): Promise<IgPairingCode> {
+    const bytes = randomBytes(IG_CODE_LENGTH);
+    let code = '';
+    for (const b of bytes) code += IG_CODE_ALPHABET[b % 32] ?? 'A';
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + IG_PAIRING_TTL_MS).toISOString();
+    // A user has at most one live code: generating replaces the previous one.
+    await this.db.delete(igPairingCodes).where(eq(igPairingCodes.userId, userId));
+    await this.db.insert(igPairingCodes).values({
+      code,
+      userId,
+      createdAt: now.toISOString(),
+      expiresAt,
+    });
+    return { code, expiresAt };
+  }
+
+  /**
+   * Consume a pairing code on an incoming DM: valid + unexpired, and the sender must not have
+   * an active link yet. Creates the `ig_links` row; the code is single-use and deleted.
+   */
+  async resolveIgPairing(
+    code: string,
+    senderId: string,
+    igUsername: string | null,
+  ): Promise<{ userId: string; igUsername: string | null } | null> {
+    const norm = code.trim().toUpperCase();
+    if (!norm) return null;
+    const row = await this.db.query.igPairingCodes.findFirst({
+      where: (t, { eq }) => eq(t.code, norm),
+    });
+    if (!row) return null;
+    await this.db.delete(igPairingCodes).where(eq(igPairingCodes.code, norm));
+    // Expired or already-linked senders consume the code but link nothing.
+    if (Date.now() > Date.parse(row.expiresAt)) return null;
+    const existing = await this.getIgLinkForSender(senderId);
+    if (existing) return null;
+    await this.db.insert(igLinks).values({
+      id: ulid(),
+      userId: row.userId,
+      senderId,
+      igUsername: igUsername ?? null,
+      createdAt: new Date().toISOString(),
+    });
+    return { userId: row.userId, igUsername: igUsername ?? null };
+  }
+
+  /** Active (non-revoked) link for an Instagram sender (IGSID), else null. */
+  async getIgLinkForSender(senderId: string) {
+    return (
+      (await this.db.query.igLinks.findFirst({
+        where: (t, { and, eq, isNull }) => and(eq(t.senderId, senderId), isNull(t.revokedAt)),
+      })) ?? null
+    );
+  }
+
+  /** Active link owned by `userId`, else null (account settings view). */
+  async getIgLink(userId: string) {
+    return (
+      (await this.db.query.igLinks.findFirst({
+        where: (t, { and, eq, isNull }) => and(eq(t.userId, userId), isNull(t.revokedAt)),
+      })) ?? null
+    );
+  }
+
+  /** Live (unexpired) pairing code for a user, else null (shown while their account is unlinked). */
+  async getLiveIgPairingCode(userId: string): Promise<IgPairingCode | null> {
+    const row = await this.db.query.igPairingCodes.findFirst({
+      where: (t, { eq }) => eq(t.userId, userId),
+    });
+    if (!row || Date.now() > Date.parse(row.expiresAt)) return null;
+    return { code: row.code, expiresAt: row.expiresAt };
+  }
+
+  /** Soft-revoke a link, scoped to its owner. Returns false when the link is not theirs. */
+  async revokeIgLink(userId: string, linkId: string): Promise<boolean> {
+    const res = await this.db
+      .update(igLinks)
+      .set({ revokedAt: new Date().toISOString() })
+      .where(and(eq(igLinks.id, linkId), eq(igLinks.userId, userId), isNull(igLinks.revokedAt)))
+      .returning({ id: igLinks.id });
+    return res.length > 0;
   }
 
   private findUserByEmail(email: string) {
