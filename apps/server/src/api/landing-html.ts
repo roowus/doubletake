@@ -145,7 +145,7 @@ img{display:block}
 .sf-tline.l2{width:42px}
 .sf-apps{display:flex;justify-content:space-between}
 .sf-app{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:.5rem;color:var(--graphite);position:relative}
-.sf-ic{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;color:#fff}
+.sf-ic{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;color:#fff;position:relative}.sf-ic svg{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%)}
 .sf-ic svg{width:14px;height:14px}
 .sf-ic.msg{background:linear-gradient(135deg,#45d052,#2bb83a)}
 .sf-ic.mail{background:linear-gradient(135deg,#4aa3ff,#2b7de9)}
