@@ -105,6 +105,8 @@ export function registerHostedRoutes(app: FastifyInstance, hosted: HostedAuth | 
     const body = RegisterBody.parse(req.body);
     const user = await hosted.registerEmail(body.email, body.password, body.invite_code);
     const { token } = await hosted.createSession(user.id, 'browser', body.displayName);
+    // Cookie + JSON token: cookie lets full page loads (/, /library) recognize the session.
+    reply.header('set-cookie', sessionCookie(token, req));
     return reply
       .code(200)
       .send({ token, user: { id: user.id, email: user.email, displayName: user.displayName } });
@@ -115,6 +117,7 @@ export function registerHostedRoutes(app: FastifyInstance, hosted: HostedAuth | 
     const user = await hosted.loginEmail(body.email, body.password);
     if (!user) return reply.code(401).send({ error: 'invalid email or password' });
     const { token } = await hosted.createSession(user.id, 'browser');
+    reply.header('set-cookie', sessionCookie(token, req));
     return reply
       .code(200)
       .send({ token, user: { id: user.id, email: user.email, displayName: user.displayName } });
