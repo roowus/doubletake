@@ -1077,6 +1077,15 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
   }
 
   registerHostedRoutes(app, hostedAuth ?? undefined); // ADR 0032: no-op unless hosted mode is on
+  // Hosted Instagram pairing (ADR 0018 + ADR 0032): the channel gains hooks only here, so the
+  // self-hosted single-owner behaviour is untouched when DOUBLETAKE_HOSTED is unset.
+  if (hostedAuth && deps.ig) {
+    deps.ig.attachHosted({
+      resolveLink: (senderId) => hostedAuth.getIgLinkForSender(senderId),
+      resolvePairing: (code, senderId, igUsername) =>
+        hostedAuth.resolveIgPairing(code, senderId, igUsername),
+    });
+  }
   // Landing + legal pages (privacy/terms/delete), and the anonymous-`/` landing hook.
   registerHostedPages(app, hostedAuth ?? undefined);
 

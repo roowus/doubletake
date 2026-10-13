@@ -7,8 +7,8 @@
  */
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { HostedAuth } from '../auth/hosted.js';
-import { LANDING_HTML } from './landing-html.js';
 import { cookieValue, HOSTED_SESSION_COOKIE, isHostedMode } from './hosted.js';
+import { LANDING_HTML } from './landing-html.js';
 
 const FOOTER = `<footer><p><a href="/privacy">Privacy</a> · <a href="/terms">Terms</a> · <a href="/delete">Delete account</a> · <a href="/login">Sign in</a></p><p>Doubletake · contact: <a href="mailto:roowus.dev@gmail.com">roowus.dev@gmail.com</a></p></footer>`;
 
@@ -178,9 +178,16 @@ async function rootPage(app: FastifyInstance, hosted: HostedAuth): Promise<void>
     const signedIn = Boolean(token && (await hosted.authenticate(token)));
     // The landing owns / for everyone; signed-in visitors get a pill into the app.
     const html = signedIn
-      ? LANDING_HTML.replace('</body>', '<a class="open-pill" href="/library">Open your library</a></body>')
+      ? LANDING_HTML.replace(
+          '</body>',
+          '<a class="open-pill" href="/library">Open your library</a></body>',
+        )
       : LANDING_HTML;
-    return reply.code(200).type('text/html; charset=utf-8').header('cache-control', 'no-store').send(html);
+    return reply
+      .code(200)
+      .type('text/html; charset=utf-8')
+      .header('cache-control', 'no-store')
+      .send(html);
   });
 }
 
@@ -188,16 +195,32 @@ async function rootPage(app: FastifyInstance, hosted: HostedAuth): Promise<void>
 export function registerHostedPages(app: FastifyInstance, hosted: HostedAuth | undefined): void {
   if (!isHostedMode() || !hosted) return;
   app.get('/welcome', async (_req, reply) =>
-    reply.code(200).type('text/html; charset=utf-8').header('cache-control', 'no-store').send(landingPage()),
+    reply
+      .code(200)
+      .type('text/html; charset=utf-8')
+      .header('cache-control', 'no-store')
+      .send(landingPage()),
   );
   app.get('/privacy', async (_req, reply) =>
-    reply.code(200).type('text/html; charset=utf-8').header('cache-control', 'no-store').send(privacyPage()),
+    reply
+      .code(200)
+      .type('text/html; charset=utf-8')
+      .header('cache-control', 'no-store')
+      .send(privacyPage()),
   );
   app.get('/terms', async (_req, reply) =>
-    reply.code(200).type('text/html; charset=utf-8').header('cache-control', 'no-store').send(termsPage()),
+    reply
+      .code(200)
+      .type('text/html; charset=utf-8')
+      .header('cache-control', 'no-store')
+      .send(termsPage()),
   );
   app.get('/delete', async (_req, reply) =>
-    reply.code(200).type('text/html; charset=utf-8').header('cache-control', 'no-store').send(deletePage()),
+    reply
+      .code(200)
+      .type('text/html; charset=utf-8')
+      .header('cache-control', 'no-store')
+      .send(deletePage()),
   );
   void rootPage(app, hosted);
 }
