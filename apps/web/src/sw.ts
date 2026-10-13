@@ -7,9 +7,25 @@ declare const self: ServiceWorkerGlobalScope;
 // App shell precache (injected by vite-plugin-pwa). The API is never cached.
 precacheAndRoute(self.__WB_MANIFEST);
 cleanupOutdatedCaches();
+// Navigations are NETWORK-FIRST: users always get the deployed shell when online; the cache
+// is only the offline fallback. Cache-first here served dead shells after every deploy
+// (orphaned hashed assets) and trapped users on the login page - never again.
 registerRoute(
   new NavigationRoute(
-    async () => (await caches.match('/index.html')) ?? (await fetch('/index.html')),
+    async (params) => {
+      // Network-first: fresh shell when online; cache only as the offline fallback.
+      const req = (params.event as FetchEvent | undefined)?.request ?? params.request;
+      try {
+        const res = await fetch(req);
+        if (res && res.status === 200 && res.type === 'basic') {
+          const cache = await caches.open('navigation-cache');
+          void cache.put(req, res.clone());
+        }
+        return res;
+      } catch {
+        return (await caches.match(req)) ?? (await caches.match('/index.html')) ?? Response.error();
+      }
+    },
     { denylist: [/^\/api\//, /^\/s\//, /^\/$/, /^\/privacy/, /^\/terms/, /^\/delete/, /^\/welcome/] },
   ),
 );
@@ -37,8 +53,8 @@ self.addEventListener('push', (e) => {
     self.registration.showNotification(p.title, {
       body: p.body,
       tag: p.tag,
-      icon: '/icon.svg',
-      badge: '/icon.svg',
+      icon: '/icon-192.png',
+      badge: '/icon-192.png',
       data: { url: p.url, chatId: p.chatId },
     }),
   );
