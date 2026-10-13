@@ -7,11 +7,22 @@
  */
 
 import crypto from 'node:crypto';
-import type { IngestRequest } from '@doubletake/shared';
+import {
+  type IngestRequest,
+  type Mode,
+  type Platform,
+  resolveRequestedMode,
+} from '@doubletake/shared';
 import type { Config } from '../../config/index.js';
-import type { ItemRow, Repo } from '../../db/repo.js';
-import { firstUrlIn } from '../../extract/registry.js';
-import { type AdapterPick, type IngestOutcome, ingest } from '../../ingest/index.js';
+import type { ItemRow, Repo, TenantCtx } from '../../db/repo.js';
+import { detectPlatform, firstUrlIn } from '../../extract/registry.js';
+import {
+  type AdapterPick,
+  type IngestOutcome,
+  ingest,
+  titleFromText,
+  titleFromUrl,
+} from '../../ingest/index.js';
 import type { ExtractParams } from '../../media/protocol.js';
 import { CHANNEL_TOOL } from '../../queue/worker.js';
 import type { SecretBox } from '../../secrets/box.js';
@@ -38,6 +49,8 @@ function isInstagramPage(url: string): boolean {
 
 /** A text-only DM this soon after a share from the same sender is that share's note. */
 export const LATE_NOTE_WINDOW_MS = 2 * 60_000;
+/** Re-share window that re-runs on the existing chat instead of forking a new item. */
+const DEDUPE_HOURS = 24;
 
 export interface IgLogger {
   info(msg: string): void;
@@ -58,6 +71,30 @@ export interface IgChannelDeps {
   /** Overridable for tests. */
   now?: () => number;
 }
+
+/**
+ * Hosted-mode hooks (ADR 0032), attached by the server when DOUBLETAKE_HOSTED=1. The channel
+ * itself stays single-owner: every hook is null/absent in self-hosted mode and none of the
+ * pairing logic runs. `resolveLink` answers whether a DM sender is already paired and to whom;
+ * `resolvePairing` consumes a pairing code typed into a DM. Ingest itself threads the user's
+ * `TenantCtx` straight through the repo, which stamps it onto items/chats on the pg dialect.
+ */
+export interface IgHostedHooks {
+  /** Active `ig_links` row for a sender (IGSID), or null when unknown/unlinked. */
+  resolveLink(senderId: string): Promise<{ userId: string } | null>;
+  /** Consume a valid unexpired pairing code for this sender; null when rejected. */
+  resolvePairing(
+    code: string,
+    senderId: string,
+    igUsername: string | null,
+  ): Promise<{ userId: string } | null>;
+}
+
+/** At most one "please connect first" DM per unknown sender per hour (in-memory, per process). */
+const PROMPT_WINDOW_MS = 60 * 60_000;
+const PAIRING_ACK = 'Linked to your Doubletake account.';
+const PAIRING_PROMPT =
+  'Connect your account at doubletake.gg/settings → Instagram, then DM me the code.';
 
 export interface IgStatus {
   configured: boolean;
@@ -169,6 +206,12 @@ export class InstagramChannel {
 
   constructor(private readonly deps: IgChannelDeps) {
     this.now = deps.now ?? Date.now;
+  }
+
+  /** Hosted hooks (ADR 0032), attached by api/server.ts when hosted mode is on. Null self-hosted. */
+  private hosted: IgHostedHooks | null = null;
+  attachHosted(hooks: IgHostedHooks): void {
+    this.hosted = hooks;
   }
 
   get configured(): boolean {
@@ -377,7 +420,7 @@ export class InstagramChannel {
       if (this.polledMedia.has(m.id)) continue;
       this.polledMedia.add(m.id);
       const eventId = `poll:${m.id}`;
-      if (!this.deps.repo.recordIgEvent({ id: eventId, kind: 'mention', raw: m })) continue;
+      if (!(await this.deps.repo.recordIgEvent({ id: eventId, kind: 'mention', raw: m }))) continue;
       try {
         const out = await this.handleMention(eventId, { media_id: m.id }, m);
         n += out ? 1 : 0;
@@ -400,6 +443,14 @@ export class InstagramChannel {
           res.ignored++;
           continue;
         }
+        // Hosted mode (ADR 0032): every DM is gated on pairing before any item is created.
+        // Self-hosted (`hosted` null) skips this entirely — behaviour byte-identical.
+        let ctx: TenantCtx | undefined;
+        if (this.hosted) {
+          const gate = await this.hostedDmGate(m, mid, res);
+          if (!gate) continue;
+          if (gate.userId) ctx = { userId: gate.userId };
+        }
         const share = (m.message?.attachments ?? []).find(
           (a) => a.type === 'ig_reel' || a.type === 'share' || a.type === 'story_mention',
         );
@@ -409,14 +460,14 @@ export class InstagramChannel {
           // webhook events a few hundred ms apart, so text right after a share from the same
           // sender is that share's note. Anything else is recorded and ignored (the bot does not
           // chat in DMs).
-          const attached = this.attachLateNote(m);
+          const attached = await this.attachLateNote(m, ctx);
           if (
-            this.deps.repo.recordIgEvent({
+            (await this.deps.repo.recordIgEvent({
               id: mid,
               kind: attached ? 'dm_note' : 'other',
               raw: m,
               senderId: m.sender?.id ?? null,
-            }) &&
+            })) &&
             attached
           ) {
             this.deps.repo.markIgEvent(mid, { itemId: attached });
@@ -427,18 +478,18 @@ export class InstagramChannel {
           continue;
         }
         if (
-          !this.deps.repo.recordIgEvent({
+          !(await this.deps.repo.recordIgEvent({
             id: mid,
             kind: 'dm_share',
             raw: m,
             senderId: m.sender?.id ?? null,
-          })
+          }))
         ) {
           res.duplicates++;
           continue;
         }
         try {
-          const out = await this.handleDmShare(mid, m, share, urlInText);
+          const out = await this.handleDmShare(mid, m, share, urlInText, ctx);
           res.handled.push({ id: mid, kind: 'dm_share', itemId: out.item.id, error: null });
         } catch (e) {
           const msg = (e as Error).message;
@@ -462,11 +513,11 @@ export class InstagramChannel {
         }
         const id = commentId ? `comment:${commentId}` : `media:${mediaId}`;
         if (
-          !this.deps.repo.recordIgEvent({
+          !(await this.deps.repo.recordIgEvent({
             id,
             kind: c.field === 'mentions' ? 'mention' : 'comment',
             raw: c,
-          })
+          }))
         ) {
           res.duplicates++;
           continue;
@@ -492,11 +543,77 @@ export class InstagramChannel {
     return res;
   }
 
+  /** Last "please connect" prompt per sender, for the hourly rate limit. */
+  private lastPrompt = new Map<string, number>();
+
+  /**
+   * Hosted-mode DM gate (ADR 0032), run before anything is ingested:
+   * - linked sender → proceed, with the link owner's user id as the ingest tenant;
+   * - DM text is a valid pairing code → link the sender, react + confirm, ingest nothing;
+   * - anyone else → ingest nothing, one polite prompt per sender per hour.
+   * Returns the tenant to ingest under, or null when the message was fully handled/blocked.
+   */
+  private async hostedDmGate(
+    m: Messaging,
+    mid: string,
+    res: WebhookResult,
+  ): Promise<{ userId?: string } | null> {
+    const hosted = this.hosted;
+    if (!hosted) return {};
+    const senderId = m.sender?.id;
+    if (!senderId) return {};
+    const link = await hosted.resolveLink(senderId);
+    if (link) return { userId: link.userId };
+    const text = m.message?.text?.trim() ?? '';
+    if (text) {
+      const paired = await hosted.resolvePairing(text, senderId, null);
+      if (paired) {
+        // Dedupe on Meta's message id so a webhook redelivery never double-replies.
+        if (
+          !(await this.deps.repo.recordIgEvent({
+            id: mid,
+            kind: 'dm_pairing',
+            raw: m,
+            senderId,
+          }))
+        ) {
+          res.duplicates++;
+        } else {
+          void this.acknowledge(senderId, mid);
+          void this.reply(senderId, PAIRING_ACK);
+          res.handled.push({ id: mid, kind: 'dm_pairing', itemId: null, error: null });
+        }
+        return null;
+      }
+    }
+    if (!(await this.deps.repo.recordIgEvent({ id: mid, kind: 'other', raw: m, senderId }))) {
+      res.duplicates++;
+      return null;
+    }
+    const now = this.now();
+    if (now - (this.lastPrompt.get(senderId) ?? 0) > PROMPT_WINDOW_MS) {
+      this.lastPrompt.set(senderId, now);
+      void this.reply(senderId, PAIRING_PROMPT);
+    }
+    res.ignored++;
+    return null;
+  }
+
+  /** Fire-and-forget DM text; never delays the webhook 200. */
+  private async reply(senderId: string, text: string): Promise<void> {
+    const t = await this.token();
+    if (!t) return;
+    this.deps.graph
+      .sendText(t.token, t.igUserId, senderId, text)
+      .catch((e) => this.deps.log.warn(`instagram: dm reply failed: ${(e as Error).message}`));
+  }
+
   private async handleDmShare(
     mid: string,
     m: Messaging,
     share: DmAttachment | undefined,
     urlInText: string | undefined,
+    ctx?: TenantCtx,
   ): Promise<IngestOutcome> {
     const cdn = share?.payload?.url;
     const text = m.message?.text?.trim() ?? '';
@@ -523,11 +640,11 @@ export class InstagramChannel {
       modeHint: 'auto',
       ...(note ? { note } : share?.payload?.title ? { note: share.payload.title } : {}),
     };
-    const out = ingest(req, { repo: this.deps.repo, adapterFor: this.deps.adapterFor });
+    const out = await this.ingestForUser(req, ctx);
     this.deps.repo.markIgEvent(mid, { itemId: out.item.id });
     // Acknowledge at once: the heart tells the owner "got it, working on it"; the answer itself
     // arrives by push. Fire-and-forget so a slow Graph call never delays the webhook 200.
-    if (m.sender?.id) this.acknowledge(m.sender.id, mid);
+    if (m.sender?.id) void this.acknowledge(m.sender.id, mid);
     // Meta puts the reel *permalink* (an HTML page) in payload.url for ig_reel shares; only a
     // real media URL is worth handing to the worker as a download shortcut.
     if (cdn && !isInstagramPage(cdn)) this.hintCdn(out.item.id, cdn, share?.payload?.reel_video_id);
@@ -540,6 +657,88 @@ export class InstagramChannel {
       });
     }
     return out;
+  }
+
+  /**
+   * Dialect-safe ingest for DM shares: like `ingest()` but every repo call is awaited, so the
+   * hosted Postgres dialect (whose sync signatures return promises, see repo.ts) produces real
+   * rows and a real item id for `markIgEvent`. On SQLite awaiting is a no-op and the behaviour
+   * matches `ingest()` for DM shares (no clientId, focus always `whole`).
+   */
+  private async ingestForUser(req: IngestRequest, ctx?: TenantCtx): Promise<IngestOutcome> {
+    const { repo, adapterFor } = this.deps;
+    const url = req.url ?? (req.text ? firstUrlIn(req.text) : undefined);
+    let platform: Platform = 'text';
+    let canonicalUrl: string | null = null;
+    if (url) {
+      const det = detectPlatform(url);
+      if (!det) throw new Error('unsupported URL (only http/https)');
+      platform = det.platform;
+      canonicalUrl = det.canonicalUrl;
+    }
+    const mode: Mode = resolveRequestedMode(req.modeHint) ?? 'standard';
+    const binding = adapterFor(mode);
+    if (canonicalUrl) {
+      const dup = await repo.findRecentDuplicate(canonicalUrl, req.focus, DEDUPE_HOURS, ctx);
+      const chat = dup ? await repo.getChatByItem(dup.id, ctx) : undefined;
+      if (dup && chat) {
+        if (req.note?.trim())
+          await repo.addMessage(
+            { chatId: chat.id, role: 'user', kind: 'question', content: req.note },
+            ctx,
+          );
+        const run = await repo.createRun(
+          {
+            itemId: dup.id,
+            chatId: chat.id,
+            kind: 'research',
+            mode,
+            adapter: binding.adapter.id,
+            model: binding.model,
+            pinned: false,
+          },
+          ctx,
+        );
+        await repo.updateItem(
+          dup.id,
+          {
+            status: 'new',
+            ...(req.note ? { note: [dup.note, req.note].filter(Boolean).join('\n\n') } : {}),
+          },
+          ctx,
+        );
+        return { item: dup, chat, run, deduplicated: true };
+      }
+    }
+    const title = canonicalUrl
+      ? titleFromUrl(canonicalUrl, platform)
+      : titleFromText(req.text ?? '');
+    const created = await repo.createItemWithChat(
+      req,
+      platform,
+      canonicalUrl,
+      title,
+      undefined,
+      ctx,
+    );
+    const run = await repo.createRun(
+      {
+        itemId: created.item.id,
+        chatId: created.chat.id,
+        kind: 'research',
+        mode,
+        adapter: binding.adapter.id,
+        model: binding.model,
+        pinned: false,
+      },
+      ctx,
+    );
+    if (req.note?.trim())
+      await repo.addMessage(
+        { chatId: created.chat.id, role: 'user', kind: 'question', content: req.note },
+        ctx,
+      );
+    return { item: created.item, chat: created.chat, run, deduplicated: false };
   }
 
   /** Last DM share per sender, so the text typed right after it can become the note. */
@@ -555,7 +754,7 @@ export class InstagramChannel {
    * question copied from the reel title is rewritten, anything else appends a new one. Returns
    * the item id it was attached to, or null.
    */
-  private attachLateNote(m: Messaging): string | null {
+  private async attachLateNote(m: Messaging, ctx?: TenantCtx): Promise<string | null> {
     const sender = m.sender?.id;
     const text = m.message?.text?.trim();
     if (!sender || !text) return null;
@@ -567,19 +766,23 @@ export class InstagramChannel {
       return null;
     }
     const { repo } = this.deps;
-    const item = repo.getItem(recent.itemId);
+    const item = await repo.getItem(recent.itemId, ctx);
     if (!item) return null;
     // A note copied from the reel's title is a placeholder; the sender's own words replace it.
     const base = recent.titleNote ? null : item.note;
     const note = [base, text].filter(Boolean).join('\n\n');
-    repo.updateItem(item.id, { note });
+    await repo.updateItem(item.id, { note }, ctx);
     const placeholder = recent.titleNote
-      ? repo
-          .listMessages(recent.chatId)
-          .find((x) => x.role === 'user' && x.kind === 'question' && x.content === item.note)
+      ? (await repo.listMessages(recent.chatId, ctx)).find(
+          (x) => x.role === 'user' && x.kind === 'question' && x.content === item.note,
+        )
       : undefined;
-    if (placeholder) repo.updateMessageContent(placeholder.id, text);
-    else repo.addMessage({ chatId: recent.chatId, role: 'user', kind: 'question', content: text });
+    if (placeholder) await repo.updateMessageContent(placeholder.id, text, ctx);
+    else
+      await repo.addMessage(
+        { chatId: recent.chatId, role: 'user', kind: 'question', content: text },
+        ctx,
+      );
     this.deps.onChatUpdated?.(recent.chatId);
     this.recentShares.set(sender, { ...recent, titleNote: false });
     return item.id;
@@ -690,8 +893,8 @@ export class InstagramChannel {
   // ---- acknowledgement / completion ----
 
   /** `love` on the DM as soon as its share was accepted. Mentions get nothing public. */
-  private acknowledge(senderId: string, messageId: string): void {
-    const t = this.token();
+  private async acknowledge(senderId: string, messageId: string): Promise<void> {
+    const t = await this.token();
     if (!t) return;
     this.deps.graph
       .react(t.token, t.igUserId, senderId, messageId)

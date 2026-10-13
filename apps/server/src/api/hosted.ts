@@ -184,6 +184,36 @@ export function registerHostedRoutes(app: FastifyInstance, hosted: HostedAuth | 
     return { ok };
   });
 
+  // ---- Instagram account pairing (ADR 0018 in hosted mode) ----
+  // Generate a code, DM it to the service's Instagram account, and the sender's IG account is
+  // linked to this Doubletake user; incoming DMs then ingest under this account's tenant.
+
+  app.post('/api/account/instagram/link', async (req) => {
+    const userId = requireUser(req);
+    return hosted.createIgPairingCode(userId);
+  });
+
+  app.get('/api/account/instagram', async (req) => {
+    const userId = requireUser(req);
+    const link = await hosted.getIgLink(userId);
+    if (link)
+      return {
+        linked: true,
+        igUsername: link.igUsername ?? undefined,
+        linkedAt: link.createdAt,
+      };
+    // While unlinked, surface a still-live code so the settings page can show it again.
+    const code = await hosted.getLiveIgPairingCode(userId);
+    return { linked: false, ...(code ? { code } : {}) };
+  });
+
+  app.delete('/api/account/instagram', async (req) => {
+    const userId = requireUser(req);
+    const link = await hosted.getIgLink(userId);
+    if (!link) return { ok: false };
+    return { ok: await hosted.revokeIgLink(userId, link.id) };
+  });
+
   /** Max active (`kind='mcp'`, not revoked) MCP sessions per user; beyond this minting 409s. */
   const MCP_SESSION_CAP = 20;
 

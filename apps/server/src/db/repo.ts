@@ -1583,7 +1583,9 @@ export class Repo {
   // ---- instagram ----
 
   getIgAccount(): typeof s.igAccounts.$inferSelect | undefined {
-    return this.db.select().from(s.igAccounts).limit(1).get();
+    return this.one<typeof s.igAccounts.$inferSelect>(
+      this.db.select().from(this.t.igAccounts).limit(1),
+    );
   }
   upsertIgAccount(row: {
     igUserId: string;
@@ -1594,11 +1596,8 @@ export class Repo {
   }) {
     const now = nowIso();
     // v1 holds exactly one shadow account; connecting another replaces it.
-    this.db.delete(s.igAccounts).run();
-    this.db
-      .insert(s.igAccounts)
-      .values({ ...row, createdAt: now, updatedAt: now })
-      .run();
+    this.exec(this.db.delete(this.t.igAccounts));
+    this.exec(this.db.insert(this.t.igAccounts).values({ ...row, createdAt: now, updatedAt: now }));
   }
   updateIgAccount(
     igUserId: string,
@@ -1609,25 +1608,30 @@ export class Repo {
       >
     >,
   ) {
-    this.db
-      .update(s.igAccounts)
-      .set({ ...patch, updatedAt: nowIso() })
-      .where(eq(s.igAccounts.igUserId, igUserId))
-      .run();
+    this.exec(
+      this.db
+        .update(this.t.igAccounts)
+        .set({ ...patch, updatedAt: nowIso() })
+        .where(eq(this.t.igAccounts.igUserId, igUserId)),
+    );
   }
   deleteIgAccount() {
-    this.db.delete(s.igAccounts).run();
+    this.exec(this.db.delete(this.t.igAccounts));
   }
 
-  /** Returns false when the event id was already recorded (webhook redelivery). */
+  /**
+   * Returns false when the event id was already recorded (webhook redelivery). On pg the
+   * boolean arrives lazily (dialect contract): hosted callers `await`, SQLite callers keep the
+   * plain synchronous value.
+   */
   recordIgEvent(row: {
     id: string;
     kind: string;
     raw: unknown;
     senderId?: string | null;
   }): boolean {
-    const res = this.db
-      .insert(s.igEvents)
+    const q = this.db
+      .insert(this.t.igEvents)
       .values({
         id: row.id,
         kind: row.kind,
@@ -1635,28 +1639,28 @@ export class Repo {
         senderId: row.senderId ?? null,
         receivedAt: nowIso(),
       })
-      .onConflictDoNothing()
-      .run();
-    return res.changes > 0;
+      .onConflictDoNothing();
+    if (!this.isPg) return q.run().changes > 0;
+    return lazy((async () => (await this.exec(q)).changes > 0)()) as unknown as boolean;
   }
   markIgEvent(id: string, patch: { itemId?: string | null; error?: string | null }) {
-    this.db
-      .update(s.igEvents)
-      .set({ ...patch, processedAt: nowIso() })
-      .where(eq(s.igEvents.id, id))
-      .run();
+    this.exec(
+      this.db
+        .update(this.t.igEvents)
+        .set({ ...patch, processedAt: nowIso() })
+        .where(eq(this.t.igEvents.id, id)),
+    );
   }
   /** DM-share events that produced this item (for the completion reaction). */
   igEventsForItem(itemId: string): (typeof s.igEvents.$inferSelect)[] {
-    return this.db.select().from(s.igEvents).where(eq(s.igEvents.itemId, itemId)).all();
+    return this.many<typeof s.igEvents.$inferSelect>(
+      this.db.select().from(this.t.igEvents).where(eq(this.t.igEvents.itemId, itemId)),
+    );
   }
   listIgEvents(limit = 50): (typeof s.igEvents.$inferSelect)[] {
-    return this.db
-      .select()
-      .from(s.igEvents)
-      .orderBy(desc(s.igEvents.receivedAt))
-      .limit(limit)
-      .all();
+    return this.many<typeof s.igEvents.$inferSelect>(
+      this.db.select().from(this.t.igEvents).orderBy(desc(this.t.igEvents.receivedAt)).limit(limit),
+    );
   }
 
   // ---- pending notifications (quiet hours, ADR 0020) ----
