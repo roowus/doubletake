@@ -225,12 +225,22 @@ export class InstagramChannel {
 
   // ---- account / token ----
 
-  private account() {
-    return this.deps.repo.getIgAccount();
+  /**
+   * The stored shadow account, if any. Async because `getIgAccount` is pg-lazy on the hosted
+   * dialect (repo.ts dialect contract); on SQLite the value is plain and `await` is a no-op.
+   */
+  private async account() {
+    return await this.deps.repo.getIgAccount();
   }
 
-  private token(): { igUserId: string; token: string } | null {
-    const a = this.account();
+  /**
+   * Decrypted account token. Async for the same reason as `account()`: the underlying repo read
+   * is a Promise on pg, and the old sync accessor read `.igUserId`/`.accessTokenEnc` off that
+   * Promise — the live "Cannot read properties of undefined (reading 'split')" inside the token
+   * refresh path (`box.open(undefined)` blows up in the cipher).
+   */
+  private async token(): Promise<{ igUserId: string; token: string } | null> {
+    const a = await this.account();
     if (!a) return null;
     return { igUserId: a.igUserId, token: this.deps.box.open(a.accessTokenEnc) };
   }
@@ -267,7 +277,7 @@ export class InstagramChannel {
       log.warn(`instagram: subscribed_apps failed: ${(e as Error).message}`);
     }
     log.info(`instagram: connected @${me.username ?? me.id}`);
-    return this.status();
+    return await this.status();
   }
 
   disconnect(): void {
@@ -318,7 +328,7 @@ export class InstagramChannel {
    */
   async verifyAccess(): Promise<IgAccessReport> {
     const { graph, log } = this.deps;
-    const t = this.token();
+    const t = await this.token();
     if (!t) throw new Error('Instagram is not connected');
     const { igUserId, token } = t;
     const errors: Record<string, string> = {};
@@ -380,7 +390,7 @@ export class InstagramChannel {
 
   /** Refresh the long-lived token when it is ≥30 days old. Returns true when refreshed. */
   async refreshIfDue(): Promise<boolean> {
-    const a = this.account();
+    const a = await this.account();
     if (!a) return false;
     const last = a.refreshedAt ? Date.parse(a.refreshedAt) : 0;
     if (this.now() - last < REFRESH_AFTER_MS) return false;
@@ -403,9 +413,17 @@ export class InstagramChannel {
     }
   }
 
-  status(): IgStatus {
-    const a = this.account();
+  /**
+   * Channel status for the settings page and the boot log. Async because it reads the account
+   * row (`getIgAccount`) and the recent event log (`listIgEvents`), both pg-lazy on the hosted
+   * dialect (repo.ts dialect contract); on SQLite `await` is a no-op. The old sync version called
+   * `.map` on the Promise `listIgEvents` returns — the live
+   * "repo.listIgEvents(...).map is not a function".
+   */
+  async status(): Promise<IgStatus> {
+    const a = await this.account();
     const { cfg, repo } = this.deps;
+    const events = await repo.listIgEvents(20);
     return {
       configured: this.configured,
       connected: Boolean(a),
@@ -416,7 +434,7 @@ export class InstagramChannel {
       webhookPublicHost: cfg.ig.webhookPublicHost,
       mentionPolling: cfg.ig.mentionPolling,
       scopes: IG_SCOPES,
-      recentEvents: repo.listIgEvents(20).map((e) => ({
+      recentEvents: events.map((e) => ({
         id: e.id,
         kind: e.kind,
         itemId: e.itemId,
@@ -447,7 +465,7 @@ export class InstagramChannel {
    * account is tagged/mentioned in. Every newly seen media becomes a `comments`-focused item.
    */
   async pollMentions(): Promise<number> {
-    const t = this.token();
+    const t = await this.token();
     if (!t) return 0;
     let media: IgMedia[];
     try {
@@ -685,7 +703,7 @@ export class InstagramChannel {
     // Prefer a permalink (dedupe + comments); the signed CDN url is a download shortcut only.
     let url = urlInText ?? null;
     if (!url && share?.payload?.reel_video_id) {
-      const t = this.token();
+      const t = await this.token();
       if (t) {
         try {
           const media = await this.deps.graph.ownMedia(t.token, share.payload.reel_video_id);
@@ -872,10 +890,10 @@ export class InstagramChannel {
     v: { media_id?: string; comment_id?: string },
     prefetched?: IgMedia,
   ): Promise<IngestOutcome | null> {
-    const t = this.token();
+    const t = await this.token();
     if (!t) throw new Error('Instagram account not connected');
     const { graph, repo } = this.deps;
-    const account = this.account();
+    const account = await this.account();
     let comment: IgComment | null = null;
     if (v.comment_id) {
       try {
@@ -974,7 +992,7 @@ export class InstagramChannel {
 
   /** Settings → "Send test DM to myself": proves messaging works end to end. */
   async sendTestDm(recipientId: string, text: string): Promise<void> {
-    const t = this.token();
+    const t = await this.token();
     if (!t) throw new Error('Instagram account not connected');
     await this.deps.graph.sendText(t.token, t.igUserId, recipientId, text);
   }
