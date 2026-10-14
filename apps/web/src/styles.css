@@ -1499,10 +1499,13 @@ button.danger.solid {
 .compose-actions {
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
 }
 .compose-actions > button.primary {
-  flex: 0 0 auto;
-  min-width: 140px;
+  flex: 0 1 auto;
+  /* The fixed 140 px floor plus the brain picker overflowed a 320 px phone by 17 px (the row
+     could not wrap and the button refused to shrink). Let it shrink, and let the row wrap. */
+  min-width: min(140px, 100%);
 }
 .brain-pick {
   display: inline-flex;
@@ -3141,8 +3144,10 @@ button.srow:hover {
   background: var(--err);
 }
 
-/* Switch: a checkbox drawn as a toggle. 44 px hit area via the enclosing row. `input.switch`
-   so the size wins over the generic `input[type="checkbox"]` rule above. */
+/* Switch: a checkbox drawn as a toggle. `input.switch` so the size wins over the generic
+   `input[type="checkbox"]` rule above. The knob is 26 px tall because that is what a toggle
+   should look like, so the ::before is an invisible 44x44 hit area centred on it — the row is
+   not a <label>, so without this the control itself is the only thing a thumb can hit. */
 input.switch {
   appearance: none;
   -webkit-appearance: none;
@@ -3156,6 +3161,15 @@ input.switch {
   border-radius: var(--radius-pill);
   cursor: pointer;
   transition: background var(--dur) var(--ease);
+}
+.switch::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 44px;
+  height: 44px;
+  transform: translate(-50%, -50%);
 }
 .switch::after {
   content: "";
