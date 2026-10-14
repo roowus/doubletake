@@ -104,8 +104,12 @@ describe.skipIf(!url)('hosted instagram pairing (Postgres)', () => {
     } as never);
     repo = new Repo(opened.db as never, null);
     // The test Postgres is shared across runs: clear pairing state keyed by the fixed sender ids.
+    // `ig_prompts`/`ig_prompt_optouts` are persisted now (ADR 0032), so a leftover hourly prompt
+    // window would suppress the "connect your account" DM these tests assert on.
     await opened.db.execute(`delete from ig_links where sender_id like 'SENDER%'`);
     await opened.db.execute(`delete from ig_pairing_codes`);
+    await opened.db.execute(`delete from ig_prompts where sender_id like 'SENDER%'`);
+    await opened.db.execute(`delete from ig_prompt_optouts where sender_id like 'SENDER%'`);
     await opened.db.execute(`delete from ig_events where id like 'm%'`);
     const a = await auth.registerEmail(`ig-pair-a-${run}@example.com`, 'longenough1');
     const b = await auth.registerEmail(`ig-pair-b-${run}@example.com`, 'longenough1');
