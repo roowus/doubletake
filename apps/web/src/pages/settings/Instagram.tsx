@@ -112,7 +112,7 @@ export function HostedInstagramSettings() {
           <Row
             icon="instagram"
             label={state.igUsername ? `@${state.igUsername}` : 'Instagram account'}
-            hint="Anything this account DMs or shares is saved to your library"
+            hint="Saves anything you DM or share from it"
             status="ok"
             value="Linked"
           />
