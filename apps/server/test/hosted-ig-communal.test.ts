@@ -30,7 +30,7 @@ const run = randomBytes(4).toString('hex');
 const APP_SECRET = 'shh-secret';
 const VERIFY_TOKEN = 'verify-me';
 const PROMPT =
-  'Hi! I turn reels and posts into researched answers you can keep. Connect your account (free, 30 seconds): doubletake.gg → Settings → Instagram → Connect, then DM me the code it shows. Your saves stay private to you.';
+  'Save this: connect your account at doubletake.gg → Settings → Instagram, then DM me the code it shows.';
 const STOP_REPLY = "Okay — I won't message you again. You can still pair later by DMing a code.";
 
 /** Minimal Graph double: records reactions and outgoing DMs, throws for unused reads. */
