@@ -50,7 +50,11 @@ export async function buildLibraryGraph(
     });
   }
 
-  const { entities, tagLinks } = await repo.graphData([...chatIdByItem.keys()], caps.entities, ctx);
+  // `graphData` returns two INDEPENDENTLY pg-lazy arrays: awaiting the object does not unwrap
+  // them, so each field is awaited (a no-op on SQLite). See the note on the Repo method.
+  const data = repo.graphData([...chatIdByItem.keys()], caps.entities, ctx);
+  const entities = await data.entities;
+  const tagLinks = await data.tagLinks;
 
   // Distinct things first (newest rows win the slot), each with an edge to every capped chat
   // that mentions them — that is what makes hubs the visual centres of the graph.
