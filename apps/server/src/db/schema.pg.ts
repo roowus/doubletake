@@ -503,6 +503,23 @@ export const igLinks = pgTable(
   (t) => [index('ig_links_user_idx').on(t.userId)],
 );
 
+/**
+ * Rate limit + audit for the "connect your account" prompt a stranger gets when they DM the
+ * communal Instagram account before pairing (ADR 0032). `last_prompt_at` is the unix-ms epoch
+ * as text; one row per sender, so the window survives a restart (the self-hosted in-memory map
+ * never fires because self-hosted instances do not prompt at all).
+ */
+export const igPrompts = pgTable('ig_prompts', {
+  senderId: text('sender_id').primaryKey(),
+  lastPromptAt: text('last_prompt_at').notNull(),
+});
+
+/** A sender who replied STOP/UNSUBSCRIBE: never prompted again (ADR 0032). Sender-scoped, no user. */
+export const igPromptOptouts = pgTable('ig_prompt_optouts', {
+  senderId: text('sender_id').primaryKey(),
+  createdAt: text('created_at').notNull(),
+});
+
 export const pgSchema = {
   items,
   extractions,
@@ -532,4 +549,6 @@ export const pgSchema = {
   oauthStates,
   igPairingCodes,
   igLinks,
+  igPrompts,
+  igPromptOptouts,
 };
