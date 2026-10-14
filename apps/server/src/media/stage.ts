@@ -165,7 +165,7 @@ export async function runMediaStage(args: {
   // Uploaded sources were written by the API before the run; the worker echoes them back as
   // `source: upload`, so drop everything else and re-add what it reports (uploads survive a
   // worker that returns nothing).
-  const uploads = repo.listMediaAssets(item.id).filter((a) => a.source === 'upload');
+  const uploads = (await repo.listMediaAssets(item.id)).filter((a) => a.source === 'upload');
   repo.deleteMediaAssets(item.id);
   const reported = new Set(result.assets.map((a) => path.relative(cfg.dataDir, a.path)));
   for (const u of uploads) {

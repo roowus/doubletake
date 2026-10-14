@@ -8,7 +8,6 @@
  * can cite it. Past answers are our own output, but they were produced from scraped content,
  * so they stay inside untrusted blocks like everything else.
  */
-
 import type { UntrustedBlock } from '@doubletake/shared';
 import type { Repo, TenantCtx } from '../db/repo.js';
 import { extractionText, parseExtraction } from '../extract/flatten.js';
@@ -45,8 +44,7 @@ export interface AskOptions {
 /**
  * Question words and glue that never identify a saved item. Everything else is kept, so a
  * question phrased around a real term ("ski wax", "that sourdough schedule") still hits.
- */
-const STOPWORDS = new Set(
+ */ const STOPWORDS = new Set(
   (
     'a an the and or of to in on at for with about from by as is are was were be been being ' +
     'do does did done have has had i me my mine we our you your it its this that these those ' +
@@ -79,12 +77,17 @@ function clip(s: string, max: number): string {
   return s.length > max ? `${s.slice(0, max - 1).trimEnd()}…` : s;
 }
 
-export function libraryContext(
+/**
+ * Async because every read below goes through `Repo`, whose pg dialect hands back
+ * lazily-awaited values behind synchronous signatures (dialect contract in `db/repo.ts`,
+ * ADR 0032). On SQLite the values are plain and `await` is a no-op.
+ */
+export async function libraryContext(
   repo: Repo,
   question: string,
   opts: AskOptions = {},
   ctx?: TenantCtx | undefined,
-): LibraryContext {
+): Promise<LibraryContext> {
   const limit = opts.limit ?? 8;
   const perHit = opts.perHitChars ?? 3000;
   const total = opts.totalChars ?? 16000;
@@ -96,20 +99,20 @@ export function libraryContext(
 
   let used = 0;
   // Over-fetch a little so excluding the asking item and other library questions still fills `limit`.
-  for (const itemId of repo.searchFts(query, limit * 2 + 2, ctx)) {
+  for (const itemId of await repo.searchFts(query, limit * 2 + 2, ctx)) {
     if (hits.length >= limit || used >= total) break;
     if (itemId === opts.excludeItemId) continue;
-    const item = repo.getItem(itemId, ctx);
-    const chat = repo.getChatByItem(itemId, ctx);
+    const item = await repo.getItem(itemId, ctx);
+    const chat = await repo.getChatByItem(itemId, ctx);
     if (!item || !chat || item.channel === 'library') continue;
 
     const parts: string[] = [];
     if (item.note?.trim()) parts.push(`Note: ${item.note.trim()}`);
     const url = item.canonicalUrl ?? item.sourceUrl;
     if (url) parts.push(`Source: ${url}`);
-    const tags = repo.listTags(itemId, ctx);
+    const tags = await repo.listTags(itemId, ctx);
     if (tags.length) parts.push(`Tags: ${tags.join(', ')}`);
-    const entities = repo.listEntities(itemId, ctx);
+    const entities = await repo.listEntities(itemId, ctx);
     if (entities.length) {
       parts.push(
         `Entities: ${entities
@@ -118,15 +121,14 @@ export function libraryContext(
           .join('; ')}`,
       );
     }
-    const answer = repo
-      .listMessages(chat.id)
+    const answer = (await repo.listMessages(chat.id))
       .filter((m) => m.role === 'assistant' && m.kind === 'answer')
       .at(-1);
     if (answer) parts.push(`Answer:\n${answer.content.trim()}`);
     const budgetLeft = perHit - parts.join('\n').length;
     if (budgetLeft > 200) {
       const snippets: string[] = [];
-      for (const x of repo.listExtractions(itemId)) {
+      for (const x of await repo.listExtractions(itemId)) {
         if (x.tool === LIBRARY_TOOL) continue;
         const text = extractionText(x.kind, parseExtraction(x.content)).trim();
         if (text) snippets.push(`[${x.kind}] ${text}`);

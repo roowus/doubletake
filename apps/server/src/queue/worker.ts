@@ -248,7 +248,7 @@ export class QueueWorker extends EventEmitter {
     this.running = true;
     try {
       while (!this.stopped) {
-        const run = this.repo.nextQueuedRun();
+        const run = await this.repo.nextQueuedRun();
         if (!run) {
           await new Promise<void>((r) => {
             this.wake = r;
@@ -269,8 +269,8 @@ export class QueueWorker extends EventEmitter {
   private async process(run: RunRow): Promise<void> {
     const ac = new AbortController();
     this.current = { runId: run.id, ac };
-    const item = this.repo.getItem(run.itemId);
-    const chat = this.repo.getChat(run.chatId);
+    const item = await this.repo.getItem(run.itemId);
+    const chat = await this.repo.getChat(run.chatId);
     if (!item || !chat) {
       this.repo.updateRun(run.id, { status: 'failed', error: 'item or chat vanished' });
       this.current = null;
@@ -304,7 +304,7 @@ export class QueueWorker extends EventEmitter {
     };
 
     // Daily cap: research runs wait; follow-ups pass while a small reserve remains.
-    const spent = this.repo.spentToday();
+    const spent = await this.repo.spentToday();
     const cap = this.cfg.dailyCapUsd;
     const over = run.kind === 'followup' ? spent >= cap + FOLLOWUP_RESERVE_USD : spent >= cap;
     if (cap > 0 && over) {
@@ -340,7 +340,7 @@ export class QueueWorker extends EventEmitter {
         run.kind === 'followup'
           ? await this.followUp(run, item, chat.id, chat.brainSessionId, emit, ac.signal)
           : await this.research(run, item, chat.id, emit, ac.signal);
-      this.finish(run, item, chat.id, result, emit);
+      await this.finish(run, item, chat.id, result, emit);
     } catch (e) {
       if (e instanceof RunCapAbort) {
         this.failRun(run, item, chat.id, e.reason, CAP_MESSAGES[e.reason]);
@@ -395,10 +395,10 @@ export class QueueWorker extends EventEmitter {
   }
 
   /** Ledger check before each model call (ADR 0032): over the per-run cap means abort. */
-  private checkPerRunCap(runId: string): void {
+  private async checkPerRunCap(runId: string): Promise<void> {
     const cap = this.runCredential?.perRunCapUsd;
     if (cap == null) return;
-    const spent = this.repo.spentOnRun(runId, this.runCtx);
+    const spent = await this.repo.spentOnRun(runId, this.runCtx);
     if (spent >= cap) throw new RunCapAbort('per_run_cap');
   }
 
@@ -536,7 +536,7 @@ export class QueueWorker extends EventEmitter {
     const forced = item.modeRequested !== 'auto' ? (item.modeRequested as Mode) : null;
     const question = item.note ?? item.text ?? '';
     emit('status', { phase: 'retrieving' });
-    const ctx = libraryContext(this.repo, question, { excludeItemId: item.id });
+    const ctx = await libraryContext(this.repo, question, { excludeItemId: item.id });
     for (const h of ctx.hits) {
       this.repo.addExtraction({
         itemId: item.id,
@@ -561,7 +561,7 @@ export class QueueWorker extends EventEmitter {
 
     const brief = this.buildBrief(item, ctx.blocks, questionType, ctx.hints);
     const opts = this.runOptions(mode, 'research', signal, null, bound.model, chatId);
-    this.checkPerRunCap(run.id);
+    await this.checkPerRunCap(run.id);
     const result = await this.boundAdapter(bound.adapter).run(brief, opts, {
       emit: (e) => emit(e.type, e.payload),
     });
@@ -620,9 +620,9 @@ export class QueueWorker extends EventEmitter {
     }
     // 1b. Media pipeline (download, transcript, frames, OCR, comments) for media platforms, and
     // for files the owner uploaded from a share sheet (no url; `hints.local_path` names the file).
-    const uploaded = this.repo
-      .listMediaAssets(item.id)
-      .find((a) => a.source === 'upload' && (a.kind === 'image' || a.kind === 'video'));
+    const uploaded = (await this.repo.listMediaAssets(item.id)).find(
+      (a) => a.source === 'upload' && (a.kind === 'image' || a.kind === 'video'),
+    );
     const wantsMedia =
       uploaded !== undefined || (url !== null && MEDIA_PLATFORMS.has(item.platform));
     if (this.media && this.cfg.media.enabled && wantsMedia) {
@@ -658,7 +658,7 @@ export class QueueWorker extends EventEmitter {
     }
     // 1c. Extractions a channel stored before the run (Instagram Graph comments / thread) are
     // authoritative for their kind and were not produced above; add them once.
-    for (const x of this.repo.listExtractions(item.id)) {
+    for (const x of await this.repo.listExtractions(item.id)) {
       if (x.tool !== CHANNEL_TOOL) continue;
       const text = extractionText(x.kind, parseExtraction(x.content)).slice(0, 12_000);
       if (!text) continue;
@@ -703,7 +703,7 @@ export class QueueWorker extends EventEmitter {
     // 3. Research.
     const brief = this.buildBrief(item, blocks, questionType);
     const opts = this.runOptions(mode, 'research', signal, null, bound.model, chatId);
-    this.checkPerRunCap(run.id);
+    await this.checkPerRunCap(run.id);
     const result = await this.boundAdapter(bound.adapter).run(brief, opts, {
       emit: (e) => emit(e.type, e.payload),
     });
@@ -723,11 +723,10 @@ export class QueueWorker extends EventEmitter {
   ) {
     const mode = (item.modeEffective as Mode | null) ?? 'quick';
     const questionType = (item.questionType as QuestionType | null) ?? 'other';
-    const history = this.repo
-      .listMessages(chatId)
+    const history = (await this.repo.listMessages(chatId))
       .filter((m) => m.role !== 'system' && m.runId !== run.id)
       .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }));
-    const blocks = this.storedBlocks(item);
+    const blocks = await this.storedBlocks(item);
     this.repo.updateRun(run.id, { status: 'researching' });
     // Follow-ups stay on the adapter that owns the chat's session; a per-mode model binding for
     // that adapter still applies so the resumed session keeps its model.
@@ -735,7 +734,7 @@ export class QueueWorker extends EventEmitter {
     const bound = this.brains.forMode(mode);
     const model = bound.adapter === adapter ? bound.model : null;
     emit('status', { phase: 'followup', resume: Boolean(sessionId), adapter: adapter.id });
-    this.checkPerRunCap(run.id);
+    await this.checkPerRunCap(run.id);
     const result = await this.boundAdapter(adapter).followUp(
       {
         chatId,
@@ -751,9 +750,9 @@ export class QueueWorker extends EventEmitter {
   }
 
   /** Rebuild untrusted blocks from stored extractions for follow-ups without native resume. */
-  private storedBlocks(item: ItemRow): UntrustedBlock[] {
+  private async storedBlocks(item: ItemRow): Promise<UntrustedBlock[]> {
     const out: UntrustedBlock[] = [];
-    for (const x of this.repo.listExtractions(item.id)) {
+    for (const x of await this.repo.listExtractions(item.id)) {
       const text = extractionText(x.kind, parseExtraction(x.content)).slice(0, 8000);
       if (!text) continue;
       const source = x.tool === LIBRARY_TOOL ? 'library' : item.platform;
@@ -763,13 +762,13 @@ export class QueueWorker extends EventEmitter {
     return out;
   }
 
-  private finish(
+  private async finish(
     started: RunRow,
     item: ItemRow,
     chatId: string,
     r: Awaited<ReturnType<QueueWorker['research']>> | Awaited<ReturnType<QueueWorker['followUp']>>,
     emit: (t: RunEvent['type'], p: Record<string, unknown>) => void,
-  ): void {
+  ): Promise<void> {
     // The research stage may have rebound the run to the mode's adapter; trust its copy.
     const run = r.run ?? started;
     const finished = new Date().toISOString();
@@ -842,8 +841,8 @@ export class QueueWorker extends EventEmitter {
     }
 
     // FTS + Markdown export.
-    const fresh = this.repo.getItem(item.id) ?? item;
-    const exported = this.reindex(fresh, chatId, r.mode, structured);
+    const fresh = (await this.repo.getItem(item.id)) ?? item;
+    const exported = await this.reindex(fresh, chatId, r.mode, structured);
     if (exported.file) emit('status', { phase: 'exported', file: exported.file });
     else if (exported.error)
       emit('status', { phase: 'warning', message: `Markdown export failed: ${exported.error}` });
@@ -856,25 +855,25 @@ export class QueueWorker extends EventEmitter {
    * Called after every finished run and after the owner edits tags, so the note and the index
    * never drift from the chat.
    */
-  reindex(
+  async reindex(
     item: ItemRow,
     chatId: string,
     mode: string,
     structured: Answer | null = null,
-  ): { file?: string; error?: string } {
-    const messages = this.repo.listMessages(chatId).filter((m) => m.role !== 'system');
+  ): Promise<{ file?: string; error?: string }> {
+    const messages = (await this.repo.listMessages(chatId)).filter((m) => m.role !== 'system');
     const answerText = messages
       .filter((m) => m.role === 'assistant')
       .map((m) => m.content)
       .join('\n');
-    const ext = this.repo.listExtractions(item.id);
+    const ext = await this.repo.listExtractions(item.id);
     const pick = (k: string) =>
       ext
         .filter((e) => e.kind === k)
         .map((e) => extractionText(e.kind, parseExtraction(e.content)))
         .join('\n');
-    const entities = this.repo.listEntities(item.id);
-    const tags = this.repo.listTags(item.id);
+    const entities = await this.repo.listEntities(item.id);
+    const tags = await this.repo.listTags(item.id);
     this.repo.upsertFts(item.id, {
       title: item.title ?? '',
       note: item.note ?? '',
@@ -897,7 +896,7 @@ export class QueueWorker extends EventEmitter {
         platform: item.platform,
         note: item.note,
         mode,
-        costUsd: this.repo.listRuns(chatId).reduce((a, x) => a + (x.costUsd ?? 0), 0),
+        costUsd: (await this.repo.listRuns(chatId)).reduce((a, x) => a + (x.costUsd ?? 0), 0),
         createdAt: item.createdAt,
         messages: messages.map((m) => ({
           role: m.role,

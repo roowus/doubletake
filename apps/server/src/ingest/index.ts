@@ -41,6 +41,114 @@ const DEDUPE_HOURS = 24;
  * Normalise a share into item + chat + queued run. Free text with a URL inside becomes a URL share
  * (share sheets send "caption + link"); text without a URL is a `text` item. Mode is decided later by
  * the worker (keywords, then classifier) unless the sharer forced one.
+ *
+ * ASYNC VARIANT — the one pg callers must use. Every Repo read here is pg-lazy on the hosted
+ * Postgres dialect (dialect contract at the top of `db/repo.ts`, ADR 0032), so a sync caller
+ * silently reads a Promise: `prior`/`dup` look truthy and every field off them is `undefined`.
+ * `await` on the SQLite values is a no-op, so this is the same code path self-hosted.
+ *
+ * `ingest()` below is the historical synchronous entry point, kept for self-hosted callers and
+ * the 238+ tests that rely on the frozen signature; it must only run on the SQLite dialect.
+ */
+export async function ingestAsync(req: IngestRequest, deps: IngestDeps): Promise<IngestOutcome> {
+  if (req.channel === 'library') return await ingestLibraryQuestionAsync(req, deps);
+  const { repo } = deps;
+  if (req.clientId) {
+    // A retrying client (offline share queue) re-posts the same body until it gets a 2xx. The
+    // first attempt may have reached us while the response was lost, so replay its outcome.
+    const prior = await repo.findByClientId(req.clientId, deps.ctx);
+    if (prior) {
+      const chat = await repo.getChatByItem(prior.id);
+      const run = chat ? (await repo.listRuns(chat.id)).at(-1) : undefined;
+      if (chat && run) return { item: prior, chat, run, deduplicated: false, replayed: true };
+    }
+  }
+  const url = req.url ?? (req.text ? firstUrlIn(req.text) : undefined);
+  let platform: Platform = 'text';
+  let canonicalUrl: string | null = null;
+  if (url) {
+    const det = detectPlatform(url);
+    if (!det) throw new IngestError('unsupported URL (only http/https)');
+    platform = det.platform;
+    canonicalUrl = det.canonicalUrl;
+  }
+  const forcedMode: Mode | null = resolveRequestedMode(req.modeHint);
+  const normalised: IngestRequest = {
+    ...req,
+    ...(url ? { url } : {}),
+    ...(req.text && url && req.text.trim() === url ? { text: undefined } : {}),
+  };
+
+  if (canonicalUrl) {
+    const dup = await repo.findRecentDuplicate(canonicalUrl, req.focus, DEDUPE_HOURS, deps.ctx);
+    if (dup) {
+      const chat = await repo.getChatByItem(dup.id);
+      if (chat) {
+        // Re-share within the window: new research run on the existing chat, note appended.
+        if (req.note?.trim()) {
+          repo.addMessage(
+            { chatId: chat.id, role: 'user', kind: 'question', content: req.note },
+            deps.ctx,
+          );
+        }
+        const mode = forcedMode ?? (dup.modeEffective as Mode | null) ?? 'standard';
+        const run = repo.createRun(
+          {
+            itemId: dup.id,
+            chatId: chat.id,
+            kind: 'research',
+            mode,
+            ...runBinding(req, deps, mode),
+          },
+          deps.ctx,
+        );
+        repo.updateItem(dup.id, {
+          status: 'new',
+          ...(req.note ? { note: [dup.note, req.note].filter(Boolean).join('\n\n') } : {}),
+          // Remember the key so a retry of this very re-share replays instead of queuing again.
+          ...(req.clientId && !dup.clientId ? { clientId: req.clientId } : {}),
+        });
+        return { item: dup, chat, run, deduplicated: true };
+      }
+    }
+  }
+
+  const title = canonicalUrl ? titleFromUrl(canonicalUrl, platform) : titleFromText(req.text ?? '');
+  const { item, chat } = await repo.createItemWithChat(
+    normalised,
+    platform,
+    canonicalUrl,
+    title,
+    undefined,
+    deps.ctx,
+  );
+  // Placeholder until the worker classifies; forced modes are final. The worker rebinds the
+  // adapter if classification lands on a mode with a different binding.
+  const mode = forcedMode ?? 'standard';
+  const run = repo.createRun(
+    {
+      itemId: item.id,
+      chatId: chat.id,
+      kind: 'research',
+      mode,
+      ...runBinding(req, deps, mode),
+    },
+    deps.ctx,
+  );
+  if (req.note?.trim()) {
+    repo.addMessage(
+      { chatId: chat.id, role: 'user', kind: 'question', content: req.note },
+      deps.ctx,
+    );
+  }
+  return { item, chat, run, deduplicated: false };
+}
+
+/**
+ * The historical synchronous entry point, frozen by the dialect contract (ADR 0032): every
+ * self-hosted caller and test uses it that way, and SQLite really is synchronous. The pg dialect
+ * has `ingestAsync` below — a sync caller there would read Promise-valued fields as a mangled
+ * outcome (the bug class the sweep exists to remove), so there is deliberately no silent fallback.
  */
 export function ingest(req: IngestRequest, deps: IngestDeps): IngestOutcome {
   if (req.channel === 'library') return ingestLibraryQuestion(req, deps);
@@ -139,10 +247,7 @@ export function ingest(req: IngestRequest, deps: IngestDeps): IngestOutcome {
 export class IngestError extends Error {}
 
 /**
- * Channel `library`: `text` (or `note`) is a question about what the owner saved earlier. No URL
- * detection, no dedupe, platform `text`; the question becomes the item note (so it shows as the
- * first message of the chat and as `ResearchBrief.note`) and the worker retrieves the context
- * (ADR 0021).
+ * Channel `library`, synchronous twin for the SQLite dialect (see `ingest()`).
  */
 function ingestLibraryQuestion(req: IngestRequest, deps: IngestDeps): IngestOutcome {
   const { repo } = deps;
@@ -156,6 +261,49 @@ function ingestLibraryQuestion(req: IngestRequest, deps: IngestDeps): IngestOutc
     note: question,
   };
   const { item, chat } = repo.createItemWithChat(
+    normalised,
+    'text',
+    null,
+    titleFromText(question),
+    undefined,
+    deps.ctx,
+  );
+  const mode = forcedMode ?? 'quick';
+  const run = repo.createRun(
+    {
+      itemId: item.id,
+      chatId: chat.id,
+      kind: 'research',
+      mode,
+      ...runBinding(req, deps, mode),
+    },
+    deps.ctx,
+  );
+  repo.addMessage({ chatId: chat.id, role: 'user', kind: 'question', content: question }, deps.ctx);
+  return { item, chat, run, deduplicated: false };
+}
+
+/**
+ * Channel `library`: `text` (or `note`) is a question about what the owner saved earlier. No URL
+ * detection, no dedupe, platform `text`; the question becomes the item note (so it shows as the
+ * first message of the chat and as `ResearchBrief.note`) and the worker retrieves the context
+ * (ADR 0021). Async twin for the hosted dialect — same shape, every Repo read awaited.
+ */
+async function ingestLibraryQuestionAsync(
+  req: IngestRequest,
+  deps: IngestDeps,
+): Promise<IngestOutcome> {
+  const { repo } = deps;
+  const question = (req.text ?? req.note ?? '').trim();
+  if (!question) throw new IngestError('a question is required');
+  const forcedMode: Mode | null = resolveRequestedMode(req.modeHint);
+  const normalised: IngestRequest = {
+    channel: 'library',
+    focus: 'whole',
+    modeHint: req.modeHint,
+    note: question,
+  };
+  const { item, chat } = await repo.createItemWithChat(
     normalised,
     'text',
     null,
@@ -197,10 +345,8 @@ export interface UploadRequest {
 }
 
 /**
- * Create item + chat + queued run for an uploaded file (ADR 0029). The item has no url; it is a
- * `text` platform item whose `media_assets` row (`source: upload`) tells the worker to run the
- * media pipeline on the file instead of downloading anything. Called after the file has been
- * written; the caller passes the id the file was saved under so paths and the row agree.
+ * Create item + chat + queued run for an uploaded file (ADR 0029), synchronous twin for the
+ * SQLite dialect (see `ingest()`).
  */
 export function ingestUpload(
   req: UploadRequest,
@@ -222,6 +368,73 @@ export function ingestUpload(
       ? 'Shared video'
       : 'Shared photo';
   const { item, chat } = repo.createItemWithChat(
+    normalised,
+    'text',
+    null,
+    title,
+    deps.itemId,
+    deps.ctx,
+  );
+  repo.addMediaAsset(
+    {
+      itemId: item.id,
+      kind,
+      path: req.relPath,
+      sha256: req.sha256,
+      bytes: req.bytes,
+      width: req.width ?? null,
+      height: req.height ?? null,
+      source: 'upload',
+    },
+    deps.ctx,
+  );
+  const mode = forcedMode ?? 'standard';
+  const run = repo.createRun(
+    {
+      itemId: item.id,
+      chatId: chat.id,
+      kind: 'research',
+      mode,
+      ...runBinding(req, deps, mode),
+    },
+    deps.ctx,
+  );
+  if (req.note?.trim()) {
+    repo.addMessage(
+      { chatId: chat.id, role: 'user', kind: 'question', content: req.note },
+      deps.ctx,
+    );
+  }
+  return { item, chat, run, deduplicated: false };
+}
+
+/**
+ * Create item + chat + queued run for an uploaded file (ADR 0029). The item has no url; it is a
+ * `text` platform item whose `media_assets` row (`source: upload`) tells the worker to run the
+ * media pipeline on the file instead of downloading anything. Called after the file has been
+ * written; the caller passes the id the file was saved under so paths and the row agree. Async
+ * twin for the hosted dialect — same shape, every Repo read awaited.
+ */
+export async function ingestUploadAsync(
+  req: UploadRequest,
+  deps: IngestDeps & { itemId: string },
+): Promise<IngestOutcome> {
+  const { repo } = deps;
+  const kind = req.contentType.startsWith('video/') ? 'video' : 'image';
+  const forcedMode: Mode | null = resolveRequestedMode(req.modeHint ?? 'auto');
+  const normalised: IngestRequest = {
+    channel: req.channel,
+    focus: 'whole',
+    modeHint: req.modeHint ?? 'auto',
+    ...(req.note?.trim() ? { note: req.note } : {}),
+    ...(req.clientId ? { clientId: req.clientId } : {}),
+  };
+  const title = req.note?.trim()
+    ? titleFromText(req.note)
+    : kind === 'video'
+      ? 'Shared video'
+      : 'Shared photo';
+  const { item, chat } = await repo.createItemWithChat(
     normalised,
     'text',
     null,

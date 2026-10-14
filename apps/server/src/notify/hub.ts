@@ -73,7 +73,8 @@ export class NotificationHub {
       skipped: 0,
       broadcast: { sent: 0, failed: 0 },
     };
-    const subs = this.repo.listPushSubscriptions();
+    // pg-lazy on the hosted dialect (repo.ts dialect contract, ADR 0032); no-op await on SQLite.
+    const subs = await this.repo.listPushSubscriptions();
     const wide = opts.onlySubscriptionIds
       ? Promise.resolve(result.broadcast)
       : this.broadcast(n).then((b) => {
