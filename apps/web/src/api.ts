@@ -172,6 +172,17 @@ export interface IgStatus {
   }[];
 }
 
+/** A live Instagram pairing code: 8 chars from an unambiguous alphabet, valid 15 minutes. */
+export interface IgPairingCode {
+  code: string;
+  expiresAt: string;
+}
+
+/** `GET /api/account/instagram`: the active link, or — while unlinked — a still-live code. */
+export type IgLinkStatus =
+  | { linked: true; igUsername?: string; linkedAt?: string }
+  | { linked: false; code?: string; expiresAt?: string };
+
 export const api = {
   health: () => call<{ ok: boolean; hasOwner: boolean }>('GET', '/api/health', undefined, false),
   /** Public probe: a hosted server answers `{ hosted: true, inviteRequired }`; inert elsewhere. */
@@ -325,6 +336,11 @@ export const api = {
     ),
   hostedLogout: () => call<void>('POST', '/api/auth/logout'),
   account: () => call<AccountInfo>('GET', '/api/account'),
+  /** Hosted Instagram pairing (ADR 0032): linked state while linked, live code while not. */
+  igLinkStatus: () => call<IgLinkStatus>('GET', '/api/account/instagram'),
+  /** Mints a single-use 8-char code (15-minute TTL); a new one replaces the previous code. */
+  igCreateLink: () => call<IgPairingCode>('POST', '/api/account/instagram/link'),
+  igUnlink: () => call<{ ok: boolean }>('DELETE', '/api/account/instagram'),
   addCredential: (c: NewCredential) => call<CredentialRow>('POST', '/api/account/credentials', c),
   revokeCredential: (id: string) => call<void>('DELETE', `/api/account/credentials/${id}`),
   revokeAccountSession: (id: string) => call<void>('POST', `/api/account/sessions/${id}/revoke`),
