@@ -123,7 +123,7 @@ export async function main(): Promise<void> {
   worker.start();
   ig?.start();
   await app.listen({ host: cfg.bind, port: cfg.port });
-  const igState = ig ? (ig.status().connected ? 'connected' : 'not connected') : 'off';
+  const igState = ig ? ((await ig.status()).connected ? 'connected' : 'not connected') : 'off';
   app.log.info(
     `Doubletake listening on http://${cfg.bind}:${cfg.port} (brain: ${brains
       .all()

@@ -100,7 +100,7 @@ export async function registerInstagramRoutes(app: FastifyInstance, deps: IgRout
   });
 
   // ---- owner-facing (device token) ----
-  app.get('/api/ig/status', async () => ig.status());
+  app.get('/api/ig/status', async () => await ig.status());
 
   /** Returns the Meta authorize URL; the browser follows it and lands on /api/ig/callback. */
   const oauthStates = new Map<string, number>();
