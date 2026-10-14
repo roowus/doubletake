@@ -197,4 +197,151 @@ describe('InstagramSettings', () => {
     expect(text).not.toContain('Connect Instagram');
     expect(spies.igLinkStatus).not.toHaveBeenCalled();
   });
+
+  /**
+   * Live pairing: redeeming a code happens on Instagram's side, so this tab has to find out.
+   * These drive the poll with fake timers and a status stub that can flip to linked, which is
+   * what the real server reports once the webhook stores the link.
+   */
+  describe('live pairing', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    /** Flush pending microtasks under fake timers without advancing the clock. */
+    const flush = async () => {
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+    };
+    const advance = async (ms: number) => {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(ms);
+      });
+    };
+    const linkedStatus = {
+      linked: true as const,
+      igUsername: 'paired',
+      linkedAt: '2026-10-14T08:00:00.000Z',
+    };
+    /** The expiry the create stub hands out; kept in step with `stubApi`'s default. */
+    const FUTURE = new Date(Date.now() + 15 * 60_000).toISOString();
+    /**
+     * A status stub that answers "not linked, code still live" until `flip()` is called. The
+     * code is echoed back because that is what the server does while a code is outstanding —
+     * a stub that omits it would (correctly) clear the code on screen.
+     */
+    function flipSpy() {
+      const box = { linked: false };
+      const spy = vi.fn(async () =>
+        box.linked ? linkedStatus : { linked: false as const, code: 'ABCD2345', expiresAt: FUTURE },
+      );
+      return { box, spy };
+    }
+
+    it('flips to linked on its own once the code is redeemed, without a manual refresh', async () => {
+      const { box, spy } = flipSpy();
+      stubApi({ igLinkStatus: spy });
+      await render();
+      await act(async () => {
+        host.querySelector<HTMLButtonElement>('button.primary')?.click();
+      });
+      await flush();
+      expect(host.querySelector('.pair-code')?.textContent).toBe('ABCD2345');
+      expect(host.textContent).not.toContain("You're paired");
+
+      // Still waiting: a poll goes out and nothing changes yet.
+      await advance(4000);
+      expect(host.querySelector('.pair-code')?.textContent).toBe('ABCD2345');
+
+      // The user sends the DM; the server stores the link.
+      box.linked = true;
+      await advance(4000);
+
+      expect(host.textContent).toContain('@paired');
+      expect(host.textContent).toContain("You're paired");
+      expect(host.querySelector('.pair-code')).toBeNull();
+      expect(host.querySelector('.pair-success')).not.toBeNull();
+    });
+
+    it('stops polling once linked, so the linked screen makes no further requests', async () => {
+      const { box, spy } = flipSpy();
+      stubApi({ igLinkStatus: spy });
+      await render();
+      await act(async () => {
+        host.querySelector<HTMLButtonElement>('button.primary')?.click();
+      });
+      await flush();
+      box.linked = true;
+      await advance(4000);
+
+      const callsAtLink = spy.mock.calls.length;
+      await advance(4000 * 5);
+      expect(spy.mock.calls.length).toBe(callsAtLink);
+    });
+
+    it('does not poll when there is no live code to redeem', async () => {
+      const spies = stubApi({});
+      await render();
+      await advance(4000 * 5);
+      // One call for the mount load, and nothing after it.
+      expect(spies.igLinkStatus).toHaveBeenCalledTimes(1);
+    });
+
+    it('clears a code the server no longer has (expired or regenerated)', async () => {
+      stubApi({ igLinkStatus: vi.fn(async () => ({ linked: false as const })) });
+      await render();
+      await act(async () => {
+        host.querySelector<HTMLButtonElement>('button.primary')?.click();
+      });
+      await flush();
+      expect(host.querySelector('.pair-code')?.textContent).toBe('ABCD2345');
+      await advance(4000);
+      expect(host.querySelector('.pair-code')).toBeNull();
+      expect(host.textContent).toContain('No code yet');
+    });
+
+    it('keeps the code on screen when a poll fails', async () => {
+      let calls = 0;
+      stubApi({
+        igLinkStatus: vi.fn(async () => {
+          calls += 1;
+          if (calls === 1) return { linked: false as const };
+          throw new Error('network down');
+        }),
+      });
+      await render();
+      await act(async () => {
+        host.querySelector<HTMLButtonElement>('button.primary')?.click();
+      });
+      await flush();
+      await advance(4000);
+      expect(host.querySelector('.pair-code')?.textContent).toBe('ABCD2345');
+    });
+
+    it('checks again the moment the tab becomes visible', async () => {
+      const { box, spy } = flipSpy();
+      stubApi({ igLinkStatus: spy });
+      await render();
+      await act(async () => {
+        host.querySelector<HTMLButtonElement>('button.primary')?.click();
+      });
+      await flush();
+      const before = spy.mock.calls.length;
+
+      // The user switches to Instagram, sends the DM, and comes back.
+      box.linked = true;
+      await act(async () => {
+        document.dispatchEvent(new Event('visibilitychange'));
+      });
+      await advance(0);
+
+      expect(spy.mock.calls.length).toBeGreaterThan(before);
+      expect(host.textContent).toContain('@paired');
+    });
+  });
 });
