@@ -219,7 +219,7 @@ senders.
 A DM from an account that is not paired and does not contain a code creates **nothing**.
 The sender gets one prompt per hour at most:
 
-> Save this: connect your account at doubletake.gg → Settings → Instagram, then DM me the
+> To save this: connect your account at doubletake.gg → Settings → Instagram, then DM me the
 > code it shows.
 
 DM **STOP** (or UNSUBSCRIBE) to opt out of prompts entirely; the account replies once
