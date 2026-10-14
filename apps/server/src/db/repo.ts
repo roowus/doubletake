@@ -1663,6 +1663,75 @@ export class Repo {
     );
   }
 
+  /**
+   * Postgres handle for the tables that exist ONLY in hosted mode (`igPrompts`, `igPromptOptouts`).
+   * They are absent from the SQLite schema by design, so `this.t` cannot name them; `this.pgDb`
+   * is the accurately-typed pg db (unlike `this.db`, whose type is the documented dialect lie).
+   */
+  private get pgOnly(): {
+    igPrompts: typeof pg.igPrompts;
+    igPromptOptouts: typeof pg.igPromptOptouts;
+  } {
+    return pg;
+  }
+
+  /** The pg db, typed honestly. Only valid when `isPg`; those call sites never run on SQLite. */
+  private get pgDb(): PgDb {
+    if (!this.pg) throw new Error('pg-only method called on a SQLite database');
+    return this.pg;
+  }
+
+  /**
+   * Hosted prompt gate (ADR 0032): prompt a stranger at most once per `windowMs`. Claims the
+   * window atomically — the row is upserted only when it is missing or older than the window, so
+   * two webhook deliveries racing the same sender cannot both send a prompt. Returns true when
+   * the caller should send. Postgres-only; the self-hosted path never prompts. On pg the boolean
+   * arrives lazily (dialect contract): hosted callers await it.
+   */
+  claimIgPrompt(senderId: string, windowMs: number, now = Date.now()): boolean {
+    const { igPrompts } = this.pgOnly;
+    const nowText = String(now);
+    const q = this.pgDb
+      .insert(igPrompts)
+      .values({ senderId, lastPromptAt: nowText })
+      .onConflictDoUpdate({
+        target: igPrompts.senderId,
+        set: { lastPromptAt: nowText },
+        where: sql`cast(${igPrompts.lastPromptAt} as bigint) <= ${now - windowMs}`,
+      });
+    return lazy((async () => (await this.exec(q)).changes > 0)()) as unknown as boolean;
+  }
+
+  /**
+   * Has this sender opted out of prompts (STOP/UNSUBSCRIBE)? Never prompts them again.
+   * Postgres-only; on pg the boolean arrives lazily (dialect contract): hosted callers await it.
+   */
+  isIgPromptOptedOut(senderId: string): boolean {
+    const { igPromptOptouts } = this.pgOnly;
+    const rows = this.pgDb
+      .select({ senderId: igPromptOptouts.senderId })
+      .from(igPromptOptouts)
+      .where(eq(igPromptOptouts.senderId, senderId));
+    return lazy((async () => (await rows).length > 0)()) as unknown as boolean;
+  }
+
+  /**
+   * Record a STOP/UNSUBSCRIBE reply. Idempotent: a repeat is a no-op, not an error. Postgres-only.
+   * Returns the write's completion so the caller can `await` it before reading the opt-out back
+   * (the other pg writers in this class share the same lazy-await contract).
+   */
+  recordIgPromptOptout(senderId: string, now = Date.now()): void {
+    const { igPromptOptouts } = this.pgOnly;
+    const p = this.pgDb
+      .insert(igPromptOptouts)
+      .values({ senderId, createdAt: new Date(now).toISOString() })
+      .onConflictDoNothing();
+    this.exec(p);
+    // Chain the raw completion too: `exec` returns before its tail drains, and the webhook gate
+    // reads the opt-out straight back on the next DM.
+    this.ex.chain(p);
+  }
+
   // ---- pending notifications (quiet hours, ADR 0020) ----
 
   enqueueNotification(n: {

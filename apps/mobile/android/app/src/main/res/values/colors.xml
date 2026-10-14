@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Paper and ink: the PWA's design tokens, copied for the native share sheet so a share looks
+  like the app it is saving to. Source of truth is `apps/web/src/styles.css` (and
+  design-system/doubletake/MASTER.md); these are the paper (light) values.
+-->
+<resources>
+    <!-- paper -->
+    <color name="paper">#F7F4EE</color>
+    <color name="surface">#FFFDF9</color>
+    <color name="surface_2">#EFEAE0</color>
+    <color name="border">#D9D2C4</color>
+    <!-- ink -->
+    <color name="ink">#1C1B18</color>
+    <color name="ink_muted">#645F56</color>
+    <color name="ink_faint">#9A9384</color>
+    <!-- accents -->
+    <color name="pine">#1F6F5B</color>
+    <color name="on_pine">#FFFFFF</color>
+    <color name="pine_soft">#E4EDE9</color>
+    <color name="clay">#A8541E</color>
+    <color name="scrim">#731C1B18</color>
+</resources>

@@ -26,6 +26,16 @@ export const KEY_PENDING_SHARE = 'doubletake.pendingShare';
 const KEY_FCM_TOKEN = 'doubletake.fcmToken';
 const CHANNEL_ID = 'doubletake';
 
+/**
+ * Where the app signs in on a phone unless the owner says otherwise. Every install is hosted
+ * (accounts at doubletake.gg) by default; "Use my own server" stores a URL with
+ * [setServerUrl] and switches to the self-hosted pairing flow.
+ *
+ * The native shell reads the same constant (`ShareReceiverActivity.HOSTED_URL` in
+ * `apps/mobile/android/.../ShareReceiverActivity.kt`); keep the two in step.
+ */
+export const HOSTED_URL = 'https://doubletake.gg';
+
 export function isNative(): boolean {
   return Capacitor.isNativePlatform();
 }
@@ -34,29 +44,103 @@ export function nativePlatform(): string {
   return Capacitor.getPlatform();
 }
 
-/** Server origin used by API calls on native; empty on the web (same origin). */
+/**
+ * Server origin used by API calls on native; empty on the web (same origin). An empty answer
+ * means hosted — the app is talking to the service the bundle's login page was served from.
+ */
 export function apiBase(): string {
   if (!isNative()) return '';
   return (localStorage.getItem(KEY_SERVER_URL) ?? '').replace(/\/+$/, '');
 }
 
+/**
+ * Explicit choice: a self-hosted origin, or null for "the hosted service". Choosing a server is
+ * also what ends hosted mode for the share sheet — `doubletake.hosted` is cleared here, so a
+ * device that leaves the hosted sign-in for its own notebook posts to that notebook.
+ */
 export function setServerUrl(url: string | null): void {
   if (!isNative()) return;
   const clean = url?.trim().replace(/\/+$/, '') ?? '';
   if (clean) localStorage.setItem(KEY_SERVER_URL, clean);
   else localStorage.removeItem(KEY_SERVER_URL);
-  void (clean
-    ? Preferences.set({ key: KEY_SERVER_URL, value: clean })
-    : Preferences.remove({ key: KEY_SERVER_URL }));
+  void mirrorPreferences(KEY_SERVER_URL, clean);
+  if (clean) void mirrorPreferences(KEY_HOSTED, null);
 }
 
-/** Mirror the device token for the native share sheet (called from `setToken`). */
+/**
+ * What the native share sheet reads for the session this WebView holds — the same three cases
+ * the app can be in, decided here because the Kotlin side is native code that cannot import
+ * this module (it reads the keys and applies the same rule in `ShareReceiverActivity`).
+ *
+ * - `hosted`: the origin the app signed in at (`doubletake.hosted`), empty when self-hosted;
+ * - `serverUrl`: the self-hosted origin, empty on hosted;
+ * - `token`: whichever of the two sessions is live.
+ */
+export function sessionPrefs(o: {
+  hostedOrigin?: string | undefined;
+  serverUrl?: string | null | undefined;
+  token?: string | null | undefined;
+}): Array<{ key: string; value: string }> {
+  return [
+    { key: KEY_HOSTED, value: (o.hostedOrigin ?? '').replace(/\/+$/, '') },
+    { key: KEY_SERVER_URL, value: (o.serverUrl ?? '').replace(/\/+$/, '') },
+    {
+      key: o.token?.startsWith(HOSTED_TOKEN_PREFIX) ? KEY_HOSTED_TOKEN : KEY_TOKEN,
+      value: o.token ?? '',
+    },
+  ];
+}
+
+/** Write the share sheet's copy of this session. Inert on the web (native only). */
+export function mirrorPreferences(
+  key: string,
+  value: string | null | Array<{ key: string; value: string }>,
+): Promise<void> {
+  if (!isNative()) return Promise.resolve();
+  if (typeof value === 'string')
+    return value
+      ? Preferences.set({ key, value }).then(
+          () => undefined,
+          () => undefined,
+        )
+      : Preferences.remove({ key }).then(
+          () => undefined,
+          () => undefined,
+        );
+  if (value === null)
+    return Preferences.remove({ key }).then(
+      () => undefined,
+      () => undefined,
+    );
+  return Promise.all(value.map((p) => mirrorPreferences(p.key, p.value))).then(() => undefined);
+}
+
+/**
+ * Mirror the session token for the native share sheet (called from `setToken`, including its
+ * sign-out call with `null`). Hosted sessions (`dth_…`) keep their own key so a hosted sign-in
+ * does not disturb a paired self-hosted server — and a sign-out clears both, so a queued share
+ * can never be posted with a token the owner just revoked.
+ *
+ * Nothing here is awaited: the share sheet copies the keys into its own storage on first use,
+ * and awaiting would put a plugin round trip on the sign-in path.
+ */
 export function mirrorToken(token: string | null): void {
   if (!isNative()) return;
-  void (token
-    ? Preferences.set({ key: KEY_TOKEN, value: token })
-    : Preferences.remove({ key: KEY_TOKEN }));
+  if (token === null) {
+    void mirrorPreferences(KEY_HOSTED_TOKEN, null);
+    void mirrorPreferences(KEY_TOKEN, null);
+    return;
+  }
+  void mirrorPreferences(
+    token.startsWith(HOSTED_TOKEN_PREFIX) ? KEY_HOSTED_TOKEN : KEY_TOKEN,
+    token,
+  );
 }
+
+const HOSTED_TOKEN_PREFIX = 'dth_';
+/** Mirror of `Pairing.KEY_HOSTED` in the native shell. */
+const KEY_HOSTED = 'doubletake.hosted';
+const KEY_HOSTED_TOKEN = 'doubletake.hostedToken';
 
 /** Normalise a typed or scanned pairing input: accepts `https://host/?code=X` or `{url, code}`. */
 export function parsePairingInput(raw: string): { url?: string; code?: string } {
@@ -99,6 +183,36 @@ export async function takePendingShare(): Promise<PendingShare | null> {
   } catch {
     return null;
   }
+}
+
+/**
+ * Where the app should sign in on a phone. The bundled copy of the PWA is the sign-in UI for
+ * the hosted service and nothing else: a hosted account cannot be created on it (the forms and
+ * the Google round trip live in the service's own shell, served from `HOSTED_URL`), so the
+ * WebView is pointed at the hosted page instead of rendering a second-rate login.
+ *
+ * `currentOrigin` is the origin of the page the WebView is showing — inside Capacitor that is
+ * the local bundle (`https://localhost` / `capacitor://localhost`), never a real site. When it
+ * is already somewhere else (an override, a dev build pointed at a server) it is left alone.
+ */
+export function nativeEntryUrl(currentOrigin: string, stored: string | null): string {
+  const clean = (stored ?? '').replace(/\/+$/, '');
+  if (clean && sameOrigin(clean, currentOrigin)) return clean;
+  if (isLocalBundleOrigin(currentOrigin)) return HOSTED_URL;
+  return currentOrigin.replace(/\/+$/, '');
+}
+
+function sameOrigin(a: string, b: string): boolean {
+  try {
+    return new URL(a).origin === new URL(b).origin;
+  } catch {
+    return false;
+  }
+}
+
+/** The origin Capacitor serves the bundled files from; never a site the owner chose. */
+export function isLocalBundleOrigin(origin: string): boolean {
+  return /^(https?:\/\/localhost|capacitor:\/\/localhost)$/i.test(origin.replace(/\/+$/, ''));
 }
 
 /** The channel a native share sheet records: `android_share` or `ios_share` by platform. */

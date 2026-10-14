@@ -52,6 +52,8 @@ export function tempEnv(prefix = 'dt-test-') {
       appId: 'app123',
       appSecret: 'shh-secret',
       verifyToken: 'verify-me',
+      accessToken: null,
+      accessTokenUserId: null,
       webhookPublicHost: 'hook.example.com',
       mentionPolling: false,
       graphBase: 'https://graph.example.test/v25.0',

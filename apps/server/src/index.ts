@@ -4,7 +4,7 @@ import { buildServer } from './api/server.js';
 import { BrainSet } from './brains/registry.js';
 import { IgGraphClient } from './channels/instagram/graph.js';
 import { InstagramChannel } from './channels/instagram/index.js';
-import { loadConfig } from './config/index.js';
+import { type Config, loadConfig } from './config/index.js';
 import { openDb } from './db/index.js';
 import { Repo } from './db/repo.js';
 import { Geocoder } from './geo/index.js';
@@ -46,17 +46,33 @@ export async function main(): Promise<void> {
   // Instagram channel: routes exist whenever the Meta app credentials are configured.
   let ig: InstagramChannel | undefined;
   if (cfg.ig.appId && cfg.ig.appSecret) {
+    // Hosted mode (ADR 0032) builds the SecretBox from the master keyfile, the same box the
+    // credential vault uses; self-hosted keeps the data-dir keyfile (ADR 0018).
+    const box = hostedIgBox(cfg);
     ig = new InstagramChannel({
       cfg,
       repo,
       graph: new IgGraphClient(cfg.ig.graphBase, cfg.ig.appId, cfg.ig.appSecret),
-      box: SecretBox.open(cfg.dataDir),
+      box,
       adapterFor: (m) => brains.forMode(m),
       log: console,
       onChatUpdated: (chatId) => worker.emit('chat_updated', chatId),
     });
     worker.onOutcome = (item, outcome) => ig?.onOutcome(item, outcome) ?? Promise.resolve();
     worker.mediaHints = (item) => ig?.mediaHints(item) ?? {};
+    // Hosted communal account (ADR 0032): the deploy environment supplies the token, so no
+    // interactive OAuth is possible and no `ig_accounts` row need exist yet. Seed it before
+    // listening so the very first webhook (Meta's hub.challenge, which needs no token) and the
+    // DM path both find a usable account.
+    if (cfg.ig.accessToken && cfg.ig.accessTokenUserId) {
+      try {
+        await ig.seedAccountFromEnv();
+      } catch (e) {
+        console.error(
+          `instagram: could not seed the hosted account from env: ${(e as Error).message}`,
+        );
+      }
+    }
   }
   // Map view: place entities get coordinates from a Nominatim-compatible geocoder (ADR 0022).
   const geocoder = new Geocoder(cfg.geocoder, repo, { log: console });
@@ -114,6 +130,21 @@ export async function main(): Promise<void> {
   };
   process.once('SIGINT', shutdown);
   process.once('SIGTERM', shutdown);
+}
+
+/**
+ * The SecretBox the Instagram channel seals its token with. Hosted mode uses the master keyfile
+ * (`DOUBLETAKE_MASTER_KEY_FILE`, the same key as the credential vault, ADR 0032); self-hosted
+ * uses the per-install data-dir keyfile (ADR 0018). Falls back to the data dir when hosted mode
+ * is on but the master keyfile is unset/absent — the channel then still boots, and only the
+ * seeded token would be sealed under a different key.
+ */
+function hostedIgBox(cfg: Config): SecretBox {
+  const keyFile = process.env.DOUBLETAKE_MASTER_KEY_FILE;
+  if (process.env.DOUBLETAKE_HOSTED === '1' && keyFile && fs.existsSync(keyFile)) {
+    return SecretBox.fromKey(fs.readFileSync(keyFile));
+  }
+  return SecretBox.open(cfg.dataDir);
 }
 
 const isDirectRun =

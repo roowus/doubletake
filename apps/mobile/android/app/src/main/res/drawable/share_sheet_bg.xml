@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Paper sheet with the notebook's rounded top corners; ink text sits on top (values/colors.xml). -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
-    <solid android:color="#0f1115" />
+    <solid android:color="@color/surface" />
     <corners android:topLeftRadius="20dp" android:topRightRadius="20dp" />
 </shape>

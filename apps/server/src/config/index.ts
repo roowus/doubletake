@@ -87,6 +87,14 @@ export interface Config {
     appId: string | null;
     appSecret: string | null;
     verifyToken: string | null;
+    /**
+     * Hosted communal account (ADR 0032): a long-lived token supplied by the deploy environment
+     * instead of the OAuth flow, seeded into `ig_accounts` at boot. Null in self-hosted installs,
+     * which connect through the settings page.
+     */
+    accessToken: string | null;
+    /** The `IG_USER_ID` the env token belongs to (needed to seed the account row). */
+    accessTokenUserId: string | null;
     /** Public hostname (tunnel / Funnel) that may reach `/webhooks/instagram` and nothing else. */
     webhookPublicHost: string | null;
     /** Poll `/me/tags` for mentions in case the `mentions` webhook does not fire. */
@@ -186,6 +194,8 @@ export function loadConfig(): Config {
       webhookPublicHost: env('DOUBLETAKE_WEBHOOK_PUBLIC_HOST')?.toLowerCase() ?? null,
       mentionPolling: (env('IG_MENTION_POLLING', 'on') ?? 'on') !== 'off',
       graphBase: env('IG_GRAPH_BASE', 'https://graph.instagram.com/v25.0') ?? '',
+      accessToken: env('IG_ACCESS_TOKEN') ?? null,
+      accessTokenUserId: env('IG_USER_ID') ?? null,
     },
     openai: {
       baseUrl: env('OPENAI_BASE_URL', 'https://api.openai.com/v1') ?? '',

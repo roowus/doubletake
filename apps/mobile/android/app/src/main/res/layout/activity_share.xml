@@ -11,11 +11,12 @@
     android:paddingTop="16dp"
     android:paddingBottom="20dp">
 
+    <!-- Paper and ink: the same tokens the PWA uses (apps/web/src/styles.css, values/colors.xml). -->
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="@string/share_label"
-        android:textColor="#e6e8ee"
+        android:textColor="@color/ink"
         android:textSize="16sp"
         android:textStyle="bold" />
 
@@ -26,7 +27,7 @@
         android:layout_marginTop="6dp"
         android:ellipsize="middle"
         android:maxLines="2"
-        android:textColor="#9aa3b2"
+        android:textColor="@color/ink_muted"
         android:textSize="13sp" />
 
     <EditText
@@ -42,8 +43,8 @@
         android:maxLines="3"
         android:minHeight="48dp"
         android:padding="12dp"
-        android:textColor="#e6e8ee"
-        android:textColorHint="#6b7482"
+        android:textColor="@color/ink"
+        android:textColorHint="@color/ink_faint"
         android:textSize="15sp" />
 
     <RadioGroup
@@ -80,7 +81,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
-        android:textColor="#f0b35a"
+        android:textColor="@color/clay"
         android:textSize="12sp"
         android:visibility="gone" />
 
@@ -89,8 +90,8 @@
         android:layout_width="match_parent"
         android:layout_height="48dp"
         android:layout_marginTop="14dp"
-        android:backgroundTint="#4f7cff"
+        android:backgroundTint="@color/pine"
         android:text="@string/share_send"
         android:textAllCaps="false"
-        android:textColor="#ffffff" />
+        android:textColor="@color/on_pine" />
 </LinearLayout>

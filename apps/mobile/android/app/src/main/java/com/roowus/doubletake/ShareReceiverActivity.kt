@@ -20,14 +20,18 @@ import java.util.regex.Pattern
 /**
  * The Doubletake share sheet. Deliberately tiny and native: Instagram (and Reddit, YouTube,
  * Chrome…) hand us a `text/plain` URL; we show a compact sheet with a note field and mode chips,
- * POST to `/api/ingest` with the paired device token, toast, and finish. The WebView is never
- * started, so the sheet appears in well under a second on top of the source app.
+ * POST to `/api/ingest` with the session the app is signed in with, toast, and finish. The
+ * WebView is never started, so the sheet appears in well under a second on top of the source app.
  *
  * A photo or video (`EXTRA_STREAM`) is streamed straight from the sharing app's content URI to
  * `POST /api/ingest/upload`; the note, mode and clientId travel in headers. Several images at once
  * (`ACTION_SEND_MULTIPLE`) send only the first, the sheet says so.
  *
- * When the server cannot be reached (offline, tunnel down) the exact body is parked in
+ * Nobody signed in: the sheet says so and opens the app ([openApp]) instead of failing quietly;
+ * the share itself is parked in `doubletake.pendingShare` and the web layer replays it once the
+ * account exists. A `401` (revoked session, deleted account) takes the same route.
+ *
+ * When the server cannot be reached (offline, no network) the exact body is parked in
  * [ShareQueue] and a WorkManager job posts it later; the `clientId` minted here lets the server
  * recognise a retry of a request whose response was lost, so nothing is ever saved twice.
  */
@@ -55,13 +59,14 @@ class ShareReceiverActivity : AppCompatActivity() {
 
         parseIntent(intent)
 
-        val paired = Pairing.get(this)
+        // The session is read once per share. It is the account signed in in the app (hosted,
+        // the default) or the device paired with the owner's own server; without either there is
+        // nothing to post to, so the share is parked and the app opens to sign in.
+        val paired = Pairing.session(this)
         if (paired == null) {
-            // Preserve the share and hand off to the app's pairing screen.
             Pairing.setPendingShare(this, pendingShareJson())
-            Toast.makeText(this, R.string.share_unpaired, Toast.LENGTH_LONG).show()
-            startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-            finish()
+            Toast.makeText(this, R.string.share_signed_out, Toast.LENGTH_LONG).show()
+            openApp()
             return
         }
 
@@ -137,6 +142,16 @@ class ShareReceiverActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Open the app on the sign-in screen. Hosted (the default) means the WebView is showing the
+     * service's own login; a device that chose its own server lands on the pairing screen, which
+     * the web layer picks from `doubletake.serverUrl`.
+     */
+    private fun openApp() {
+        startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        finish()
+    }
+
     /** Size of the shared file when the provider reports it, else -1 (chunked upload). */
     private fun streamLength(uri: Uri): Long = try {
         contentResolver.openAssetFileDescriptor(uri, "r")?.use { it.length } ?: -1L
@@ -200,6 +215,15 @@ class ShareReceiverActivity : AppCompatActivity() {
                         finish()
                     }
                     is ShareApi.Outcome.Rejected -> {
+                        // The session is gone (revoked, or the account was deleted): the app is
+                        // where that is fixed, and the share stays parked meanwhile.
+                        if (outcome.code == 401) {
+                            Pairing.setPendingShare(this, pendingShareJson())
+                            Pairing.clearSession(this)
+                            Toast.makeText(this, R.string.share_session_expired, Toast.LENGTH_LONG).show()
+                            openApp()
+                            return@runOnUiThread
+                        }
                         // The server answered: a retry with the same body would fail the same way.
                         Toast.makeText(this, getString(R.string.share_failed, outcome.message), Toast.LENGTH_LONG).show()
                         send.isEnabled = true
@@ -216,6 +240,15 @@ class ShareReceiverActivity : AppCompatActivity() {
 
     companion object {
         private val URL_RE = Pattern.compile("https?://\\S+")
+
+        /**
+         * The hosted Doubletake service, the app's default. It is a mirror of `HOSTED_URL` in
+         * `apps/web/src/native.ts` and is documentation only — the phone decides where to post
+         * from what the WebView wrote into Preferences (`doubletake.hosted`), which the web
+         * layer fills in with the origin it actually signed in at. This constant exists so the
+         * default is written down once on the native side too; keep the two in step.
+         */
+        const val HOSTED_URL = "https://doubletake.gg"
         /** Mirrors `UPLOAD_EXT` on the server: what `/api/ingest/upload` accepts. */
         private val UPLOAD_TYPES = setOf(
             "image/jpeg", "image/png", "image/webp", "image/gif", "image/heic", "image/heif",

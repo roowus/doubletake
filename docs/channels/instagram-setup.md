@@ -203,6 +203,254 @@ Remove the **unverified** markers above in the same commit as the observed behav
 
 ## Hosted service: pairing your Instagram account (ADR 0032)
 
+The hosted service runs one **communal** Instagram account (the product's own, e.g. `@dt.save`)
+for everyone. Saves must belong to an account, so DMs are only ingested from **paired**
+senders.
+
+1. Sign in at the service, open **Settings → Instagram → Connect**: you get a single-use
+   pairing code, valid 15 minutes (one live code per user; regenerating replaces it).
+2. DM that code to the communal account. It reacts and replies
+   "Linked to your Doubletake account."
+3. From then on, anything you DM or share from that Instagram account is saved to your
+   library. Unlink in Settings to stop ingestion immediately.
+
+### Unpaired senders
+
+A DM from an account that is not paired and does not contain a code creates **nothing**.
+The sender gets one prompt per hour at most:
+
+> Hi! I turn reels and posts into researched answers you can keep. Connect your account
+> (free, 30 seconds): doubletake.gg → Settings → Instagram → Connect, then DM me the code
+> it shows. Your saves stay private to you.
+
+DM **STOP** (or UNSUBSCRIBE) to opt out of prompts entirely; the account replies once
+("Okay — I won't message you again. You can still pair later by DMing a code.") and never
+prompts that sender again. Pairing still works afterwards if they DM a code.
+
+The prompt window is persisted (`ig_prompts`) and claimed atomically, so a service restart or
+two simultaneous deliveries cannot double-prompt. Opt-outs live in `ig_prompt_optouts`.
+
+### Bootstrapping the communal account from env
+
+The hosted instance seeds `ig_accounts` from the environment at boot, so the webhook route
+exists before anyone connects anything:
+
+| Var | Purpose |
+|---|---|
+| `IG_APP_ID`, `IG_APP_SECRET` | the Meta app; the secret verifies `X-Hub-Signature-256` |
+| `IG_ACCESS_TOKEN`, `IG_USER_ID` | long-lived token + app-scoped IG user id of the communal account (sealed at rest) |
+| `IG_WEBHOOK_VERIFY_TOKEN` | answers Meta's `hub.challenge` at `GET /webhooks/instagram` (row-independent) |
+| `DOUBLETAKE_WEBHOOK_PUBLIC_HOST` | the public host Meta calls (e.g. `https://ig-app.doubletake.gg`) |
+
+In hosted mode the Instagram token is sealed with the **master keyfile**
+(`DOUBLETAKE_MASTER_KEY_FILE`) — the same key as the BYOK credential vault. Self-hosted keeps
+the data-dir keyfile.
+
+# Instagram channel setup
+
+Doubletake uses Meta's official **Instagram API with Instagram Login** against a *shadow*
+Instagram account you control. You DM reels to it, or @mention it under posts. Nothing here
+touches your personal account's DMs; the official API cannot read those.
+
+Statements marked **unverified** come from Meta's documentation and have not yet been
+confirmed against the live API. M4 removes the markers as they are checked. Implementation:
+`apps/server/src/channels/instagram/` and `apps/server/src/api/instagram.ts`
+([ADR 0018](../adr/0018-instagram-channel-and-keyfile-secrets.md)).
+
+## 0. Server configuration
+
+| variable | meaning |
+|---|---|
+| `IG_APP_ID`, `IG_APP_SECRET` | The **Instagram app ID / secret** from Instagram → API setup with Instagram login → *Business login settings*, **not** the Meta App ID shown at the top of the dashboard (that one makes the login dialog fail with "Invalid platform app"); both set ⇒ the channel is enabled (boot log `instagram: connected` / `not connected`) |
+| `IG_WEBHOOK_VERIFY_TOKEN` | random string you also paste into the Meta webhook dialog |
+| `DOUBLETAKE_WEBHOOK_PUBLIC_HOST` | hostname of the tunnel; requests with that `Host` are refused (`404`) on every path except `/webhooks/instagram`. With Tailscale Funnel the public name equals the tailnet name, so use `host:8443` and only that port is guarded (the PWA on 443 keeps working) |
+| `IG_MENTION_POLLING` | `on` (default) polls `/tags` every 2 minutes; `off` relies on the webhook alone |
+| `IG_GRAPH_BASE` | default `https://graph.instagram.com/v25.0` |
+| `DOUBLETAKE_PUBLIC_URL` | must be set: the OAuth redirect is `<public url>/api/ig/callback`, so add exactly that URL under **Valid OAuth redirect URIs** in the Meta dashboard |
+
+The long-lived token is stored sealed with `~/.doubletake/keyfile` in `ig_accounts`; the app
+secret stays in `.env` and is never written to the database.
+
+## 1. Accounts
+
+1. Create (or convert) an Instagram account to **Business** or **Creator** and set it to
+   **public**. This is the shadow account (e.g. `@yourname.doubletake`).
+2. Create a Meta developer account at developers.facebook.com and a new app of type
+   **Business** (or "Other → Business"). No Facebook Page is required for the Instagram Login
+   flavour of the API.
+3. Add the product **Instagram** → **API setup with Instagram login**. Open **Business login
+   settings** there: it lists the *Instagram app ID* and *Instagram app secret* (these are the
+   `IG_APP_ID` / `IG_APP_SECRET` values; the embed URL on that page shows the same `client_id`)
+   and the **OAuth redirect URIs** field where `<public url>/api/ig/callback` goes.
+4. Add your shadow account as an **Instagram Tester** (App Roles) and accept the invite from
+   the shadow account. App-role accounts are the only ones that trigger webhooks under Standard
+   Access, which is exactly what a single-owner install needs.
+
+## 2. Permissions and tokens
+
+Scopes: `instagram_business_basic`, `instagram_business_manage_messages`,
+`instagram_business_manage_comments`. Standard Access is sufficient; **do not** submit for App
+Review for a personal install.
+
+Doubletake's settings page runs the OAuth flow (`POST /api/ig/connect` → `{ url }`): it sends
+you to `https://www.instagram.com/oauth/authorize?...` with a random 10-minute `state`,
+receives the code at `/api/ig/callback` (any `#_` suffix is stripped), exchanges it for a short-lived token, then for a **60-day long-lived
+token** (`GET /access_token?grant_type=ig_exchange_token`). Tokens are refreshed by a
+scheduled job every 30 days (`GET /refresh_access_token?grant_type=ig_refresh_token`; the
+token must be at least 24 h old; `POST /api/ig/refresh` forces it). After connecting, the
+server subscribes the app to `messages`, `mentions`, `comments` (`POST /<IG_ID>/subscribed_apps`)
+and redirects to `/settings/instagram?ig=connected` (or `?ig=error&message=…`). `DELETE /api/ig/account`
+disconnects.
+
+API host: `https://graph.instagram.com/v25.0`.
+
+## 3. Webhooks
+
+1. Expose `/webhooks/instagram` publicly (Cloudflare Tunnel or Tailscale Funnel; see
+   [DEPLOYMENT.md](../DEPLOYMENT.md)). Only this path is reachable through the public
+   hostname.
+2. In the Meta dashboard → Instagram → Webhooks, set the callback URL and the verify token
+   from `IG_WEBHOOK_VERIFY_TOKEN`. Subscribe to fields `messages`, `mentions`, `comments`.
+3. Switch the app to **Live** mode (webhooks do not fire in Development mode for this API).
+   Meta refuses Live (and the login dialog says "Invalid platform app") until App settings →
+   Basic has a valid **Privacy Policy URL**; point it at
+   `https://github.com/roowus/doubletake/blob/main/docs/PRIVACY.md` (or your fork's copy) and
+   set the **User data deletion** field to the same URL (it has a deletion section). Pick an
+   app category (e.g. "Productivity") while you are there; Meta requires one too.
+4. Doubletake verifies `X-Hub-Signature-256` with `IG_APP_SECRET` on every delivery, answers
+   `200` immediately, and processes asynchronously. Every event id is stored in `ig_events`
+   for deduplication (Meta retries).
+
+Field availability: `messages` works under Standard Access. `comments` officially requires
+Advanced Access. `mentions` under Standard Access is **unverified** (see the 2026-09-07 note
+below: the one live attempt produced no delivery). If mentions do not arrive, Doubletake polls
+`GET /<IG_ID>/tags` every 2 minutes as a fallback (`IG_MENTION_POLLING`, default on;
+`POST /api/ig/poll` runs one poll by hand). **Observed 2026-09-07: `/tags` does not cover
+comment mentions.** After a real `@dt.save …` comment under a public post, `GET /<IG_ID>/tags`
+kept answering `{"data":[]}`, no `comments` webhook delivery reached `/webhooks/instagram`
+(Funnel route confirmed alive), `ig_events` gained only `dm_share`/`dm_note` rows and
+`POST /api/ig/poll` returned `{"ingested":0}`. `/tags` lists media the account is photo-tagged
+in, not comments that mention it, so polling only helps for tag-style mentions. **For comment
+mentions the `comments` webhook is the only path.**
+
+Dashboard-verified the same day (app `1866999274466938`, Instagram business login setup page):
+App Mode was **Live**, the webhook fields table lists **no `mentions` field at all** in this API
+flavour (`comments` and `live_comments` are the comment rows, both Subscribed), and Meta's
+**Test → Send to My Server** for `comments` delivered a sample to `/webhooks/instagram` that the
+server verified and recorded as an `ig_events` `comment` row — plumbing is good end to end. So
+the missed real mention was either Meta-side nondelivery on that specific post (non-public
+account) or the still-incomplete "Complete app review" checklist item gating live data; a retry
+on a public post is the first thing to try. `instagram_business_manage_comments` shows
+**Standard access** (auto-granted; Meta notes Advanced Access is only required for Tech
+Providers). DM share is the guaranteed path either way.
+
+What *is* verified (2026-09-06, `dt.save` connected under Standard Access): the app
+subscription on the account (`GET /<IG_ID>/subscribed_apps`) lists `messages`, `mentions` and
+`comments`, and `GET /<IG_ID>/tags` answers (it needs `instagram_business_manage_comments`), so
+the comment scope was granted. `POST /api/ig/verify` (Settings → **Check comment access**)
+runs exactly these probes, re-subscribes the missing webhook fields when the list is short,
+and reports `commentsOk`. On `graph.instagram.com` there is no `me/permissions` edge ("Tried
+accessing nonexisting field (permissions)") and `debug_token` refuses user tokens
+("Application does not have permission for this action"), so the scope list in the report
+comes from the `tags` probe rather than a permissions call; the `errors.permissions` field
+carries that message and is expected.
+
+## 4. Flows
+
+### DM share (reliable)
+Share a reel/post to the shadow account from the Instagram share sheet, optionally with a
+text message (becomes the `note`).
+
+Payload shape (abridged):
+```json
+{ "entry": [{ "messaging": [{ "sender": { "id": "OWNER_IGSID" }, "message": {
+    "mid": "…", "text": "is this legit?",
+    "attachments": [{ "type": "ig_reel", "payload": { "url": "https://lookaside.fbsbx.com/…", "title": "…", "reel_video_id": "…" } }] } }] }] }
+```
+`type` is `ig_reel` or `share` (`story_mention` is accepted too). When `payload.url` is a signed
+CDN URL it is handed to the media worker as `hints.cdn_url` so it downloads it immediately (TTL
+undocumented) instead of going through yt-dlp. **Observed live (2026-09-06, `dt.save`):** for
+`ig_reel` Meta puts the reel's *permalink* (`https://www.instagram.com/reel/<code>/`, an HTML
+page) in `payload.url`, so `instagram.com` URLs are never hinted; the worker goes straight to
+yt-dlp, and its direct downloader refuses any non image/video content type anyway. The item's
+URL is, in order: an `instagram.com` permalink found in the message text, the permalink of
+`reel_video_id` when the media is your own, else `payload.url`. `note` = message text minus
+that URL, else `payload.title`.
+
+Typing a message with the share arrives as **two webhook events**: the attachment first, then
+a text-only message a few hundred ms later (observed live). A text-only DM from the same sender
+within 2 minutes of their last share is recorded as `dm_note` and becomes that item's note,
+replacing a `payload.title` placeholder or appended to the sender's earlier text. It always
+shows in the chat as the owner's own message (the placeholder question is rewritten in place,
+later text appends a new one) and the open chat page refreshes over `chat_updated`, so the
+owner can see their words were fed in. A still-queued run picks the note up as the question;
+after that it is kept as a follow-up question only.
+Echoes (`is_echo`), messages without `mid` and other plain text without an attachment are
+recorded as `other` and ignored; redeliveries of the same `mid` count as duplicates.
+
+As soon as the share is accepted (before any research runs, so the owner sees "got it" at
+once; the answer itself arrives by push):
+`POST /<IG_ID>/messages` with
+`{ "recipient": { "id": "OWNER_IGSID" }, "sender_action": "react", "payload": { "message_id": "<mid>", "reaction": "love" } }`.
+
+### Comment @mention
+Comment `@yourname.doubletake what do people think?` under any public post.
+
+Payload shape (abridged; Doubletake accepts both `changes[]` and flat `field`/`value`):
+```json
+{ "entry": [{ "changes": [{ "field": "mentions", "value": { "media_id": "…", "comment_id": "…" } }] }] }
+```
+Processing:
+1. `GET /<IG_ID>?fields=mentioned_comment.comment_id(<comment_id>){text,username,timestamp,parent_id,replies{…}}`
+   — `parent_id` presence is how a reply is detected (**unverified** field name on this
+   edge; fallback: compare against the top-level comment list of the media).
+2. `GET /<IG_ID>?fields=mentioned_media.media_id(<media_id>){caption,permalink,media_url,media_type,username,comments{…}}`.
+3. `focus = thread:<parent_id>` if the mention is a reply, else `focus = comments`.
+   `note` = the mention text minus the handle.
+4. Caption, comments (total count + up to 200 sampled, replies flattened) and, for a reply,
+   the whole thread (`{ parent, replies }`) are stored on the item as `instagram-graph`
+   extractions and reach the brain as untrusted blocks (the thread labelled `primary thread`).
+   `media_url` goes to the media worker as `hints.cdn_url`.
+5. Comments that do not contain the shadow account's handle (from the `comments` field) are
+   ignored. Every comment id is stored in `ig_events`, so Meta retries and the polling fallback
+   never create a second item. `POST /api/ig/simulate-mention { media_id, comment_id }` replays
+   a real id pair through the same code.
+6. The bot posts **nothing**. Completion is signalled by push notification only.
+
+Limits: the media owner must be a public account; private replies to comments are only
+possible on your own media and are not used.
+
+## 5. Settings UI
+Settings → **Instagram**: shows "not configured" when the server lacks the env vars,
+otherwise **Connect Instagram** (starts OAuth, returns to `/settings/instagram?ig=connected`), and once
+connected the username, token expiry, polling/webhook-host state, **Poll mentions now**,
+**Check comment access** (`POST /api/ig/verify`), **Refresh token**, **Disconnect**, and the last five webhook events. "Send test DM to myself"
+(`POST /api/ig/test { recipientId, text? }`) and "simulate mention" have routes but no buttons
+yet; call them with `curl` and a device token.
+
+## 6. Live verification checklist (M4 acceptance)
+1. `GET /api/ig/status` → `connected: true`, `username` = shadow account.
+2. Meta dashboard → Webhooks → **Test** on `messages`: server log shows the delivery and
+   `ig_events` gains a row (`GET /api/chats` shows no item because test payloads have no
+   attachment).
+3. DM a public reel to the shadow account with a note: item `instagram | ig_dm`, media from the
+   CDN URL, `love` reaction appears on the DM within a second or two, answer pushed later.
+4. Comment `@<shadow> is this true?` under a public post: item with `focus=comments`; reply
+   inside a thread: `focus=thread:<parent_id>`. If nothing arrives within 3 minutes the
+   polling fallback would only help if `/tags` listed the media; it does not for comment
+   mentions (observed 2026-09-07, see §3), so a missing item means the webhook did not fire.
+   Check in the dashboard: app → **Instagram → API setup with Instagram login → "2. Configure
+   webhooks"**: Callback URL points at the Funnel host, and the **Webhook fields** table shows
+   `comments` (and `live_comments`) Subscribed — there is no `mentions` field in this flavour.
+   Press **Test** on the `comments` row and **Send to My Server**; a green delivery reaches the
+   server log and `ig_events` gains a `comment` row (verified 2026-09-07). Also confirm App Mode
+   = Live, the post owner being a public account, and (unresolved) the "Complete app review"
+   checklist item.
+Remove the **unverified** markers above in the same commit as the observed behaviour.
+
+
+## Hosted service: pairing your Instagram account (ADR 0032)
+
 On the hosted service, saves must belong to an account, so DMs are only ingested from
 **paired** senders:
 

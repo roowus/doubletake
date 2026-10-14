@@ -4,23 +4,26 @@
     <string name="title_activity_main">Doubletake</string>
     <string name="package_name">com.roowus.doubletake</string>
     <string name="custom_url_scheme">com.roowus.doubletake</string>
-    <string name="share_label">Send to Doubletake</string>
+    <string name="share_label">Save to Doubletake</string>
     <string name="share_note_hint">Note or question (optional)</string>
-    <string name="share_send">Send</string>
+    <string name="share_send">Save</string>
     <string name="share_mode_auto">Auto</string>
     <string name="share_mode_quick">Quick</string>
     <string name="share_mode_standard">Standard</string>
     <string name="share_mode_deep">Deep</string>
-    <string name="share_unpaired">Pair Doubletake with your server first.</string>
+    <!-- Nobody is signed in: say so and open the app; the share is parked and replayed. -->
+    <string name="share_signed_out">Sign in to Doubletake to save this</string>
+    <!-- A 401 from a session that was revoked or deleted. -->
+    <string name="share_session_expired">Signed out — open Doubletake to sign in again</string>
     <string name="share_media_unsupported">This file type cannot be uploaded. Only your note is sent.</string>
     <string name="share_photo">Shared photo</string>
     <string name="share_video">Shared video</string>
     <string name="share_media_first_only">%1$d files shared: only the first is sent.</string>
-    <string name="share_sent">Sent to Doubletake</string>
+    <string name="share_sent">Saved to Doubletake</string>
     <string name="share_failed">Doubletake: could not send (%1$s)</string>
-    <string name="share_queued">Offline: saved, will send when the server is reachable</string>
+    <string name="share_queued">Offline: saved, will send when Doubletake is reachable</string>
     <string name="share_queued_more">Offline: saved (%1$d waiting)</string>
-    <string name="queue_sent_body">Queued shares reached your server.</string>
+    <string name="queue_sent_body">Queued shares reached Doubletake.</string>
     <string name="queue_dropped_title">Doubletake could not send a share</string>
     <string name="queue_dropped_body">%1$s: %2$s</string>
     <plurals name="queue_sent">
