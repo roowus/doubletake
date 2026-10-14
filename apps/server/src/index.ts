@@ -36,7 +36,8 @@ export async function main(): Promise<void> {
   // Hosted mode (ADR 0032) runs the whole app on Postgres: the repo, the queue, the MCP
   // tools and the Instagram pairing gate all read/write the same tenant-aware database.
   // Self-hosted stays SQLite in the data dir, byte-for-byte as before.
-  const hostedUrl = process.env.DOUBLETAKE_HOSTED === '1' ? process.env.DOUBLETAKE_DATABASE_URL : undefined;
+  const hostedUrl =
+    process.env.DOUBLETAKE_HOSTED === '1' ? process.env.DOUBLETAKE_DATABASE_URL : undefined;
   let repo: Repo;
   let close: () => void;
   if (hostedUrl) {
@@ -51,7 +52,7 @@ export async function main(): Promise<void> {
   const brains = BrainSet.fromConfig(cfg);
   const brain = brains.defaultBrain;
   const worker = new QueueWorker(repo, brains, cfg);
-  const { hub, vapid } = createHub(cfg, repo);
+  const { hub, vapid } = await createHub(cfg, repo);
   // Quiet hours: park run notifications and send one digest when the window ends (ADR 0020).
   const digest = new DigestGate(repo, hub, cfg.publicUrl ?? null);
   worker.notifier = digest;

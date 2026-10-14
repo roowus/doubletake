@@ -123,12 +123,12 @@ describe('NotificationHub', () => {
     expect(fcm.sent.map((s) => s.target.endpoint)).not.toContain('tok-old');
   });
 
-  it('generates VAPID keys once and persists them in settings; env wins when set', () => {
-    const k1 = resolveVapid(env.cfg, env.repo);
-    const k2 = resolveVapid(env.cfg, env.repo);
+  it('generates VAPID keys once and persists them in settings; env wins when set', async () => {
+    const k1 = await resolveVapid(env.cfg, env.repo);
+    const k2 = await resolveVapid(env.cfg, env.repo);
     expect(k1.publicKey).toBe(k2.publicKey);
     expect(k1.publicKey.length).toBeGreaterThan(40);
-    const k3 = resolveVapid(
+    const k3 = await resolveVapid(
       { ...env.cfg, vapidPublicKey: 'PUB', vapidPrivateKey: 'PRIV' },
       env.repo,
     );

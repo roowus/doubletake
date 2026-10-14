@@ -69,8 +69,13 @@ export function isQuiet(q: QuietHours, at: Date = new Date()): boolean {
   return start < end ? now >= start && now < end : now >= start || now < end;
 }
 
-export function loadQuietHours(repo: Repo): QuietHours {
-  const raw = repo.getSetting(QUIET_SETTING);
+/**
+ * Quiet hours as stored. On the hosted Postgres dialect `getSetting` is pg-lazy (repo.ts dialect
+ * contract), so this is async there; on SQLite the value is plain and `await` is a no-op, exactly
+ * as before.
+ */
+export async function loadQuietHours(repo: Repo): Promise<QuietHours> {
+  const raw = await repo.getSetting(QUIET_SETTING);
   if (!raw) return DEFAULT_QUIET;
   try {
     const j = JSON.parse(raw) as Partial<QuietHours>;
@@ -90,7 +95,10 @@ export function loadQuietHours(repo: Repo): QuietHours {
 }
 
 export function saveQuietHours(repo: Repo, q: QuietHours): void {
-  repo.setSetting(QUIET_SETTING, JSON.stringify(q));
+  const p = repo.setSetting(QUIET_SETTING, JSON.stringify(q));
+  // The write is pg-lazy: it fires eagerly but resolves on the ordering tail, so nothing to await
+  // for correctness here (setSetting discards the handle anyway). Kept sync for its callers.
+  void p;
 }
 
 /** The one digest that replaces N parked notifications. Opens the chat list, not one chat. */
@@ -136,18 +144,23 @@ export class DigestGate implements Sink {
     private readonly now: () => Date = () => new Date(),
   ) {}
 
-  quietHours(): QuietHours {
+  /**
+   * Quiet hours for this gate. Async because `getSetting` is pg-lazy on the hosted dialect
+   * (repo.ts dialect contract); sync-equivalent on SQLite.
+   */
+  quietHours(): Promise<QuietHours> {
     return loadQuietHours(this.repo);
   }
   setQuietHours(q: QuietHours): void {
     saveQuietHours(this.repo, q);
   }
-  pendingCount(): number {
-    return this.repo.countPendingNotifications();
+  /** Parked-notification count; `countPendingNotifications` is pg-lazy on the hosted dialect. */
+  pendingCount(): Promise<number> {
+    return Promise.resolve(this.repo.countPendingNotifications());
   }
 
   async notify(n: Notification): Promise<unknown> {
-    if (isQuiet(this.quietHours(), this.now())) {
+    if (isQuiet(await this.quietHours(), this.now())) {
       this.repo.enqueueNotification({
         chatId: n.chatId,
         title: n.title,
@@ -162,8 +175,8 @@ export class DigestGate implements Sink {
 
   /** Sends the digest if anything is parked and we are outside quiet hours (or `force`). */
   async flush(force = false): Promise<{ sent: number }> {
-    if (!force && isQuiet(this.quietHours(), this.now())) return { sent: 0 };
-    const pending = this.repo.listPendingNotifications();
+    if (!force && isQuiet(await this.quietHours(), this.now())) return { sent: 0 };
+    const pending = await this.repo.listPendingNotifications();
     if (pending.length === 0) return { sent: 0 };
     await this.sink.notify(buildDigest(pending, this.publicUrl));
     this.repo.clearPendingNotifications(pending.map((p) => p.id));
@@ -174,7 +187,12 @@ export class DigestGate implements Sink {
   start(intervalMs = 60_000): void {
     if (this.timer) return;
     this.timer = setInterval(() => {
-      if (this.repo.countPendingNotifications() > 0) this.flush().catch(() => {});
+      // `pendingCount()` is a promise only on the pg dialect; a sync `> 0` comparison against it
+      // was the hosted "pending.slice is not a function" bug's cousin (`undefined > 0` is false,
+      // so the digest silently never flushed). `void` keeps the timer callback synchronous.
+      void this.pendingCount().then((n) => {
+        if (n > 0) void this.flush().catch(() => {});
+      });
     }, intervalMs);
     this.timer.unref?.();
   }

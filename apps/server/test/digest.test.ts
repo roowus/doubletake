@@ -88,20 +88,20 @@ describe('DigestGate', () => {
   const gate = new DigestGate(env.repo, sink, 'https://dt.example', () => clock);
 
   it('defaults to disabled and passes notifications straight through', async () => {
-    expect(gate.quietHours().enabled).toBe(false);
+    expect((await gate.quietHours()).enabled).toBe(false);
     await gate.notify(n('c0'));
     expect(sink.sent.map((x) => x.chatId)).toEqual(['c0']);
-    expect(gate.pendingCount()).toBe(0);
+    expect(await gate.pendingCount()).toBe(0);
   });
 
   it('parks inside the window, flushes one digest after it ends, and forgets the rows', async () => {
     gate.setQuietHours({ enabled: true, start: '22:00', end: '07:30', timeZone: 'UTC' });
-    expect(loadQuietHours(env.repo).start).toBe('22:00');
+    expect((await loadQuietHours(env.repo)).start).toBe('22:00');
     clock = new Date('2026-09-04T23:00:00Z');
     expect(await gate.notify(n('c1'))).toEqual({ parked: true });
     await gate.notify(n('c2'));
     expect(sink.sent).toHaveLength(1);
-    expect(gate.pendingCount()).toBe(2);
+    expect(await gate.pendingCount()).toBe(2);
     // Timer tick while still quiet: nothing goes out.
     expect(await gate.flush()).toEqual({ sent: 0 });
     clock = new Date('2026-09-05T07:31:00Z');
@@ -112,14 +112,14 @@ describe('DigestGate', () => {
       url: 'https://dt.example/',
       tag: 'digest',
     });
-    expect(gate.pendingCount()).toBe(0);
+    expect(await gate.pendingCount()).toBe(0);
     expect(await gate.flush()).toEqual({ sent: 0 });
   });
 
   it('force-flush sends inside the window; the timer flushes without being asked', async () => {
     clock = new Date('2026-09-05T23:00:00Z');
     await gate.notify(n('c3'));
-    expect(gate.pendingCount()).toBe(1);
+    expect(await gate.pendingCount()).toBe(1);
     expect(await gate.flush(true)).toEqual({ sent: 1 });
     expect(sink.sent.at(-1)).toMatchObject({
       title: 'Answer ready',
@@ -131,18 +131,18 @@ describe('DigestGate', () => {
     gate.start(10);
     await new Promise((r) => setTimeout(r, 80));
     gate.stop();
-    expect(gate.pendingCount()).toBe(0);
+    expect(await gate.pendingCount()).toBe(0);
     expect(sink.sent.at(-1)?.chatId).toBe('c4');
   });
 
-  it('ignores a corrupt setting', () => {
+  it('ignores a corrupt setting', async () => {
     env.repo.setSetting('quiet_hours', '{not json');
-    expect(loadQuietHours(env.repo).enabled).toBe(false);
+    expect((await loadQuietHours(env.repo)).enabled).toBe(false);
     env.repo.setSetting(
       'quiet_hours',
       JSON.stringify({ enabled: true, start: 'x', timeZone: 'Mars/Olympus' }),
     );
-    const q = loadQuietHours(env.repo);
+    const q = await loadQuietHours(env.repo);
     expect(q).toMatchObject({ enabled: true, start: '22:00', end: '07:30' });
     expect(q.timeZone).not.toBe('Mars/Olympus');
   });

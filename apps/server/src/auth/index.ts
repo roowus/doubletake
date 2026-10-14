@@ -21,8 +21,14 @@ export class Auth {
 
   constructor(private readonly repo: Repo) {}
 
-  hasOwner(): boolean {
-    return Boolean(this.repo.getSetting(OWNER_KEY));
+  /**
+   * Owner password set? Async because `getSetting` is pg-lazy on the hosted dialect (repo.ts
+   * dialect contract); on SQLite the value is plain and `await` is a no-op. The hosted service
+   * never consults this (it authenticates against `sessions`), but the self-hosted routes and
+   * tests share this class, and a promise is never a truthy "no".
+   */
+  async hasOwner(): Promise<boolean> {
+    return Boolean(await this.repo.getSetting(OWNER_KEY));
   }
 
   async setOwnerPassword(password: string): Promise<void> {
@@ -31,7 +37,7 @@ export class Auth {
   }
 
   async verifyOwnerPassword(password: string): Promise<boolean> {
-    const h = this.repo.getSetting(OWNER_KEY);
+    const h = await this.repo.getSetting(OWNER_KEY);
     if (!h) return false;
     try {
       return await argonVerify(h, password);
@@ -47,9 +53,13 @@ export class Auth {
     return { token, deviceId: device.id };
   }
 
-  authenticate(bearer: string | undefined): Session | null {
+  /**
+   * Session for a device token. Async because `findDeviceByTokenHash` is pg-lazy on the hosted
+   * dialect (repo.ts dialect contract); on SQLite the value is plain and `await` is a no-op.
+   */
+  async authenticate(bearer: string | undefined): Promise<Session | null> {
     if (!bearer?.startsWith('dt_')) return null;
-    const device = this.repo.findDeviceByTokenHash(hashToken(bearer));
+    const device = await this.repo.findDeviceByTokenHash(hashToken(bearer));
     if (!device || device.revokedAt) return null;
     this.repo.touchDevice(device.id);
     return { deviceId: device.id, deviceName: device.name };
