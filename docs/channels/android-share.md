@@ -1,20 +1,53 @@
 # Android share sheet and push
 
-## Pairing
+## Two ways in: hosted (default) and self-hosted
+
+The app ships one bundle with two entry points, and the default is the hosted service.
+
+- **Hosted (default).** `nativeEntryUrl()` (`apps/web/src/native.ts`) sends the Capacitor WebView
+  (origin `https://localhost`, iOS `capacitor://localhost`) to `HOSTED_URL`
+  (`https://doubletake.gg`) whenever `doubletake.serverUrl` does not name the origin the WebView
+  is already on. The WebView then shows the service's own shell: register with the invite code,
+  log in with e-mail + password, or Sign in with Google. Everything after that (`/library`,
+  `/chat/<id>`, Settings) is served by the service, so the PWA fixes reach the app without an
+  APK rebuild. Nothing about that flow lives in this repository's bundle, which is why the
+  bundle never renders a hosted login of its own.
+- **Self-hosted.** "Use my own server" on the bundled sign-in page (`Welcome`) reveals the
+  Server URL + pairing code form; a dev build served against a local server stays where it is.
+  Pairing and its QR/`{url, code}` payload are unchanged (below).
+
+Both write the same Capacitor Preferences keys, and `ShareReceiverActivity` prefers the explicit
+self-hosted pairing when both exist:
+
+| key | hosted | self-hosted |
+|---|---|---|
+| `doubletake.hosted` | the service origin (`https://doubletake.gg`) | empty |
+| `doubletake.hostedToken` | the `dth_` session token | — |
+| `doubletake.serverUrl` | empty | the owner's server |
+| `doubletake.token` | — | the paired device token |
+
+The sheet copies this group into its own SharedPreferences file (`doubletake.session`, via
+`Pairing.session()`) on the first share and reads its copy from then on, so it stays inside the
+app-private directory instead of the (world-readable) `CapacitorStorage` group; a sign-out clears
+that copy through `setToken(null)` → `mirrorToken(null)`, and the next share asks for a sign-in.
+Choosing a server (`setServerUrl`) clears `doubletake.hosted`, which is what ends hosted mode for
+the sheet.
+
+## Pairing (self-hosted)
 1. Open the Doubletake PWA on the laptop → Settings → **Pair a device** → **Show pairing code**.
    The server (`POST /api/pair/start`) mints a 6-character, 10-minute, single-use code; the
    page shows it as text and as a QR whose payload is the URL
    `https://<host>.ts.net/?code=ABC123` (a plain URL, so any camera app opens the web pairing
    screen too). The same response carries `qr: {"url","code"}` as JSON for clients that prefer
    it; the Android app accepts either form.
-2. Install the Android app (debug APK from `apps/mobile`, later a release). Its first screen
-   is the same `Welcome` page as the web, opened on the **Pairing code** tab with an extra
-   **Server URL** field. Paste the QR payload (the `https://…/?code=` URL or the `{url, code}`
-   JSON) into the code field and both fields fill themselves; or type them. The app calls
-   `POST /api/pair/redeem` `{ code, deviceName, platform: "android" }` and keeps the server URL
-   and the long-lived token in `localStorage`, mirrored into Capacitor Preferences
-   (`doubletake.serverUrl`, `doubletake.token`) so the native share activity can read them.
-   Every API call from the WebView is prefixed with the stored server URL (`apiBase()` in
+2. Install the Android app (debug APK from `apps/mobile`, later a release). "Use my own server"
+   on the first screen opens the **Server URL** + **Pairing code** fields. Paste the QR payload
+   (the `https://…/?code=` URL or the `{url, code}` JSON) into the code field and both fields
+   fill themselves; or type them. The app calls `POST /api/pair/redeem`
+   `{ code, deviceName, platform: "android" }` and keeps the server URL and the long-lived token
+   in `localStorage`, mirrored into Capacitor Preferences (`doubletake.serverUrl`,
+   `doubletake.token`, and `doubletake.hosted` cleared) so the native share activity can read
+   them. Every API call from the WebView is prefixed with the stored server URL (`apiBase()` in
    `apps/web/src/native.ts`). Tokens are per device and revocable from Settings → Devices.
 3. The phone must reach the server: install Tailscale on the phone and join the same tailnet.
 
@@ -31,7 +64,9 @@
 - Renders a compact bottom sheet (`res/layout/activity_share.xml`): detected URL or the shared
   text, a one-line note field (IME "Send" submits), mode chips **Auto · Quick · Standard ·
   Deep** (a `RadioGroup`), and **Send**.
-- On Send: `POST {serverUrl}/api/ingest` with `Authorization: Bearer <device token>`, body
+- On Send: `POST {serverUrl}/api/ingest` with `Authorization: Bearer <session token>` — the
+  hosted account's `dth_` token when the app is signed in to the service, the paired device
+  token otherwise (see "Two ways in" above) — body
   `{ url? | text?, note?, modeHint: "auto" | "quick" | "standard" | "deep", channel: "android_share", clientId }`
   over `HttpURLConnection` (8 s connect / 15 s read; `ShareApi.kt`). Success shows a toast and
   calls `finish()`; a server *rejection* (non-2xx) shows the `error` field (or `HTTP <code>`) and
@@ -58,10 +93,17 @@
   arrived. A MediaStore URI passed by hand via `am start --grant-read-uri-permission` is *not*
   readable by the app (the shell cannot grant it), so drive a real sharing app when testing on
   the emulator.
-- If unpaired (`Pairing.get()` finds no URL + token in Preferences): the share is saved as JSON
-  under `doubletake.pendingShare`, a toast asks to pair, and `MainActivity` opens. After
-  pairing the web app consumes the pending share once and opens `/share?…&channel=android_share`
-  pre-filled.
+- If nobody is signed in (`Pairing.session()` finds no server + token): the share is saved as
+  JSON under `doubletake.pendingShare`, the sheet says **"Sign in to Doubletake to save this"**,
+  and `MainActivity` opens (the hosted login, or the pairing screen on a device that chose its
+  own server). After signing in the web layer consumes the pending share once and opens
+  `/share?…&channel=android_share` pre-filled. A `401` on Send (session revoked, account
+  deleted) takes the same route, drops the sheet's copy of the session and says "Signed out —
+  open Doubletake to sign in again".
+- **Offline queue and sign-out.** `ShareUploadWorker` reads `Pairing.session()` per pass; with
+  nobody signed in it returns `retry` and keeps the queued shares until someone does. A `401`
+  drops the record with the usual "could not send" notification and clears the sheet's copy of
+  the session.
 - **Offline queue.** When nothing reaches the server (airplane mode, tailnet down, DNS, timeout)
   the exact body is appended to `ShareQueue` (a JSON array in the app-private SharedPreferences
   file `doubletake.shareQueue`; a few small records, so no Room database) and the sheet closes
@@ -186,6 +228,18 @@ notification also goes to the owner channels (ntfy, Telegram) when configured
   (Android 13, WebView 151) — the S25 FE had accepted the same URL before the flag existed, so
   do not rely on a single WebView version for this. The native share sheet uses
   `HttpURLConnection`, which honours the same network security config.
+
+- **Hosted sign-in and the bundled page.** The bundle is only the self-hosted entry point: the
+  WebView loads `HOSTED_URL` unless `doubletake.serverUrl` matches the origin it is on
+  (`nativeEntryUrl`), so a hosted sign-in happens in the service's shell and gets server fixes
+  live. Consequences to remember when testing: the pending-share replay lands on the hosted
+  `/share` route, the Google round trip returns to the hosted login, and `?code=` in a URL is
+  the hosted invite code, not a pairing code (pairing codes are only read on the bundled page).
+- **iOS.** `nativeEntryUrl` is platform-agnostic. On iOS the equivalent of "the app has no
+  server yet" must load `HOSTED_URL` in the `WKWebView` **before** evaluating the bundle's own
+  `apiBase()` (`https://doubletake.gg`, never an empty base), or the first hosted request dies
+  as mixed content; the Share Extension needs `doubletake.hosted` + `doubletake.hostedToken` in
+  the App Group alongside the existing self-hosted keys. Not implemented in this change.
 
 ## Verified on device (Galaxy S25 FE, Android 16, 2026-09-03)
 Over `adb reverse tcp:7391` with `DOUBLETAKE_PUBLIC_URL=http://localhost:7391` (that build

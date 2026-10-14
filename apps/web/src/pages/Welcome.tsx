@@ -1,7 +1,14 @@
 import { useEffect, useState } from 'react';
 import { ApiError, api, setToken } from '../api';
 import { Icon } from '../components/Icon';
-import { apiBase, isNative, nativePlatform, parsePairingInput, setServerUrl } from '../native';
+import {
+  apiBase,
+  HOSTED_URL,
+  isNative,
+  nativePlatform,
+  parsePairingInput,
+  setServerUrl,
+} from '../native';
 
 function defaultDeviceName(): string {
   const ua = navigator.userAgent;
@@ -12,13 +19,24 @@ function defaultDeviceName(): string {
   return 'Browser';
 }
 
-/** First run (set owner password), login on a new device, or redeem a pairing code. */
+/**
+ * First run (set owner password), login on a new device, or redeem a pairing code.
+ *
+ * On a phone this page is the **self-hosted** entry point. Hosted accounts sign in on the hosted
+ * service's own shell — the WebView is pointed there by `nativeEntryUrl`, which is why this page
+ * normally never renders on a phone. When it does (the WebView could not reach the service, or
+ * the owner asked for it) it offers the self-hosted path with the hosted service named, so the
+ * hosted default stays discoverable without a server URL ever being required.
+ */
 export function Welcome({ onAuthed }: { onAuthed: () => void }) {
   const [hasOwner, setHasOwner] = useState<boolean | null>(null);
   const native = isNative();
   // On Android the app is not served by the server, so pairing must also learn the server URL.
   const [tab, setTab] = useState<'password' | 'pair'>(native ? 'pair' : 'password');
-  const [serverUrl, setServerUrlState] = useState(apiBase());
+  // Hosted first, then self-hosted behind one link: with nothing stored there is no server to
+  // talk to yet, so the URL field stays behind "Use my own server" instead of greeting everyone.
+  const [ownServer, setOwnServer] = useState(!!apiBase());
+  const [serverUrl, setServerUrlState] = useState(apiBase() || HOSTED_URL);
   const [password, setPassword] = useState('');
   const [code, setCode] = useState('');
   const [deviceName, setDeviceName] = useState(defaultDeviceName());
@@ -27,6 +45,8 @@ export function Welcome({ onAuthed }: { onAuthed: () => void }) {
 
   useEffect(() => {
     if (native && !apiBase()) {
+      // Nothing paired, so `/api/health` would ask the bundle's own origin. The self-hosted
+      // form only needs to know whether that server has an owner, and it is not reachable yet.
       setHasOwner(true);
       return;
     }
@@ -59,7 +79,7 @@ export function Welcome({ onAuthed }: { onAuthed: () => void }) {
     setErr(null);
     try {
       let token: string;
-      if (native) {
+      if (native && ownServer) {
         if (!/^https?:\/\//i.test(serverUrl.trim()))
           throw new ApiError(0, 'Server URL must start with https:// or http://');
         setServerUrl(serverUrl);
@@ -108,14 +128,27 @@ export function Welcome({ onAuthed }: { onAuthed: () => void }) {
       </aside>
       <form className="card welcome" onSubmit={submit} aria-busy={busy}>
         <h2 className="welcome-title">
-          {hasOwner === false ? 'Set up this notebook' : 'Open your notebook'}
+          {native && !ownServer
+            ? 'Use your own server'
+            : hasOwner === false
+              ? 'Set up this notebook'
+              : 'Open your notebook'}
         </h2>
-        {hasOwner === false && (
+        {native && !ownServer ? (
           <p className="muted welcome-first">
-            First run. Choose the owner password; you will use it to sign in new devices.
+            Doubletake runs on the hosted service by default, with an account at{' '}
+            <span className="mono">{HOSTED_URL.replace(/^https:\/\//, '')}</span> — this app
+            normally opens its sign-in. Point it at a notebook of your own instead: paste the
+            pairing link from Settings → Pair a device.
           </p>
+        ) : (
+          hasOwner === false && (
+            <p className="muted welcome-first">
+              First run. Choose the owner password; you will use it to sign in new devices.
+            </p>
+          )
         )}
-        {hasOwner && (
+        {hasOwner && (!native || ownServer) && (
           <div className="tabs" role="tablist" aria-label="Sign-in method">
             <button
               type="button"
@@ -137,7 +170,7 @@ export function Welcome({ onAuthed }: { onAuthed: () => void }) {
             </button>
           </div>
         )}
-        {native && (
+        {native && ownServer && (
           <div className="field">
             <label htmlFor="w-server">Server URL</label>
             <input
@@ -190,39 +223,65 @@ export function Welcome({ onAuthed }: { onAuthed: () => void }) {
             />
           </div>
         )}
-        <div className="field">
-          <label htmlFor="w-device">Device name</label>
-          <input
-            id="w-device"
-            value={deviceName}
-            onChange={(e) => setDeviceName(e.target.value)}
-            aria-describedby="w-device-help"
-          />
-          <div id="w-device-help" className="help">
-            Shown in Settings → Devices so you can revoke it later.
+        {(!native || ownServer) && (
+          <div className="field">
+            <label htmlFor="w-device">Device name</label>
+            <input
+              id="w-device"
+              value={deviceName}
+              onChange={(e) => setDeviceName(e.target.value)}
+              aria-describedby="w-device-help"
+            />
+            <div id="w-device-help" className="help">
+              Shown in Settings → Devices so you can revoke it later.
+            </div>
           </div>
-        </div>
+        )}
         {err && (
           <div className="banner error" role="alert">
             <Icon name="alert" />
             <span>{err}</span>
           </div>
         )}
-        <button
-          type="submit"
-          className="primary block"
-          disabled={busy || hasOwner === null}
-          aria-live="polite"
-        >
-          {busy
-            ? 'Connecting…'
-            : hasOwner === false
-              ? 'Set password & continue'
-              : tab === 'pair'
-                ? 'Pair this device'
-                : 'Sign in'}
-        </button>
+        {native && ownServer ? (
+          <button
+            type="submit"
+            className="primary block"
+            disabled={busy || hasOwner === null || !code.trim()}
+            aria-live="polite"
+          >
+            {busy ? 'Connecting…' : 'Pair this device'}
+          </button>
+        ) : (
+          <button
+            type="submit"
+            className="primary block"
+            disabled={busy || hasOwner === null}
+            aria-live="polite"
+          >
+            {busy
+              ? 'Connecting…'
+              : hasOwner === false
+                ? 'Set password & continue'
+                : tab === 'pair'
+                  ? 'Pair this device'
+                  : 'Sign in'}
+          </button>
+        )}
       </form>
+      {native && !ownServer && (
+        <button
+          type="button"
+          className="welcome-selfhost"
+          onClick={() => {
+            setOwnServer(true);
+            setHasOwner(true);
+            setErr(null);
+          }}
+        >
+          Use my own server
+        </button>
+      )}
     </div>
   );
 }

@@ -53,7 +53,9 @@ export function Login({
     <div className="welcome-layout">
       <aside className="welcome-brand">
         <div className="hero">
-          <span className="brand-mark"><img src="/icon-192.png" width="30" height="30" alt="" /></span>
+          <span className="brand-mark">
+            <img src="/icon-192.png" width="30" height="30" alt="" />
+          </span>
           <h1 className="welcome-name">Doubletake</h1>
           <p className="tagline">A field notebook that fills itself in.</p>
         </div>

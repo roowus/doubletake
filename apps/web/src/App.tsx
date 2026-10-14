@@ -1,12 +1,17 @@
 import type { EntityKind } from '@doubletake/shared';
 import { lazy, Suspense, useEffect, useState } from 'react';
-import { getToken, setToken } from './api';
+import { api, getToken, setToken } from './api';
 import { Shell } from './components/Shell';
 import { Toaster } from './components/Toast';
 import { detectHostedOnce, parseAuthHash, useHosted } from './lib/hosted';
 import { resetLive } from './live';
 import {
   installNativeListeners,
+  isLocalBundleOrigin,
+  isNative,
+  KEY_SERVER_URL,
+  mirrorPreferences,
+  nativeEntryUrl,
   pendingShareToPath,
   resumeNativePush,
   takePendingShare,
@@ -46,6 +51,31 @@ export function App() {
   // Hosted mode (ADR 0032) is probed once at boot; until it answers the app stays self-hosted.
   useEffect(() => {
     void detectHostedOnce();
+  }, []);
+
+  // Hosted sign-in happens in the app: the WebView loads doubletake.gg's own login (see the
+  // entry effect below), and on every native page whose server answers "hosted" this writes
+  // where the session lives, so the share sheet posts there. A self-hosted server never reaches
+  // here — the same probe drives `detectHostedOnce`, so the two can never disagree.
+  useEffect(() => {
+    if (!isNative()) return;
+    void (async () => {
+      if (!(await welcomeScreen(api.setupStatus))) return;
+      const origin = location.origin.replace(/\/+$/, '');
+      const url = (localStorage.getItem(KEY_SERVER_URL) ?? '').replace(/\/+$/, '');
+      // The hosted page's own origin is the hosted server; an explicit URL only wins when it is
+      // where this page came from (a device paired against its owner's server).
+      await mirrorPreferences('doubletake.hosted', url && url !== origin ? '' : origin);
+    })();
+  }, []);
+
+  // The bundle is the self-hosted sign-in UI; hosted accounts live on doubletake.gg, whose own
+  // shell renders the login. On a phone the WebView is therefore pointed at the hosted page
+  // instead of showing a sign-in form that cannot create an account here.
+  useEffect(() => {
+    if (!isNative() || !isLocalBundleOrigin(location.origin)) return;
+    const target = nativeEntryUrl(location.origin, localStorage.getItem(KEY_SERVER_URL));
+    if (target !== location.origin.replace(/\/+$/, '')) location.replace(target);
   }, []);
 
   // A Google OAuth round trip lands back with `#dth_token=<bearer>` or `#error=<msg>` in the
@@ -182,4 +212,21 @@ export function App() {
       <Toaster />
     </Shell>
   );
+}
+
+/**
+ * The share sheet's copy of this session — `doubletake.hosted` is the origin the app signed in
+ * at, `doubletake.serverUrl` the self-hosted one. Written from here (the WebView) every time a
+ * native page's server says it is hosted, so a phone that signed in at doubletake.gg posts its
+ * shares to doubletake.gg and a paired device posts to its own server.
+ *
+ * Returns true when the server answered that it is hosted. Derived from `api.setupStatus` so
+ * the native branch is the same request the hosted gate makes, just through the shared client.
+ */
+async function welcomeScreen(probe: () => Promise<{ hosted?: boolean }>): Promise<boolean> {
+  try {
+    return (await probe()).hosted === true;
+  } catch {
+    return false;
+  }
 }

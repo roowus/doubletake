@@ -174,6 +174,14 @@ export interface IgStatus {
 
 export const api = {
   health: () => call<{ ok: boolean; hasOwner: boolean }>('GET', '/api/health', undefined, false),
+  /** Public probe: a hosted server answers `{ hosted: true, inviteRequired }`; inert elsewhere. */
+  setupStatus: () =>
+    call<{ hosted?: boolean; inviteRequired?: boolean }>(
+      'GET',
+      '/api/setup/status',
+      undefined,
+      false,
+    ),
   setup: (password: string, deviceName: string) =>
     call<{ token: string }>('POST', '/api/setup', { password, deviceName }, false),
   login: (password: string, deviceName: string) =>
