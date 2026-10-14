@@ -219,9 +219,8 @@ senders.
 A DM from an account that is not paired and does not contain a code creates **nothing**.
 The sender gets one prompt per hour at most:
 
-> Hi! I turn reels and posts into researched answers you can keep. Connect your account
-> (free, 30 seconds): doubletake.gg → Settings → Instagram → Connect, then DM me the code
-> it shows. Your saves stay private to you.
+> Save this: connect your account at doubletake.gg → Settings → Instagram, then DM me the
+> code it shows.
 
 DM **STOP** (or UNSUBSCRIBE) to opt out of prompts entirely; the account replies once
 ("Okay — I won't message you again. You can still pair later by DMing a code.") and never
