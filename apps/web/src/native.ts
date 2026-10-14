@@ -53,13 +53,18 @@ export function apiBase(): string {
   return (localStorage.getItem(KEY_SERVER_URL) ?? '').replace(/\/+$/, '');
 }
 
-/** Explicit choice: a self-hosted origin, or null for "the hosted service". */
+/**
+ * Explicit choice: a self-hosted origin, or null for "the hosted service". Choosing a server is
+ * also what ends hosted mode for the share sheet — `doubletake.hosted` is cleared here, so a
+ * device that leaves the hosted sign-in for its own notebook posts to that notebook.
+ */
 export function setServerUrl(url: string | null): void {
   if (!isNative()) return;
   const clean = url?.trim().replace(/\/+$/, '') ?? '';
   if (clean) localStorage.setItem(KEY_SERVER_URL, clean);
   else localStorage.removeItem(KEY_SERVER_URL);
   void mirrorPreferences(KEY_SERVER_URL, clean);
+  if (clean) void mirrorPreferences(KEY_HOSTED, null);
 }
 
 /**
@@ -111,20 +116,25 @@ export function mirrorPreferences(
 }
 
 /**
- * Mirror the session token for the native share sheet (called from `setToken`). Hosted sessions
- * (`dth_…`) keep their own key: signing in does not disturb a paired self-hosted server, so
- * "Use my own server" is still there after a hosted sign-in.
+ * Mirror the session token for the native share sheet (called from `setToken`, including its
+ * sign-out call with `null`). Hosted sessions (`dth_…`) keep their own key so a hosted sign-in
+ * does not disturb a paired self-hosted server — and a sign-out clears both, so a queued share
+ * can never be posted with a token the owner just revoked.
  *
- * Neither write is awaited by `setToken`: the share sheet copies both keys into its own
- * storage on first use, and awaiting would put the plugin round trip on the sign-in path.
+ * Nothing here is awaited: the share sheet copies the keys into its own storage on first use,
+ * and awaiting would put a plugin round trip on the sign-in path.
  */
 export function mirrorToken(token: string | null): void {
   if (!isNative()) return;
-  if (token?.startsWith(HOSTED_TOKEN_PREFIX)) {
-    void mirrorPreferences(KEY_HOSTED_TOKEN, token);
+  if (token === null) {
+    void mirrorPreferences(KEY_HOSTED_TOKEN, null);
+    void mirrorPreferences(KEY_TOKEN, null);
     return;
   }
-  void mirrorPreferences(KEY_TOKEN, token);
+  void mirrorPreferences(
+    token.startsWith(HOSTED_TOKEN_PREFIX) ? KEY_HOSTED_TOKEN : KEY_TOKEN,
+    token,
+  );
 }
 
 const HOSTED_TOKEN_PREFIX = 'dth_';

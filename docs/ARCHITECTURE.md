@@ -90,7 +90,8 @@ apps/server       Fastify + TS: api/ (REST + WebSocket), auth/, brains/ (adapter
                   mcp/ (library tools for other agents over Streamable HTTP), library/
                   (collections, cross-library ask, Karakeep/Memos interchange)
 apps/web          Vite + React PWA: chats, chat view, compose, settings, pairing, service worker,
-                  native.ts (Capacitor glue: server-URL prefix, Preferences mirror, FCM, deep links)
+                  native.ts (Capacitor glue: hosted/self-hosted entry URL, Preferences mirror,
+                  FCM, deep links)
 apps/mobile       Capacitor 8 Android: ShareReceiverActivity + Pairing (Kotlin); iOS: App +
                   ShareExtension targets, Pairing (Swift), committed Xcode project
 packages/shared   zod schemas + types (Item, Run, Message, events, API DTOs, untrusted wrappers)
@@ -203,8 +204,15 @@ every configured adapter and Settings shows them ([guide](BRAIN-ADAPTERS.md#sele
 ## 8. Channels
 
 - **Android share sheet** ([guide](channels/android-share.md)): translucent native activity,
-  compact sheet with URL preview, note, mode chips; posts to `/api/ingest` with the device token
-  and finishes without booting the WebView. A shared photo or video (`EXTRA_STREAM`) is streamed
+  compact sheet with URL preview, note, mode chips; posts to `/api/ingest` with whichever
+  session the app holds — the hosted account's `dth_` token or a paired device token — and
+  finishes without booting the WebView. The WebView writes both into Capacitor Preferences
+  (`doubletake.hosted` + `doubletake.hostedToken`, `doubletake.serverUrl` + `doubletake.token`);
+  the sheet copies that group into its own storage on first use (`Pairing.SHARE_GROUP`, so it
+  stays inside the app-private dir rather than world-readable), prefers the explicit
+  self-hosted pairing, and re-reads it on the next share after a sign-out. Nobody signed in:
+  the sheet says "Sign in to Doubletake to save this", parks the share in
+  `doubletake.pendingShare` and opens the app. A shared photo or video (`EXTRA_STREAM`) is streamed
   to `/api/ingest/upload` from the content URI; of several files only the first is sent. When
   the server is unreachable the body is parked in a WorkManager-drained offline queue and
   delivered later (files are copied into app-private storage first, since the URI grant dies
@@ -259,7 +267,14 @@ every configured adapter and Settings shows them ([guide](BRAIN-ADAPTERS.md#sele
 ## 9. Clients
 
 One PWA (`apps/web`, Vite + React, served by the server at `/` from `apps/web/dist`, or by
-the Vite dev server with `/api` proxied). Its visual language, the "field notebook"
+the Vite dev server with `/api` proxied). The same bundle is wrapped by Capacitor on phones
+(`apps/mobile`), where it has **two entry points**: the hosted service (the default) and a
+server of the owner's own. `nativeEntryUrl()` in `apps/web/src/native.ts` sends the Capacitor
+WebView (origin `https://localhost` / `capacitor://localhost`) to `HOSTED_URL`
+(`https://doubletake.gg`) unless `doubletake.serverUrl` names the origin it is already on; a
+dev build pointed at a local server and the whole plain-web build are untouched. The hosted
+sign-in therefore happens in the hosted shell, not in the bundle — which only renders the
+self-hosted `Welcome` page, with its "Use my own server" path. Its visual language, the "field notebook"
 ([ADR 0030](adr/0030-field-notebook-ui-and-rich-answer-blocks.md)), is defined in
 [`design-system/doubletake/MASTER.md`](../design-system/doubletake/MASTER.md) with one spec per
 screen under [`design-system/doubletake/pages/`](../design-system/doubletake/pages/): experience

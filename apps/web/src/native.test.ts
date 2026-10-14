@@ -9,7 +9,6 @@ import {
   parsePairingInput,
   pendingShareToPath,
   sessionPrefs,
-  setServerUrl,
   targetPath,
 } from './native';
 
@@ -185,6 +184,8 @@ describe('native bridge on the web', () => {
     mod.setServerUrl('https://mac.tail1234.ts.net');
     mod.mirrorToken('dth_abc');
     expect(mod.apiBase()).toBe('https://mac.tail1234.ts.net');
+    // Choosing a server is what leaves hosted mode, and a sign-out clears both sessions.
+    mod.mirrorToken(null);
     mod.setServerUrl(null);
     await mod.mirrorPreferences('doubletake.hosted', HOSTED_URL);
     expect(set).toHaveBeenCalledWith({
@@ -192,7 +193,10 @@ describe('native bridge on the web', () => {
       value: 'https://mac.tail1234.ts.net',
     });
     expect(remove).toHaveBeenCalledWith({ key: 'doubletake.serverUrl' });
+    expect(remove).toHaveBeenCalledWith({ key: 'doubletake.hosted' }); // setServerUrl(url): hosted off
     expect(set).toHaveBeenCalledWith({ key: 'doubletake.hostedToken', value: 'dth_abc' });
+    expect(remove).toHaveBeenCalledWith({ key: 'doubletake.hostedToken' }); // mirrorToken(null)
+    expect(remove).toHaveBeenCalledWith({ key: 'doubletake.token' }); // mirrorToken(null)
     expect(set).toHaveBeenCalledWith({ key: 'doubletake.hosted', value: HOSTED_URL });
     expect(mod.apiBase()).toBe('');
     vi.unstubAllGlobals();
