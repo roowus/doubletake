@@ -1250,6 +1250,10 @@ export class Repo {
    * items (the chats inside the graph cap). Two indexed selects instead of a per-item walk.
    * Entities come newest first — ULID ids sort by creation time, so `id desc` is stable even
    * when rows share a `created_at`.
+   *
+   * NOTE for pg callers: BOTH fields are independently pg-lazy (`many`), so awaiting the returned
+   * object does not unwrap them — `await` each field, as `library/graph.ts` does. The empty-input
+   * early return hands back real arrays, so a caller must tolerate either.
    */
   graphData(
     itemIds: string[],
@@ -1319,20 +1323,26 @@ export class Repo {
         .where(and(eq(this.t.todos.id, id), ...this.scope('todos', ctx))),
     );
   }
+  /** Lazily derived scalar (see `getSetting`): the pg handle must be awaited before `?.n`. */
   countOpenTodos(ctx?: TenantCtx): number {
-    return (
-      this.one<{ n: number }>(
-        this.db
-          .select({ n: sql<number>`count(*)` })
-          .from(this.t.todos)
-          .where(
-            and(
-              eq(this.t.todos.status, 'open'),
-              isNull(this.t.todos.doneAt),
-              ...this.scope('todos', ctx),
-            ),
+    const row = this.one<{ n: number }>(
+      this.db
+        .select({ n: sql<number>`count(*)` })
+        .from(this.t.todos)
+        .where(
+          and(
+            eq(this.t.todos.status, 'open'),
+            isNull(this.t.todos.doneAt),
+            ...this.scope('todos', ctx),
           ),
-      )?.n ?? 0
+        ),
+    );
+    if (!this.isPg) return row?.n ?? 0;
+    return lazy(
+      (async () => {
+        const r = await (row as unknown as PromiseLike<{ n: number } | undefined>);
+        return r?.n ?? 0;
+      })(),
     );
   }
   createTodo(
@@ -1770,10 +1780,22 @@ export class Repo {
 
   // ---- settings / devices ----
 
+  /**
+   * A stored setting. The scalar is derived LAZILY: `this.one(...)?.value` would collapse the pg
+   * dialect's Promise to `undefined` before the caller could await it (`promise?.value` is
+   * `undefined`, not a Promise), which silently broke every hosted setting read.
+   */
   getSetting(key: string): string | undefined {
-    return this.one<{ value: string }>(
+    const row = this.one<{ value: string }>(
       this.db.select().from(s.settings).where(eq(s.settings.key, key)),
-    )?.value;
+    );
+    if (!this.isPg) return row?.value;
+    return lazy(
+      (async () => {
+        const r = await (row as unknown as PromiseLike<{ value: string } | undefined>);
+        return r?.value;
+      })(),
+    );
   }
   setSetting(key: string, value: string) {
     this.exec(
@@ -1838,6 +1860,13 @@ export class Repo {
 
   // ---- push subscriptions ----
 
+  /**
+   * Register (or refresh) a push subscription for one device. Postgres-portable: instead of
+   * reading the row back and branching on it — which on the pg dialect would branch on a truthy
+   * Promise and then spread that Promise into the returned object — the write is a single
+   * upsert on the endpoint's unique key and the returned row is the caller's own input. SQLite
+   * behaviour is unchanged: the same row is written and the same shape returned.
+   */
   upsertPushSubscription(
     deviceId: string,
     kind: string,
@@ -1847,11 +1876,11 @@ export class Repo {
   ) {
     const existing = this.one<typeof s.pushSubscriptions.$inferSelect>(
       this.db
-        .select()
+        .select({ id: this.t.pushSubscriptions.id, createdAt: this.t.pushSubscriptions.createdAt })
         .from(this.t.pushSubscriptions)
         .where(eq(this.t.pushSubscriptions.endpoint, endpoint)),
     );
-    if (existing) {
+    if (!this.isPg && existing) {
       this.exec(
         this.db
           .update(this.t.pushSubscriptions)
@@ -1870,6 +1899,20 @@ export class Repo {
       createdAt: nowIso(),
       ...this.stamp(ctx),
     };
+    if (this.isPg) {
+      // Single statement, no read-back: dedupe on the endpoint's unique key, exactly what the
+      // SQLite branch above achieves by reading first.
+      this.exec(
+        this.db
+          .insert(this.t.pushSubscriptions)
+          .values(row)
+          .onConflictDoUpdate({
+            target: this.t.pushSubscriptions.endpoint,
+            set: { deviceId, kind, keys, failedCount: 0 },
+          }),
+      );
+      return row as typeof s.pushSubscriptions.$inferInsert;
+    }
     this.exec(this.db.insert(this.t.pushSubscriptions).values(row));
     return row as typeof s.pushSubscriptions.$inferInsert;
   }
@@ -1940,13 +1983,20 @@ export class Repo {
         .set({ failedCount: sql`${this.t.pushSubscriptions.failedCount} + 1` })
         .where(and(eq(this.t.pushSubscriptions.id, id), ...this.scope('push_subscriptions', ctx))),
     );
-    return (
-      this.one<{ failedCount: number }>(
-        this.db
-          .select({ failedCount: this.t.pushSubscriptions.failedCount })
-          .from(this.t.pushSubscriptions)
-          .where(eq(this.t.pushSubscriptions.id, id)),
-      )?.failedCount ?? 0
+    const row = this.one<{ failedCount: number }>(
+      this.db
+        .select({ failedCount: this.t.pushSubscriptions.failedCount })
+        .from(this.t.pushSubscriptions)
+        .where(eq(this.t.pushSubscriptions.id, id)),
+    );
+    // Lazily derived scalar (see `getSetting`). The read rides the same ordering tail as the
+    // update above, so it observes the increment.
+    if (!this.isPg) return row?.failedCount ?? 0;
+    return lazy(
+      (async () => {
+        const r = await (row as unknown as PromiseLike<{ failedCount: number } | undefined>);
+        return r?.failedCount ?? 0;
+      })(),
     );
   }
   resetPushFailures(id: string, ctx?: TenantCtx): void {

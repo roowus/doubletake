@@ -113,7 +113,7 @@ export class NotificationHub {
         } else {
           result.failed++;
           this.log.warn(`push ${sub.kind} to device ${sub.deviceId} failed: ${out.error}`);
-          const failures = this.repo.bumpPushFailure(sub.id);
+          const failures = await this.repo.bumpPushFailure(sub.id);
           if (failures >= MAX_FAILED) this.repo.deletePushSubscription(sub.id);
         }
       }),
