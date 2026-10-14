@@ -30,7 +30,9 @@ registerRoute(
         return (await caches.match(req)) ?? (await caches.match('/index.html')) ?? Response.error();
       }
     },
-    { denylist: [/^\/api\//, /^\/s\//, /^\/$/, /^\/privacy/, /^\/terms/, /^\/delete/, /^\/welcome/] },
+    {
+      denylist: [/^\/api\//, /^\/s\//, /^\/$/, /^\/privacy/, /^\/terms/, /^\/delete/, /^\/welcome/],
+    },
   ),
 );
 
@@ -44,7 +46,9 @@ self.addEventListener('activate', (e) =>
       const current = await stamp?.text();
       if (current !== CACHE_STAMP) {
         await Promise.all((await caches.keys()).map((k) => caches.delete(k)));
-        await caches.open('dt-cache-stamp').then((c) => c.put(CACHE_STAMP, new Response(CACHE_STAMP)));
+        await caches
+          .open('dt-cache-stamp')
+          .then((c) => c.put(CACHE_STAMP, new Response(CACHE_STAMP)));
       }
       await self.clients.claim();
       for (const client of await self.clients.matchAll({ type: 'window' })) {

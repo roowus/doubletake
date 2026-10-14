@@ -39,7 +39,9 @@ export function Shell({
     <div className={bare ? 'shell bare' : 'shell'}>
       <nav className="shell-nav" aria-label="Primary">
         <Link to="/library" className="brand" aria-label="Doubletake, library">
-          <span className="brand-mark"><img src="/icon-192.png" width="20" height="20" alt="" /></span>
+          <span className="brand-mark">
+            <img src="/icon-192.png" width="20" height="20" alt="" />
+          </span>
         </Link>
         <ul className="tabs-list">
           {TABS.map((t) => {
