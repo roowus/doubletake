@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <!-- Base application theme. -->
+    <!-- The app itself is the web view; these colours only paint native chrome (dialogs,
+         the share sheet's cursor and ripples), so they are the notebook's paper and ink. -->
     <style name="AppTheme" parent="Theme.AppCompat.Light.DarkActionBar">
-        <!-- Customize your theme here. -->
-        <item name="colorPrimary">@color/colorPrimary</item>
-        <item name="colorPrimaryDark">@color/colorPrimaryDark</item>
-        <item name="colorAccent">@color/colorAccent</item>
+        <item name="colorPrimary">@color/pine</item>
+        <item name="colorPrimaryDark">@color/paper</item>
+        <item name="colorAccent">@color/pine</item>
     </style>
 
     <style name="AppTheme.NoActionBar" parent="Theme.AppCompat.DayNight.NoActionBar">
@@ -20,8 +20,9 @@
         <item name="android:background">@drawable/splash</item>
     </style>
 
-    <!-- Bottom-anchored, translucent share sheet (ShareReceiverActivity). -->
-    <style name="AppTheme.ShareSheet" parent="Theme.AppCompat.DayNight.Dialog">
+    <!-- Bottom-anchored, translucent share sheet (ShareReceiverActivity). Paper, never ink:
+         the sheet is a slip of the notebook, and its text colours are fixed in the layout. -->
+    <style name="AppTheme.ShareSheet" parent="Theme.AppCompat.Light.Dialog">
         <!-- Both attrs: AppCompat's Dialog theme reads its own `windowNoTitle`, and without
              `windowActionBar=false` it still draws the activity label above the content. -->
         <item name="windowNoTitle">true</item>
@@ -34,6 +35,10 @@
         <item name="android:windowMinWidthMajor">100%</item>
         <item name="android:windowMinWidthMinor">100%</item>
         <item name="android:backgroundDimEnabled">true</item>
+        <!-- Native text selection/ripples on paper; the default is a dark-theme white. -->
+        <item name="android:textColorHighlight">@color/pine_soft</item>
+        <item name="colorControlNormal">@color/pine</item>
+        <item name="colorControlActivated">@color/pine</item>
         <item name="android:windowAnimationStyle">@android:style/Animation.InputMethod</item>
         <item name="android:windowSoftInputMode">adjustResize</item>
     </style>
@@ -46,7 +51,7 @@
         <item name="android:button">@null</item>
         <item name="android:background">@drawable/share_chip_bg</item>
         <item name="android:gravity">center</item>
-        <item name="android:textColor">#e6e8ee</item>
+        <item name="android:textColor">@color/ink</item>
         <item name="android:textSize">13sp</item>
     </style>
 </resources>

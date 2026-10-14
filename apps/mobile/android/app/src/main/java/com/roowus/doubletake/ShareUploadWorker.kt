@@ -13,13 +13,18 @@ import androidx.work.WorkerParameters
 
 /**
  * Drains [ShareQueue]: posts every stored body in order. A share the server accepts or rejects
- * (4xx: bad token, bad body) leaves the queue; the first one the server cannot be reached for
+ * (4xx: bad session, bad body) leaves the queue; the first one the server cannot be reached for
  * stops the pass and asks WorkManager to retry with backoff, keeping the order intact.
+ *
+ * The session is read once per pass. A `401` (the account signed out, or the session was
+ * revoked) drops the record with a notification pointing at the app, since the same request
+ * would fail again; the sheet's copy is dropped too so the next share asks for a sign-in.
  */
 class ShareUploadWorker(ctx: Context, params: WorkerParameters) : Worker(ctx, params) {
     override fun doWork(): Result {
         val ctx = applicationContext
-        val paired = Pairing.get(ctx) ?: return Result.retry() // unpaired: keep the shares until paired
+        // Signed out: keep the shares until someone signs in (the sheet asks, this cannot).
+        val paired = Pairing.session(ctx) ?: return Result.retry()
         var sent = 0
         for (body in ShareQueue.list(ctx)) {
             val clientId = body.optString("clientId")
@@ -36,6 +41,7 @@ class ShareUploadWorker(ctx: Context, params: WorkerParameters) : Worker(ctx, pa
                         notifyProgress(ctx, sent)
                         return Result.retry()
                     }
+                    if (out.code == 401) Pairing.clearSession(ctx) // the sheet asks again next time
                     ShareQueue.remove(ctx, clientId)
                     notify(ctx, "dropped-$clientId", ctx.getString(R.string.queue_dropped_title),
                         ctx.getString(R.string.queue_dropped_body, preview(body), out.message))
