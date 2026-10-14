@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run --passWithNoTests",
     "shots": "node scripts/shots.mjs",
+    "audit:mobile": "node scripts/audit-mobile.mjs",
     "e2e": "playwright test",
     "e2e:update": "playwright test --update-snapshots"
   },
