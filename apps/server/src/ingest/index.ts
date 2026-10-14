@@ -151,6 +151,7 @@ export async function ingestAsync(req: IngestRequest, deps: IngestDeps): Promise
  * outcome (the bug class the sweep exists to remove), so there is deliberately no silent fallback.
  */
 export function ingest(req: IngestRequest, deps: IngestDeps): IngestOutcome {
+  assertSyncDialect(deps.repo, 'ingest');
   if (req.channel === 'library') return ingestLibraryQuestion(req, deps);
   const { repo } = deps;
   if (req.clientId) {
@@ -245,6 +246,18 @@ export function ingest(req: IngestRequest, deps: IngestDeps): IngestOutcome {
 }
 
 export class IngestError extends Error {}
+
+/**
+ * A synchronous Repo contract is only sound on SQLite: on the pg dialect every read is a Promise,
+ * so a sync caller reads `undefined`/a Promise where a row or array belongs. Fail loudly instead —
+ * this is the bug class the async sweep removed, and a silent `undefined` is how it hid.
+ */
+function assertSyncDialect(repo: Repo, fn: string): void {
+  if (repo.isPg)
+    throw new Error(
+      `${fn}() is the synchronous (SQLite) entry point; on the Postgres dialect call ${fn}Async() and await it (ADR 0032)`,
+    );
+}
 
 /**
  * Channel `library`, synchronous twin for the SQLite dialect (see `ingest()`).
@@ -352,6 +365,7 @@ export function ingestUpload(
   req: UploadRequest,
   deps: IngestDeps & { itemId: string },
 ): IngestOutcome {
+  assertSyncDialect(deps.repo, 'ingestUpload');
   const { repo } = deps;
   const kind = req.contentType.startsWith('video/') ? 'video' : 'image';
   const forcedMode: Mode | null = resolveRequestedMode(req.modeHint ?? 'auto');
