@@ -150,7 +150,10 @@ export function SettingsIndex() {
             : ig === 'off'
               ? { value: 'Not set up' }
               : ig.connected
-                ? { value: `@${ig.username ?? ig.igUserId}`, status: 'ok' }
+                ? // Never fall back to `ig.igUserId`: it is a 17-digit app-scoped id, and
+                  // rendering it as "@28030956743198301" reads as a broken handle. When the
+                  // handle is genuinely unknown, say so in words.
+                  { value: ig.username ? `@${ig.username}` : 'Connected', status: 'ok' }
                 : { value: 'Not connected', status: 'warn' },
         data: { value: '' },
         appearance: {

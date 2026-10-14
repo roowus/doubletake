@@ -192,14 +192,14 @@ body::before {
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="paper"]) {
     color-scheme: dark;
-    --bg: #101214;
-    --surface: #171a1d;
-    --surface-2: #1f2327;
-    --surface-3: #0c0e10;
-    --border: #2e343a;
-    --border-strong: #46505a;
-    --text: #e9e6df;
-    --text-muted: #9d9a91;
+    --bg: #16130f;
+    --surface: #1e1a15;
+    --surface-2: #262119;
+    --surface-3: #100e0b;
+    --border: #352f26;
+    --border-strong: #4d453a;
+    --text: #ece7dd;
+    --text-muted: #a49b8c;
     --accent: #e5805f;
     --on-accent: #2a1008;
     --accent-soft: rgba(229, 128, 95, 0.18);
@@ -210,36 +210,36 @@ body::before {
     --warn: #e2b53c;
     --err: #ff7b6e;
     --focus: #e5805f;
-    --scrim: rgba(0, 0, 0, 0.6);
-    --code-bg: #0c0e10;
+    --scrim: rgba(10, 8, 5, 0.62);
+    --code-bg: #100e0b;
     --chart-1: #e5805f;
-    --chart-2: #e2b53c;
+    --chart-2: #d8a13f;
     --chart-3: #8aa6d9;
-    --chart-4: #e2b53c;
+    --chart-4: #b7d16a;
     --chart-5: #c48ad1;
     --chart-6: #5fc4c4;
     --chart-7: #e07a6a;
     --chart-8: #a3c46a;
-    --shadow-sm: 0 12px 40px -18px rgba(0, 0, 0, 0.5);
-    --shadow-md: 0 12px 40px -18px rgba(0, 0, 0, 0.5);
-    --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.5);
-    --shadow-hover: 0 24px 60px -24px rgba(0, 0, 0, 0.62);
+    --shadow-sm: 0 12px 40px -18px rgba(8, 6, 3, 0.55);
+    --shadow-md: 0 12px 40px -18px rgba(8, 6, 3, 0.55);
+    --shadow-lg: 0 16px 40px rgba(8, 6, 3, 0.55);
+    --shadow-hover: 0 24px 60px -24px rgba(8, 6, 3, 0.66);
     --field-bg: var(--surface-2);
-    --chrome-bg: rgba(16, 18, 20, 0.82);
+    --chrome-bg: rgba(22, 19, 15, 0.82);
     --map-filter: invert(1) hue-rotate(180deg) brightness(0.8) contrast(0.9) saturate(0.6);
-    --map-sea: #1f3037;
+    --map-sea: #2a2419;
   }
 }
 :root[data-theme="ink"] {
   color-scheme: dark;
-  --bg: #101214;
-  --surface: #171a1d;
-  --surface-2: #1f2327;
-  --surface-3: #0c0e10;
-  --border: #2e343a;
-  --border-strong: #46505a;
-  --text: #e9e6df;
-  --text-muted: #9d9a91;
+  --bg: #16130f;
+  --surface: #1e1a15;
+  --surface-2: #262119;
+  --surface-3: #100e0b;
+  --border: #352f26;
+  --border-strong: #4d453a;
+  --text: #ece7dd;
+  --text-muted: #a49b8c;
   --accent: #e5805f;
   --on-accent: #2a1008;
   --accent-soft: rgba(229, 128, 95, 0.18);
@@ -250,24 +250,24 @@ body::before {
   --warn: #e2b53c;
   --err: #ff7b6e;
   --focus: #e5805f;
-  --scrim: rgba(0, 0, 0, 0.6);
-  --code-bg: #0c0e10;
+  --scrim: rgba(10, 8, 5, 0.62);
+  --code-bg: #100e0b;
   --chart-1: #e5805f;
-  --chart-2: #e2b53c;
+  --chart-2: #d8a13f;
   --chart-3: #8aa6d9;
-  --chart-4: #e2b53c;
+  --chart-4: #b7d16a;
   --chart-5: #c48ad1;
   --chart-6: #5fc4c4;
   --chart-7: #e07a6a;
   --chart-8: #a3c46a;
-  --shadow-sm: 0 12px 40px -18px rgba(0, 0, 0, 0.5);
-  --shadow-md: 0 12px 40px -18px rgba(0, 0, 0, 0.5);
-  --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.5);
-  --shadow-hover: 0 24px 60px -24px rgba(0, 0, 0, 0.62);
+  --shadow-sm: 0 12px 40px -18px rgba(8, 6, 3, 0.55);
+  --shadow-md: 0 12px 40px -18px rgba(8, 6, 3, 0.55);
+  --shadow-lg: 0 16px 40px rgba(8, 6, 3, 0.55);
+  --shadow-hover: 0 24px 60px -24px rgba(8, 6, 3, 0.66);
   --field-bg: var(--surface-2);
-  --chrome-bg: rgba(16, 18, 20, 0.82);
+  --chrome-bg: rgba(22, 19, 15, 0.82);
   --map-filter: invert(1) hue-rotate(180deg) brightness(0.8) contrast(0.9) saturate(0.6);
-  --map-sea: #1f3037;
+  --map-sea: #2a2419;
 }
 
 /* Ink keeps the landing's texture, re-pointed: the clay accent blooms and the ruled-paper
@@ -2258,11 +2258,12 @@ a.clip:hover {
 }
 .group-title {
   margin: 0;
+  font-family: var(--font-mono);
   font-size: var(--text-xs);
-  font-weight: 600;
+  font-weight: 500;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--text-muted);
+  letter-spacing: 0.18em;
+  color: var(--accent-text);
 }
 
 /* Claims: verdict, the claim itself, confidence bar and numbered sources. */
@@ -2478,13 +2479,16 @@ a.clip:hover {
   margin-bottom: var(--space-3);
 }
 
-/* Menu extras used by the research menu: headings, hints and check marks. */
+/* Menu extras used by the research menu: headings, hints and check marks. The heading keeps
+   the eyebrow's mono/uppercase/tracking but stays muted — a menu is a dense transient surface,
+   and clay there would compete with the selected item's own accent. */
 .menu-heading {
   padding: 8px var(--space-3) 4px;
+  font-family: var(--font-mono);
   font-size: var(--text-xs);
-  font-weight: 600;
+  font-weight: 500;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.18em;
   color: var(--text-muted);
 }
 .menu-item .hint {
@@ -3003,9 +3007,15 @@ details.card > summary + .md {
 /* ---- Settings ------------------------------------------------------------ */
 /* Grouped list, the phone-settings idiom: a small-caps group title, a bordered surface with
    one row per setting (label left, value or control right, chevron when it opens a page),
-   and a one-line footnote. Detail pages reuse the same parts (pages/settings/parts.tsx). */
+   and a one-line footnote. Detail pages reuse the same parts (pages/settings/parts.tsx).
+
+   Aligned to the landing's section rhythm: the group title is the landing's `.eyebrow` (mono,
+   uppercase, wide tracking, clay) and the body carries the landing's `.key-card` treatment —
+   a raised card on `--shadow-soft` at the landing's `--r-lg` corner. The landing's `.wrap` is
+   1080 px; the settings column stays narrower because these are dense label/value rows rather
+   than marketing copy, but the rhythm and card language now match. */
 .settings {
-  max-width: 720px;
+  max-width: 760px;
 }
 .settings > search {
   display: block;
@@ -3020,27 +3030,33 @@ details.card > summary + .md {
 .sgroup {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--space-3);
+  margin-bottom: var(--space-6);
+}
+.sgroup:last-child {
+  margin-bottom: 0;
 }
 .sgroup-title {
-  margin: 0 var(--space-3);
+  margin: 0 var(--space-1);
   font-family: var(--font-mono);
   font-size: var(--text-xs);
   font-weight: 500;
-  letter-spacing: 0.08em;
+  /* The landing's `.eyebrow`: .18em, and clay rather than a grey label. */
+  letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: var(--text-muted);
+  color: var(--accent-text);
 }
 .sgroup-body {
   display: flex;
   flex-direction: column;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   overflow: hidden;
+  box-shadow: var(--shadow-sm);
 }
 .sgroup-foot {
-  margin: 0 var(--space-3);
+  margin: 0 var(--space-1);
 }
 .srow {
   display: flex;
@@ -3585,13 +3601,16 @@ input.switch {
 }
 
 /* ---- Library tiles -------------------------------------------------------- */
+/* The landing's `.eyebrow`, shared with the settings group titles: mono, uppercase, wide
+   tracking, clay. It was a grey sans label, which read as a different (and quieter) system
+   than the rest of the page. */
 .section-title {
-  font-family: var(--font-sans);
+  font-family: var(--font-mono);
   font-size: var(--text-xs);
-  font-weight: 600;
-  letter-spacing: 0.08em;
+  font-weight: 500;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: var(--text-muted);
+  color: var(--accent-text);
   margin: 0;
 }
 .tiles {
@@ -3599,24 +3618,29 @@ input.switch {
   margin: 0;
   padding: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  gap: var(--space-2);
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: var(--space-3);
 }
+/* The landing's `.key-card`: a raised card on the soft shadow that lifts 2 px on hover rather
+   than swapping its background. The old rule changed background on hover, which read as a
+   state change instead of a surface responding to the pointer. */
 .tile {
   display: grid;
   grid-template-columns: 1fr auto;
   grid-template-rows: auto auto;
   align-items: end;
   gap: var(--space-3) var(--space-2);
-  min-height: 92px;
-  padding: var(--space-3);
+  min-height: 96px;
+  padding: var(--space-4);
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
   color: var(--text);
   transition:
-    border-color var(--dur) var(--ease),
-    background var(--dur) var(--ease);
+    transform var(--dur) var(--ease-out),
+    box-shadow var(--dur) var(--ease-out),
+    border-color var(--dur) var(--ease-out);
 }
 .tile > svg {
   grid-column: 1 / -1;
@@ -3625,7 +3649,16 @@ input.switch {
 .tile:hover {
   text-decoration: none;
   border-color: var(--border-strong);
-  background: var(--surface-2);
+  transform: translateY(var(--lift));
+  box-shadow: var(--shadow-hover);
+}
+@media (prefers-reduced-motion: reduce) {
+  .tile:hover {
+    transform: none;
+  }
+}
+:root[data-motion="reduce"] .tile:hover {
+  transform: none;
 }
 .tile-label {
   font-weight: 500;

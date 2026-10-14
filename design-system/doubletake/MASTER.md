@@ -76,16 +76,24 @@ The accent is the landing's **clay**, not a pine. The landing ships `#C45A3C`, w
 3.89:1 on paper and 4.31:1 behind white text, so the app darkens it to `#a8432a` (5.4:1 and
 6.0:1): the same hue family, deep enough to be legible as text and as a button fill.
 
+**Ink is warm, not blue.** The landing has no dark theme, so ink is the app's own — but it is
+built from the landing's paper family rather than from a neutral grey. The landing's papers sit
+at hue ~43° (warm amber); the first ink was `#101214`, hue 210° (cool blue-grey), which is the
+opposite temperature and read as a different product the moment the two were compared. Ink now
+runs hue 33–40°, mirroring the landing's lightness ladder onto a dark ground: `--bg` `#16130f`,
+`--surface` `#1e1a15`, `--surface-2` `#262119`. Shadows are warm-tinted too (`rgba(8,6,3,…)`) —
+a neutral black shadow over a warm surface reads grey.
+
 | Token | Paper (light) | Ink (dark) | Role |
 |---|---|---|---|
-| `--bg` | `#f7f3e9` | `#101214` | app background |
-| `--surface` | `#fffdf7` | `#171a1d` | cards, sheets, header |
-| `--surface-2` | `#f1ebdc` | `#1f2327` | inputs, code, nested rows |
-| `--surface-3` | `#eae2cf` | `#0c0e10` | inset wells (segmented track, media placeholder) |
-| `--border` | `#e6e3d9` | `#2e343a` | hairlines, dividers |
-| `--border-strong` | `#b9b09d` | `#46505a` | control outlines |
-| `--text` | `#1c1b18` (15.7:1) | `#e9e6df` (14.1:1) | primary text |
-| `--text-muted` | `#6b675f` (5.5:1) | `#9d9a91` (6.5:1) | meta, secondary |
+| `--bg` | `#f7f3e9` | `#16130f` | app background |
+| `--surface` | `#fffdf7` | `#1e1a15` | cards, sheets, header |
+| `--surface-2` | `#f1ebdc` | `#262119` | inputs, code, nested rows |
+| `--surface-3` | `#eae2cf` | `#100e0b` | inset wells (segmented track, media placeholder) |
+| `--border` | `#e6e3d9` | `#352f26` | hairlines, dividers |
+| `--border-strong` | `#b9b09d` | `#4d453a` | control outlines |
+| `--text` | `#1c1b18` (15.7:1) | `#ece7dd` (15.0:1) | primary text |
+| `--text-muted` | `#6b675f` (5.5:1) | `#a49b8c` (6.7:1) | meta, secondary |
 | `--accent` | `#a8432a` clay (5.4:1) | `#e5805f` (6.8:1) | buttons, rail, active tab, focus |
 | `--on-accent` | `#ffffff` (6.0:1) | `#2a1008` (6.5:1) | text on accent |
 | `--accent-text` | `#963a24` (6.5:1) | `#f0a184` (9.1:1) | links, accent text on surfaces |
@@ -141,15 +149,27 @@ two lines, meta to one.
 ```
 --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px; --space-5: 20px;
 --space-6: 24px; --space-8: 32px; --space-12: 48px;
---radius-sm: 6px (controls); --radius-md: 10px (cards); --radius-lg: 14px (sheets); --radius-pill: 999px (tag chips only)
---shadow-sm: none; --shadow-md: 0 8px 24px rgba(28,27,24,.12); --shadow-lg: 0 16px 40px rgba(28,27,24,.16)
+--radius-sm: 10px (controls); --radius-md: 16px (cards); --radius-lg: 24px (sheets, groups); --radius-pill: 999px (tag chips only)
+--shadow-sm/md: 0 12px 40px -18px rgba(28,27,24,.18) (= landing --shadow-soft)
+--shadow-lg:   0 24px 60px -24px rgba(28,27,24,.22), 0 4px 14px -6px rgba(28,27,24,.10) (= landing --shadow)
+--lift: -2px; --ease-out: cubic-bezier(.22,.9,.3,1)
 --tap: 44px; --header-h: 56px; --tabbar-h: 56px; --rail-w: 220px; --content-w: 760px
 ```
 
-Paper has no drop shadows: elevation is a hairline border plus a slightly lighter or darker
-surface. Only sheets and menus get `--shadow-md/lg`. Everything sits on the 4/8 rhythm; page
-gutter 16 px on phones, 24 px from 768 px; content column max 760 px; the answer measure is
-narrower still (68 ch).
+Radii and shadows are the landing's (`--r-md` 16, `--r-lg` 24, `--shadow-soft`/`--shadow`), so
+a card in the app and a card on the landing are the same object. Cards carry `--shadow-sm` and
+lift `--lift` on hover; the landing's `.key-card` does exactly this, and hover changes the
+*elevation* rather than swapping the background (a background swap reads as a state change, not
+as a surface responding to the pointer). Only the settings groups and tiles lift; dense table
+rows do not. Everything sits on the 4/8 rhythm; page gutter 16 px on phones, 24 px from 768 px;
+content column max 760 px; the answer measure is narrower still (68 ch).
+
+**Section labels are the landing's `.eyebrow`.** Library section titles, settings group titles
+and answer-block group titles all render as mono, uppercase, `letter-spacing: .18em`, in
+`--accent-text` (clay). They were a grey sans-serif small-caps at `.06em`–`.08em`, which read as
+a quieter, different system than the rest of the page. Menus (`.menu-heading`) keep the mono
+treatment but stay `--text-muted`: a dropdown is a dense transient surface, and clay there
+competes with the selected item's own accent.
 
 ## 5. Shell and navigation
 
@@ -244,7 +264,7 @@ italics so it is never mistaken for the answer.
 ## 11. Anti-patterns (do not ship)
 
 Chat bubbles for the answer · cream + terracotta + serif everywhere (the AI default) · drop
-shadows on paper · two competing accents (a tag chip in the button colour, or any second
+heavy or neutral-grey shadows · two competing accents (a tag chip in the button colour, or any second
 "primary") · emoji as icons · placeholder-only labels · text under
 12 px · chips that wrap mid-label · inline `style={{}}` · raw hex in components · hover-only
 affordances · 0 ms state changes · removing focus rings · a focus rule that changes an
