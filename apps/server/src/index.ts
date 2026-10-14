@@ -6,6 +6,7 @@ import { IgGraphClient } from './channels/instagram/graph.js';
 import { InstagramChannel } from './channels/instagram/index.js';
 import { type Config, loadConfig } from './config/index.js';
 import { openDb } from './db/index.js';
+import { openPgDb } from './db/pg.js';
 import { Repo } from './db/repo.js';
 import { Geocoder } from './geo/index.js';
 import type { MediaClient } from './media/protocol.js';
@@ -32,8 +33,21 @@ export async function main(): Promise<void> {
   ]) {
     fs.mkdirSync(d, { recursive: true });
   }
-  const { db, sqlite, close } = openDb(path.join(cfg.dataDir, 'doubletake.db'));
-  const repo = new Repo(db, sqlite);
+  // Hosted mode (ADR 0032) runs the whole app on Postgres: the repo, the queue, the MCP
+  // tools and the Instagram pairing gate all read/write the same tenant-aware database.
+  // Self-hosted stays SQLite in the data dir, byte-for-byte as before.
+  const hostedUrl = process.env.DOUBLETAKE_HOSTED === '1' ? process.env.DOUBLETAKE_DATABASE_URL : undefined;
+  let repo: Repo;
+  let close: () => void;
+  if (hostedUrl) {
+    const opened = await openPgDb(hostedUrl, { max: 10 });
+    repo = new Repo(opened.db, null);
+    close = () => opened.close();
+  } else {
+    const opened = openDb(path.join(cfg.dataDir, 'doubletake.db'));
+    repo = new Repo(opened.db, opened.sqlite);
+    close = () => opened.close();
+  }
   const brains = BrainSet.fromConfig(cfg);
   const brain = brains.defaultBrain;
   const worker = new QueueWorker(repo, brains, cfg);
