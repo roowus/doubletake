@@ -12,7 +12,7 @@ import type { Config } from '../config/index.js';
 
 import { SHARE_PATH_PREFIX } from '../library/share.js';
 
-export const IG_PUBLIC_PATHS = ['/api/ig/callback'];
+export const IG_PUBLIC_PATHS = ['/api/ig/callback', '/api/ig/deauthorize'];
 export const IG_WEBHOOK_PATH = '/webhooks/instagram';
 
 /**
@@ -148,6 +148,22 @@ export async function registerInstagramRoutes(app: FastifyInstance, deps: IgRout
   app.delete('/api/ig/account', async (_req, reply) => {
     ig.disconnect();
     return reply.code(204).send();
+  });
+
+  /**
+   * Meta's Deauthorize Callback (App Dashboard -> Business login settings): Meta POSTs here
+   * (form-encoded `signed_request`) when someone removes the app from their Instagram
+   * account. We drop the stored token so a revoked connection cannot be reused, and always
+   * answer 200 so Meta does not retry. Public: Meta is the caller, not a signed-in device.
+   */
+  app.post('/api/ig/deauthorize', async (req, reply) => {
+    try {
+      ig.disconnect();
+      app.log.info('instagram: deauthorize callback received; stored connection cleared');
+    } catch (e) {
+      app.log.warn(`instagram: deauthorize cleanup failed: ${(e as Error).message}`);
+    }
+    return reply.code(200).send({ ok: true });
   });
 
   app.post('/api/ig/refresh', async () => ({ refreshed: await ig.refreshIfDue() }));
