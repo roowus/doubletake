@@ -1,4 +1,39 @@
-/* Doubletake PWA stylesheet. Tokens and rules: design-system/doubletake/MASTER.md. */
+/* Doubletake PWA stylesheet. Tokens and rules: design-system/doubletake/MASTER.md.
+ *
+ * SHARED DESIGN TOKENS. The marketing landing at https://doubletake.gg (served from
+ * apps/server/src/api/landing-html.ts, source of truth doubletake-cloud/website/landing.html)
+ * and this app are one design language. The block below is the landing's `:root` verbatim under
+ * the landing's own names, then reconciled onto the app's existing paper/ink system. Reconcile by
+ * changing the app's *value*, never by rewriting a rule: the app's names (--bg, --surface,
+ * --text, --accent, --radius-*, --shadow-*, --font-*) stay, so every deep in-app surface inherits
+ * the new look without being restructured.
+ *
+ * Landing `:root` (landing-html.ts), kept 1:1 so a diff against the landing is meaningful:
+ *   --paper:#F7F3E9  --paper-2:#F1EBDC  --paper-3:#EAE2CF
+ *   --card:#FFFDF7   --ink:#1C1B18     --graphite:#6B675F
+ *   --line:rgba(28,27,24,.10)
+ *
+ * Reconciliation decided here (both surfaces now share these exact values):
+ *   --bg       <- --paper      #f7f3e9   (was #f7f4ee, a slightly cooler cream)
+ *   --surface  <- --card       #fffdf7   (was #fffdf9)
+ *   --surface-2<- --paper-2    #f1ebdc   (was #efeae0; --paper-3 #eae2cf is the deeper tone)
+ *   --text     <- --ink        #1c1b18   (already identical)
+ *   --text-muted <- --graphite #6b675f   (was #645f56, a warmer grey the landing does not use)
+ *   --border   <- --line       the landing's line is rgba(28,27,24,.10); the app also needs a
+ *                              border that is not inset over artwork, so it compounds --line
+ *                              over --card -> #e6e3d9. --border-strong stays app-only.
+ *   --r-md/--r-lg <- --r-md 16px / --r-lg 24px, --shadow-md/--shadow-lg <- --shadow-soft /
+ *                    --shadow.
+ * Deliberately NOT adopted: the landing's --rail:#C45A3C (its accent) and its system font
+ * stacks. The app's signature element is the *margin rail*, a 3 px rule beside every answer,
+ * and that rail must stay the pine accent (ADR 0030); the landing's clay already has a home in
+ * the app as --accent-2. The app bundles Newsreader / Instrument Sans / JetBrains Mono
+ * (@fontsource-variable) where the landing uses the OS stack and is used signed-out, so there is
+ * no shared surface to reconcile — the families are listed side by side below for reference.
+ *
+ * The app also carries a full ink (dark) theme the landing does not have. Ink keeps the same
+ * shape — radii, geometry, motion, font sizes — and only re-points the colours, so nothing below
+ * needs a second definition. */
 
 :root {
   /* Edge-to-edge (Capacitor 8 injects --safe-area-inset-*; browsers expose env()). */
@@ -9,14 +44,16 @@
 
   color-scheme: light;
 
-  /* Paper (default). Ink below, via prefers-color-scheme or [data-theme="ink"]. */
-  --bg: #f7f4ee;
-  --surface: #fffdf9;
-  --surface-2: #efeae0;
-  --border: #d9d2c4;
+  /* Paper (default). Ink below, via prefers-color-scheme or [data-theme="ink"].
+     Values are the landing's --paper / --card / --paper-2 above. */
+  --bg: #f7f3e9;
+  --surface: #fffdf7;
+  --surface-2: #f1ebdc;
+  --surface-3: #eae2cf; /* landing --paper-3: an inset well (segmented track, media placeholder) */
+  --border: #e6e3d9; /* landing --line (rgba(28,27,24,.10)) composited over --card */
   --border-strong: #b9b09d;
   --text: #1c1b18;
-  --text-muted: #645f56;
+  --text-muted: #6b675f;
   --accent: #1f6f5b;
   --on-accent: #ffffff;
   --accent-soft: rgba(31, 111, 91, 0.12);
@@ -28,7 +65,7 @@
   --err: #b3261e;
   --focus: #1f6f5b;
   --scrim: rgba(28, 27, 24, 0.45);
-  --code-bg: #efeae0;
+  --code-bg: #f1ebdc;
   /* Chart series: pine, clay, slate blue, ochre, plum, teal, rust, moss. Distinct in both
      themes and legible on paper; charts also emit their data as a table, so colour is never
      the only carrier. */
@@ -41,15 +78,32 @@
   --chart-7: #9a3b2e;
   --chart-8: #5f7a2e;
   --rail: var(--accent);
-  --shadow-sm: none;
-  --shadow-md: 0 8px 24px rgba(28, 27, 24, 0.12);
-  --shadow-lg: 0 16px 40px rgba(28, 27, 24, 0.16);
+  /* Soft layered shadows, the landing's --shadow-soft / --shadow (`none` is kept as a valid
+     value other rules rely on). */
+  --shadow-sm: 0 12px 40px -18px rgba(28, 27, 24, 0.18);
+  --shadow-md: 0 12px 40px -18px rgba(28, 27, 24, 0.18);
+  --shadow-lg: 0 24px 60px -24px rgba(28, 27, 24, 0.22), 0 4px 14px -6px rgba(28, 27, 24, 0.1);
+  /* Hover lift: the landing raises a card 2-3 px and deepens its shadow; the app joins in. */
+  --shadow-hover: 0 24px 60px -24px rgba(28, 27, 24, 0.22), 0 4px 14px -6px rgba(28, 27, 24, 0.14);
 
   /* Legacy aliases still used by a few rules. */
   --panel: var(--surface);
   --panel-2: var(--surface-2);
   --muted: var(--text-muted);
 
+  /* Inset-field surface: the landing's inputs sit on the deeper paper (--paper-2) rather than on
+     the card, which is what makes them read as "fill this in". Alias so a rule never hardcodes. */
+  --field-bg: var(--surface-2);
+  /* The landing's public header is a translucent blurred bar over the paper; the app's tab bar
+     and desktop rail use the same treatment. */
+  --chrome-bg: rgba(247, 243, 233, 0.82);
+  --chrome-blur: blur(10px);
+
+  /* Fonts. The app bundles these (@fontsource-variable, latin subsets, precached). The landing
+     uses the OS stack; its names are kept here for reference only, and are NOT applied.
+       landing --serif: "Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif
+       landing --sans:  -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif
+       landing --mono:  ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace */
   --font-sans:
     "Instrument Sans Variable", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
     "Helvetica Neue", Arial, sans-serif;
@@ -62,6 +116,11 @@
   --text-xl: 20px;
   --text-2xl: 24px;
   --text-3xl: 32px;
+  /* Display scale: the landing sets headings in clamp() so they breathe on phones and open up on
+     wide screens (h1 clamp(2.4rem,6vw,4.2rem), h2 clamp(1.8rem,4vw,2.6rem)). The app's entry
+     pages use these; in-app headings keep the fixed --text-* steps above. */
+  --display-1: clamp(2.05rem, 7.2vw, 3.1rem);
+  --display-2: clamp(1.55rem, 4.4vw, 2.2rem);
   --prose-size: 18px;
   --prose-leading: 1.6;
   --measure: 68ch;
@@ -74,9 +133,10 @@
   --space-6: 24px;
   --space-8: 32px;
   --space-12: 48px;
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
+  /* Landing --r-md / --r-lg, exact: generous, and the single most visible part of the look. */
+  --radius-sm: 10px;
+  --radius-md: 16px;
+  --radius-lg: 24px;
   --radius-pill: 999px;
   --tap: 44px;
   --gutter: var(--space-4);
@@ -84,17 +144,38 @@
   --tabbar-h: 56px;
   --rail-w: 220px;
   --content-w: 760px;
+  /* The landing's `.wrap` is 1080 px with a 24 px gutter, dropping to 18 px at 760 px and 14 px
+     at 420 px. Used by the wide entry screens; in-app pages keep --content-w so the reading
+     column is unchanged. */
+  --wrap-w: 1080px;
 
   --dur-fast: 120ms;
   --dur: 200ms;
   --dur-slow: 280ms;
+  /* The landing's button/rail motion: a short ease for lifts, a long one for reveals. */
   --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-out: cubic-bezier(0.22, 0.9, 0.3, 1);
+  --lift: -2px;
 
   font-family: var(--font-sans);
   font-size: var(--text-md);
   line-height: 1.5;
   letter-spacing: -0.005em;
   -webkit-text-size-adjust: 100%;
+}
+
+/* The landing's "faint paper texture via gradients, zero bytes": a warm bloom top-right and a
+   hairline ruled-paper repeat. Painted as a fixed pseudo-element so it never scrolls with a
+   page and never intercepts a tap. Ink re-points the bloom to its own accent below. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(1200px 600px at 80% -10%, rgba(196, 90, 60, 0.05), transparent 60%),
+    repeating-linear-gradient(0deg, transparent 0 2px, rgba(28, 27, 24, 0.012) 2px 4px);
 }
 
 /* Ink */
@@ -128,8 +209,12 @@
     --chart-6: #5fc4c4;
     --chart-7: #e07a6a;
     --chart-8: #a3c46a;
-    --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.4);
+    --shadow-sm: 0 12px 40px -18px rgba(0, 0, 0, 0.5);
+    --shadow-md: 0 12px 40px -18px rgba(0, 0, 0, 0.5);
     --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.5);
+    --shadow-hover: 0 24px 60px -24px rgba(0, 0, 0, 0.62);
+    --field-bg: var(--surface-2);
+    --chrome-bg: rgba(16, 18, 20, 0.82);
     --map-filter: invert(1) hue-rotate(180deg) brightness(0.8) contrast(0.9) saturate(0.6);
     --map-sea: #1f3037;
   }
@@ -163,10 +248,29 @@
   --chart-6: #5fc4c4;
   --chart-7: #e07a6a;
   --chart-8: #a3c46a;
-  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.4);
+  --shadow-sm: 0 12px 40px -18px rgba(0, 0, 0, 0.5);
+  --shadow-md: 0 12px 40px -18px rgba(0, 0, 0, 0.5);
   --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.5);
+  --shadow-hover: 0 24px 60px -24px rgba(0, 0, 0, 0.62);
+  --field-bg: var(--surface-2);
+  --chrome-bg: rgba(16, 18, 20, 0.82);
   --map-filter: invert(1) hue-rotate(180deg) brightness(0.8) contrast(0.9) saturate(0.6);
   --map-sea: #1f3037;
+}
+
+/* Ink keeps the landing's texture, re-pointed: the pine accent blooms instead of the clay, and
+   the ruled-paper hairlines become light-on-dark. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="paper"]) body::before {
+    background:
+      radial-gradient(1200px 600px at 80% -10%, rgba(95, 181, 154, 0.05), transparent 60%),
+      repeating-linear-gradient(0deg, transparent 0 2px, rgba(233, 230, 223, 0.014) 2px 4px);
+  }
+}
+:root[data-theme="ink"] body::before {
+  background:
+    radial-gradient(1200px 600px at 80% -10%, rgba(95, 181, 154, 0.05), transparent 60%),
+    repeating-linear-gradient(0deg, transparent 0 2px, rgba(233, 230, 223, 0.014) 2px 4px);
 }
 
 /* Prose size (Settings → Appearance). */
@@ -219,6 +323,15 @@ body {
   color: var(--text);
   -webkit-font-smoothing: antialiased;
   overflow-x: hidden;
+}
+/* The texture is a fixed backdrop, so page content must sit in a layer above it — otherwise a
+   negative z-index child (scrims, sticky bars) would slip behind the grain. */
+.app,
+.shell,
+.welcome-layout,
+.toasts {
+  position: relative;
+  z-index: 1;
 }
 h1,
 h2,
@@ -3132,6 +3245,22 @@ input.switch {
   letter-spacing: 0.25em;
   text-align: center;
   padding: var(--space-2) 0;
+}
+/* A pairing code past its deadline stays readable but stops looking actionable; the row's own
+   "Expires in …" line below it carries the meaning, the colour only reinforces it. */
+.pair-code[data-expired] {
+  color: var(--text-muted);
+  text-decoration: line-through;
+}
+/* Numbered steps of a pairing flow (hosted Instagram connect), inside a stacked row. */
+.steps {
+  margin: 0;
+  padding-left: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
 }
 .qr {
   display: grid;
