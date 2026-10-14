@@ -576,7 +576,7 @@ Backup = copy `~/.doubletake` and `~/Doubletake`. See [DEPLOYMENT.md](DEPLOYMENT
 
 ### Hosted PWA (ADR 0032)
 
-When `GET /api/status` reports `hosted: true`, the PWA adds: `/login` (email+password with
+When `GET /api/setup/status` reports `hosted: true`, the PWA adds: `/login` (email+password with
 Login/Register toggle and invite-code field when `inviteRequired`; "Sign in with Google"
 via `/api/auth/google`; OAuth returns capture `#dth_token=` into the existing token store),
 `/settings/account` (Connect OpenRouter, paste-key form with monthly/per-run caps and the
@@ -590,3 +590,16 @@ exactly as they were), hosted-only Log
 out, and run-failure copy mapping `no_credential`/`cap_reached`/`per_run_cap` to fix-it
 messages. Hosted+anonymous traffic gates to `/login`; when `hosted` is false the PWA is
 byte-identical to self-hosted.
+
+Two details that have bitten us, both now pinned by tests:
+
+- **The flag comes from `/api/setup/status`** (public, unauthenticated), *not* `/api/status`.
+  `apps/web/src/lib/hosted.ts` probes the former at boot and stays in self-hosted behaviour
+  until the server answers. A test or mock aimed at `/api/status` never enters hosted mode, so
+  the gate is silently not exercised — `e2e/hosted.spec.ts` mocked the wrong route for a while
+  and only one of its three assertions caught it.
+- **Focus must not restyle geometry.** The global `:focus-visible` rule sets the ring only.
+  While it also set `border-radius: var(--radius-sm)`, focusing any pill control snapped its
+  corners from the pill to 10px — the login fields changed shape the instant you clicked them.
+  `apps/web/scripts/audit-mobile.mjs` covers hit-target and overflow regressions;
+  the focus sweep is the visual/e2e suite's job.
