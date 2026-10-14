@@ -90,11 +90,15 @@ export interface IgHostedHooks {
   ): Promise<{ userId: string } | null>;
 }
 
-/** At most one "please connect first" DM per unknown sender per hour (in-memory, per process). */
+/** At most one "please connect first" DM per unknown sender per hour (ADR 0032). */
 const PROMPT_WINDOW_MS = 60 * 60_000;
+/** The exact DM text Meta users expect for "stop messaging me" (case-insensitive). */
+const STOP_KEYWORDS = new Set(['STOP', 'UNSUBSCRIBE']);
 const PAIRING_ACK = 'Linked to your Doubletake account.';
+/** Self-contained, stranger-friendly: says what the bot is, the price, and the exact steps. */
 const PAIRING_PROMPT =
-  'Connect your account at doubletake.gg/settings → Instagram, then DM me the code.';
+  'Hi! I turn reels and posts into researched answers you can keep. Connect your account (free, 30 seconds): doubletake.gg → Settings → Instagram → Connect, then DM me the code it shows. Your saves stay private to you.';
+const STOP_REPLY = "Okay — I won't message you again. You can still pair later by DMing a code.";
 
 export interface IgStatus {
   configured: boolean;
@@ -268,6 +272,43 @@ export class InstagramChannel {
 
   disconnect(): void {
     this.deps.repo.deleteIgAccount();
+  }
+
+  /**
+   * Hosted boot (ADR 0032): the communal service account's long-lived token arrives from the
+   * environment (`IG_ACCESS_TOKEN` + `IG_USER_ID`) instead of an interactive OAuth flow, so the
+   * channel can start on an instance that has no `ig_accounts` row yet — Meta's webhook
+   * verification must be answered before anyone has connected anything. Writes/refreshes the row
+   * (token sealed with the master-key SecretBox) only when it is missing or the token changed, so
+   * a restart never needlessly rewrites it. No-op (returns false) when either env var is unset.
+   * Must be awaited: the repo's pg reads/writes are async on the hosted dialect.
+   */
+  async seedAccountFromEnv(): Promise<boolean> {
+    const { cfg, repo, box, log } = this.deps;
+    const igUserId = cfg.ig.accessTokenUserId;
+    const token = cfg.ig.accessToken;
+    if (!igUserId || !token) return false;
+    const existing = await repo.getIgAccount();
+    if (existing?.igUserId === igUserId) {
+      // A row sealed under a different key (e.g. the self-hosted data-dir keyfile) must not throw
+      // here: fall through and re-seal it with the current box instead.
+      try {
+        if (box.open(existing.accessTokenEnc) === token) return false;
+      } catch {
+        /* unreadable with this key — rewrite it below */
+      }
+    }
+    const now = new Date(this.now());
+    await repo.upsertIgAccount({
+      igUserId,
+      username: existing?.igUserId === igUserId ? existing.username : null,
+      accessTokenEnc: box.seal(token),
+      // The long-lived token's real expiry is unknown from env; the refresh job overwrites it.
+      expiresAt: null,
+      refreshedAt: now.toISOString(),
+    });
+    log.info(`instagram: seeded account ${igUserId} from env`);
+    return true;
   }
 
   /**
@@ -543,14 +584,16 @@ export class InstagramChannel {
     return res;
   }
 
-  /** Last "please connect" prompt per sender, for the hourly rate limit. */
+  /** Last "please connect" prompt per sender, for the hourly rate limit (self-hosted/no-pg path). */
   private lastPrompt = new Map<string, number>();
 
   /**
    * Hosted-mode DM gate (ADR 0032), run before anything is ingested:
    * - linked sender → proceed, with the link owner's user id as the ingest tenant;
    * - DM text is a valid pairing code → link the sender, react + confirm, ingest nothing;
-   * - anyone else → ingest nothing, one polite prompt per sender per hour.
+   * - DM text is STOP/UNSUBSCRIBE → record the opt-out, reply once, never prompt again;
+   * - anyone else → ingest nothing, one polite prompt per sender per hour (persisted in
+   *   `ig_prompts` in hosted mode, so a restart does not reset the window).
    * Returns the tenant to ingest under, or null when the message was fully handled/blocked.
    */
   private async hostedDmGate(
@@ -590,13 +633,35 @@ export class InstagramChannel {
       res.duplicates++;
       return null;
     }
-    const now = this.now();
-    if (now - (this.lastPrompt.get(senderId) ?? 0) > PROMPT_WINDOW_MS) {
-      this.lastPrompt.set(senderId, now);
-      void this.reply(senderId, PAIRING_PROMPT);
+    // STOP/UNSUBSCRIBE is honored before anything else: record it, confirm once, prompt never
+    // again. The reply is deduped on Meta's message id via the `ig_events` row above.
+    if (STOP_KEYWORDS.has(text.toUpperCase())) {
+      await this.deps.repo.recordIgPromptOptout(senderId, this.now());
+      void this.reply(senderId, STOP_REPLY);
+      res.handled.push({ id: mid, kind: 'dm_optout', itemId: null, error: null });
+      return null;
     }
+    if (await this.deps.repo.isIgPromptOptedOut(senderId)) {
+      res.ignored++;
+      return null;
+    }
+    if (await this.claimPrompt(senderId)) void this.reply(senderId, PAIRING_PROMPT);
     res.ignored++;
     return null;
+  }
+
+  /**
+   * Atomically claim the hourly prompt window for a sender. Hosted mode persists it in
+   * `ig_prompts` (ADR 0032) so a restart cannot re-prompt; the in-memory map stays for the
+   * self-hosted path, which never prompts at all.
+   */
+  private async claimPrompt(senderId: string): Promise<boolean> {
+    const now = this.now();
+    if (this.deps.repo.isPg)
+      return await this.deps.repo.claimIgPrompt(senderId, PROMPT_WINDOW_MS, now);
+    if (now - (this.lastPrompt.get(senderId) ?? 0) <= PROMPT_WINDOW_MS) return false;
+    this.lastPrompt.set(senderId, now);
+    return true;
   }
 
   /** Fire-and-forget DM text; never delays the webhook 200. */
