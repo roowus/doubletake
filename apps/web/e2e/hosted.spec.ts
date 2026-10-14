@@ -1,12 +1,14 @@
 import { expect, test } from '@playwright/test';
 
 /**
- * Hosted-mode gating (ADR 0032), behaviour-level only (no screenshots). The /api/status route
- * is mocked per-test here rather than in fixture-server.mjs so the visual suite's fixture
- * (self-hosted, hosted flag absent) is untouched.
+ * Hosted-mode gating (ADR 0032), behaviour-level only (no screenshots). The hosted flag comes
+ * from `GET /api/setup/status` — that is the route mocked per-test here, rather than in
+ * fixture-server.mjs, so the visual suite's fixture (self-hosted, hosted flag absent) is
+ * untouched. Mocking `/api/status` instead silently never enters hosted mode: the app stays on
+ * the self-hosted welcome screen and this gate is not exercised at all.
  */
 test('hosted and anonymous redirects every view to login', async ({ page }) => {
-  await page.route('**/api/status**', (route) =>
+  await page.route('**/api/setup/status**', (route) =>
     route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -23,7 +25,7 @@ test('hosted and anonymous redirects every view to login', async ({ page }) => {
 });
 
 test('an OAuth hash token is stored and lands in the shell', async ({ page }) => {
-  await page.route('**/api/status**', (route) =>
+  await page.route('**/api/setup/status**', (route) =>
     route.fulfill({
       status: 200,
       contentType: 'application/json',
