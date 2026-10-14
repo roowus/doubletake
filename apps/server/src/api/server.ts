@@ -190,7 +190,7 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
         return;
       }
     }
-    const session = auth.authenticate(bearer);
+    const session = await auth.authenticate(bearer);
     if (!session) return reply.code(401).send({ error: 'unauthorized' });
     req.session = session;
   });
@@ -212,10 +212,10 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
   app.get('/api/health', async () => ({
     ok: true,
     brain: deps.brain.id,
-    hasOwner: auth.hasOwner(),
+    hasOwner: await auth.hasOwner(),
   }));
   app.get('/api/setup/status', async () => ({
-    hasOwner: auth.hasOwner(),
+    hasOwner: await auth.hasOwner(),
     // Hosted-mode markers (ADR 0032, non-sensitive, public): the PWA's boot probe is
     // anonymous, so hosted/inviteRequired must live on the PUBLIC status route or the
     // hosted login page would never appear.
@@ -224,7 +224,7 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
   }));
 
   app.post('/api/setup', async (req, reply) => {
-    if (auth.hasOwner()) return reply.code(409).send({ error: 'owner already set' });
+    if (await auth.hasOwner()) return reply.code(409).send({ error: 'owner already set' });
     const body = z
       .object({ password: z.string(), deviceName: z.string().default('This browser') })
       .parse(req.body);
@@ -968,8 +968,8 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
         kinds: deps.hub?.kinds() ?? [],
         channels: deps.hub?.channels() ?? [],
         vapidPublicKey: deps.vapidPublicKey ?? null,
-        quietHours: deps.digest?.quietHours() ?? null,
-        pending: deps.digest?.pendingCount() ?? 0,
+        quietHours: (await deps.digest?.quietHours()) ?? null,
+        pending: (await deps.digest?.pendingCount()) ?? 0,
       },
     };
   });
@@ -1054,7 +1054,10 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
     deps.digest.setQuietHours(body);
     // Turning quiet hours off releases anything parked right away.
     if (!body.enabled) await deps.digest.flush();
-    return { quietHours: deps.digest.quietHours(), pending: deps.digest.pendingCount() };
+    return {
+      quietHours: await deps.digest.quietHours(),
+      pending: await deps.digest.pendingCount(),
+    };
   });
   /** "Send now": pushes the digest of parked notifications even inside quiet hours. */
   app.post('/api/push/digest/flush', async (_req, reply) => {
@@ -1084,7 +1087,11 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
       let ok = false;
       const token = bearer ?? cookie;
       if (token) {
-        try { ok = Boolean(await hostedAuth.authenticate(token)); } catch { ok = false; }
+        try {
+          ok = Boolean(await hostedAuth.authenticate(token));
+        } catch {
+          ok = false;
+        }
       }
       if (!ok && req.url.split('?')[0] !== '/login') return reply.redirect('/login');
       reply.header('cache-control', 'no-store');

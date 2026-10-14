@@ -18,15 +18,18 @@ const VAPID_SETTING = 'vapid_keys';
 /**
  * VAPID keys come from the environment when set; otherwise they are generated once and kept in
  * the `settings` table so browser subscriptions survive restarts (ADR 0016).
+ *
+ * Async because `getSetting` is pg-lazy on the hosted dialect (repo.ts dialect contract); on
+ * SQLite the value is plain and `await` is a no-op, so self-hosted behaviour is unchanged.
  */
-export function resolveVapid(cfg: Config, repo: Repo): VapidKeys {
+export async function resolveVapid(cfg: Config, repo: Repo): Promise<VapidKeys> {
   if (cfg.vapidPublicKey && cfg.vapidPrivateKey)
     return {
       publicKey: cfg.vapidPublicKey,
       privateKey: cfg.vapidPrivateKey,
       subject: cfg.vapidSubject,
     };
-  const stored = repo.getSetting(VAPID_SETTING);
+  const stored = await repo.getSetting(VAPID_SETTING);
   if (stored) {
     const k = JSON.parse(stored) as { publicKey: string; privateKey: string };
     return { ...k, subject: cfg.vapidSubject };
@@ -39,12 +42,12 @@ export function resolveVapid(cfg: Config, repo: Repo): VapidKeys {
   return fresh;
 }
 
-export function createHub(
+export async function createHub(
   cfg: Config,
   repo: Repo,
   log: { warn: (msg: string) => void } = console,
-): { hub: NotificationHub; vapid: VapidKeys } {
-  const vapid = resolveVapid(cfg, repo);
+): Promise<{ hub: NotificationHub; vapid: VapidKeys }> {
+  const vapid = await resolveVapid(cfg, repo);
   const notifiers: Notifier[] = [new WebPushNotifier(vapid)];
   if (cfg.fcmServiceAccountPath) {
     try {
