@@ -22,10 +22,11 @@ function defaultDeviceName(): string {
 /**
  * First run (set owner password), login on a new device, or redeem a pairing code.
  *
- * On a phone this page is the **self-hosted** path only: the hosted service has accounts and its
- * own sign-in (the WebView is pointed at it, see `nativeEntryUrl`), so the first thing an owner
- * sees here is where to type their server. A URL already stored opens the pairing fields
- * straight away; the hosted service is still one tap away.
+ * On a phone this page is the **self-hosted** entry point. Hosted accounts sign in on the hosted
+ * service's own shell — the WebView is pointed there by `nativeEntryUrl`, which is why this page
+ * normally never renders on a phone. When it does (the WebView could not reach the service, or
+ * the owner asked for it) it offers the self-hosted path with the hosted service named, so the
+ * hosted default stays discoverable without a server URL ever being required.
  */
 export function Welcome({ onAuthed }: { onAuthed: () => void }) {
   const [hasOwner, setHasOwner] = useState<boolean | null>(null);
