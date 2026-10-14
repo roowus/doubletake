@@ -24,7 +24,7 @@ import { ftsQuery } from '../api/fts.js';
 import { isHostedMode } from '../api/hosted.js';
 import type { Session } from '../auth/index.js';
 import type { ChatRow, ItemRow, Repo, TenantCtx } from '../db/repo.js';
-import { ingest } from '../ingest/index.js';
+import { ingestAsync } from '../ingest/index.js';
 import { LIBRARY_TOOL } from '../library/ask.js';
 import { listCollections, resolveCollection } from '../library/collections.js';
 import type { QueueWorker } from '../queue/worker.js';
@@ -55,8 +55,13 @@ function text(s: string) {
   return { content: [{ type: 'text' as const, text: s }] };
 }
 
-function summaryLine(repo: Repo, chat: ChatRow, item: ItemRow, ctx?: TenantCtx): string {
-  const s = toChatSummary(repo, chat, item, ctx);
+async function summaryLine(
+  repo: Repo,
+  chat: ChatRow,
+  item: ItemRow,
+  ctx?: TenantCtx,
+): Promise<string> {
+  const s = await toChatSummary(repo, chat, item, ctx);
   const bits = [
     `- **${s.title}** (chat \`${s.id}\`, ${s.platform}${s.category ? `, ${s.category}` : ''}, ${s.status})`,
   ];
@@ -66,26 +71,26 @@ function summaryLine(repo: Repo, chat: ChatRow, item: ItemRow, ctx?: TenantCtx):
   return bits.join('\n');
 }
 
-function latestAnswer(repo: Repo, chatId: string, ctx?: TenantCtx) {
-  return repo
-    .listMessages(chatId, ctx)
+async function latestAnswer(repo: Repo, chatId: string, ctx?: TenantCtx) {
+  return (await repo.listMessages(chatId, ctx))
     .filter((m) => m.role === 'assistant' && m.kind === 'answer')
     .at(-1);
 }
 
 /**
  * Markdown rendering of one chat: the owner's question, our answer, structure, sources,
- * extractions. (Sync like the Repo contract; on the pg dialect the callers await the scoped
- * reads that gate this call — see the dialect contract at the top of `db/repo.ts`.)
+ * extractions. Async because every read goes through `Repo`, whose pg dialect returns
+ * lazily-awaited values behind synchronous signatures (dialect contract at the top of
+ * `db/repo.ts`, ADR 0032); on SQLite `await` is a no-op.
  */
-export function renderChat(
+export async function renderChat(
   repo: Repo,
   chat: ChatRow,
   item: ItemRow,
   opts: { extractions: boolean },
   ctx?: TenantCtx,
-): string {
-  const d = toChatDetail(repo, chat, item, ctx);
+): Promise<string> {
+  const d = await toChatDetail(repo, chat, item, ctx);
   const out: string[] = [`# ${d.chat.title}`, ''];
   out.push(`- chat: \`${d.chat.id}\``);
   out.push(`- status: ${d.chat.status}${d.item.modeEffective ? ` (${d.item.modeEffective})` : ''}`);
@@ -100,7 +105,7 @@ export function renderChat(
   if (run && run.status !== 'done')
     out.push(`- latest run: ${run.status}${run.error ? ` (${run.error})` : ''}`);
 
-  const answer = latestAnswer(repo, chat.id, ctx);
+  const answer = await latestAnswer(repo, chat.id, ctx);
   if (answer) {
     out.push('', '## Answer (written by the Doubletake brain from the content below)', '');
     out.push(answer.content.trim());
@@ -213,7 +218,7 @@ export function buildMcpServer(
       for (const itemId of await repo.searchFts(q, limit, ctx)) {
         const item = await repo.getItem(itemId, ctx);
         const chat = await repo.getChatByItem(itemId, ctx);
-        if (item && chat) rows.push(summaryLine(repo, chat, item, ctx));
+        if (item && chat) rows.push(await summaryLine(repo, chat, item, ctx));
       }
       return text(rows.length ? rows.join('\n') : 'No matches.');
     },
@@ -237,7 +242,7 @@ export function buildMcpServer(
       if (collection) {
         const c = await repo.getCollection(collection, ctx);
         if (!c) return { ...text(`Collection ${collection} not found.`), isError: true };
-        const ids = resolveCollection(repo, c, ctx);
+        const ids = await resolveCollection(repo, c, ctx);
         rows = rows.filter((r) => ids.has(r.item.id));
       }
       if (tag?.trim()) {
@@ -246,7 +251,7 @@ export function buildMcpServer(
       }
       return text(
         rows.length
-          ? rows.map((r) => summaryLine(repo, r.chat, r.item, ctx)).join('\n')
+          ? (await Promise.all(rows.map((r) => summaryLine(repo, r.chat, r.item, ctx)))).join('\n')
           : 'No chats.',
       );
     },
@@ -278,7 +283,7 @@ export function buildMcpServer(
       }
       const item = await repo.getItem(chat.itemId, ctx);
       if (!item) return { ...text(`Chat ${chat_id} not found.`), isError: true };
-      return text(renderChat(repo, chat, item, { extractions: include_extractions }, ctx));
+      return text(await renderChat(repo, chat, item, { extractions: include_extractions }, ctx));
     },
   );
 
@@ -291,7 +296,7 @@ export function buildMcpServer(
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     async () => {
-      const cols = listCollections(repo, false, true, undefined, ctx);
+      const cols = await listCollections(repo, false, true, undefined, ctx);
       return text(
         cols.length
           ? cols
@@ -412,7 +417,11 @@ export function buildMcpServer(
       };
       // Hosted MCP tokens map to hosted users in a later step; when req.hosted is absent the
       // context stays undefined and the tool behaves exactly as self-hosted (ADR 0032).
-      const out = ingest(req, { repo, ctx, adapterFor: (m) => worker.brains.forMode(m) });
+      const out = await ingestAsync(req, {
+        repo,
+        ctx,
+        adapterFor: (m) => worker.brains.forMode(m),
+      });
       worker.kick();
       return text(
         `${out.deduplicated ? 'Already saved recently; re-running on the existing chat' : 'Queued'} as chat \`${out.chat.id}\` (run \`${out.run.id}\`${session ? `, requested by device "${session.deviceName}"` : ''}).`,
@@ -431,7 +440,7 @@ export function buildMcpServer(
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
     },
     async ({ question, mode }) => {
-      const out = ingest(
+      const out = await ingestAsync(
         { text: question, channel: 'library', focus: 'whole', modeHint: mode },
         { repo, ctx, adapterFor: (m) => worker.brains.forMode(m) },
       );

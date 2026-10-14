@@ -269,14 +269,14 @@ describe('per-run cap helpers (pure)', () => {
     expect(clampBudget(2, null)).toBe(2);
   });
 
-  it('aborts a run once the ledger for that run reaches the per-run cap', () => {
+  it('aborts a run once the ledger for that run reaches the per-run cap', async () => {
     const env = tempEnv();
     try {
       const worker = new QueueWorker(env.repo, new FakeBrain(), env.cfg);
       const sl = worker as unknown as {
         runCredential: RunCredential | null;
         runCtx: { userId: string } | undefined;
-        checkPerRunCap(runId: string): void;
+        checkPerRunCap(runId: string): Promise<void>;
       };
       sl.runCredential = {
         id: 'c1',
@@ -288,13 +288,13 @@ describe('per-run cap helpers (pure)', () => {
       sl.runCtx = { userId: 'u1' };
       env.repo.addCost('fake', null, 0.5, 'run-1', { userId: 'u1' }, 'c1');
       expect(env.repo.spentOnRun('run-1')).toBe(0.5);
-      expect(() => sl.checkPerRunCap('run-1')).toThrow(RunCapAbort);
+      await expect(sl.checkPerRunCap('run-1')).rejects.toThrow(RunCapAbort);
       try {
-        sl.checkPerRunCap('run-1');
+        await sl.checkPerRunCap('run-1');
       } catch (e) {
         expect((e as RunCapAbort).reason).toBe('per_run_cap');
       }
-      expect(() => sl.checkPerRunCap('run-empty')).not.toThrow();
+      await expect(sl.checkPerRunCap('run-empty')).resolves.toBeUndefined();
     } finally {
       env.cleanup();
     }

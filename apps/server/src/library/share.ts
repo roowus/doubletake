@@ -92,26 +92,32 @@ export interface SharedItemView {
   answer: string | null;
 }
 
-export function sharedItems(
+/**
+ * Async because every read goes through `Repo`, whose pg dialect returns lazily-awaited values
+ * behind synchronous signatures (dialect contract in `db/repo.ts`, ADR 0032). On SQLite the
+ * values are plain and `await` is a no-op.
+ */
+export async function sharedItems(
   repo: Repo,
   c: { id: string; query: string; manual: boolean },
   ctx?: TenantCtx | undefined,
-): SharedItemView[] {
+): Promise<SharedItemView[]> {
   const out: SharedItemView[] = [];
-  for (const itemId of resolveCollection(repo, c, ctx)) {
-    const item = repo.getItem(itemId, ctx);
+  for (const itemId of await resolveCollection(repo, c, ctx)) {
+    const item = await repo.getItem(itemId, ctx);
     if (!item) continue;
-    const chat = repo.getChatByItem(item.id, ctx);
+    const chat = await repo.getChatByItem(item.id, ctx);
     const answer = chat
-      ? (repo.listMessages(chat.id, ctx).find((m) => m.role === 'assistant' && m.kind === 'answer')
-          ?.content ?? null)
+      ? ((await repo.listMessages(chat.id, ctx)).find(
+          (m) => m.role === 'assistant' && m.kind === 'answer',
+        )?.content ?? null)
       : null;
     out.push({
       title: item.title ?? item.sourceUrl ?? item.text?.slice(0, 80) ?? 'Untitled',
       url: item.canonicalUrl ?? item.sourceUrl ?? null,
       platform: item.platform,
       savedAt: item.createdAt,
-      tags: repo.listTags(item.id, ctx),
+      tags: await repo.listTags(item.id, ctx),
       answer,
     });
   }

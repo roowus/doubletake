@@ -267,11 +267,14 @@ export class Repo {
   /**
    * Coerce SQLite boolean-mode integer columns for Postgres (0/1). Needed because pg queries
    * are built from values typed against the SQLite schema (see the dialect contract above).
+   * The list is exactly the columns declared `integer(..., { mode: 'boolean' })` in
+   * `schema.ts`; the pg mirror declares them plain `integer`, so a JS `true` fails the insert
+   * with `42804 column "x" is of type integer but expression is of type boolean`.
    */
   private pgVals<V>(v: V): V {
     if (!this.isPg) return v;
     const out = { ...(v as Record<string, unknown>) };
-    for (const k of ['pinned', 'hidden', 'starred'])
+    for (const k of ['pinned', 'hidden', 'starred', 'manual', 'auto'])
       if (typeof out[k] === 'boolean') out[k] = out[k] ? 1 : 0;
     return out as V;
   }
@@ -1751,10 +1754,7 @@ export class Repo {
   }
   listPendingNotifications() {
     return this.many<typeof s.pendingNotifications.$inferSelect>(
-      this.db
-        .select()
-        .from(s.pendingNotifications)
-        .orderBy(s.pendingNotifications.createdAt),
+      this.db.select().from(s.pendingNotifications).orderBy(s.pendingNotifications.createdAt),
     );
   }
   countPendingNotifications(): number {

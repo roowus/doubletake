@@ -19,7 +19,7 @@ import { detectPlatform, firstUrlIn } from '../../extract/registry.js';
 import {
   type AdapterPick,
   type IngestOutcome,
-  ingest,
+  ingestAsync,
   titleFromText,
   titleFromUrl,
 } from '../../ingest/index.js';
@@ -640,8 +640,11 @@ export class InstagramChannel {
         ) {
           res.duplicates++;
         } else {
-          void this.acknowledge(senderId, mid);
-          void this.reply(senderId, PAIRING_ACK);
+          // Awaited only for the *dispatch*: `reply`/`acknowledge` resolve an async token
+          // (pg-lazy account read, ADR 0032) and then hand the send to the Graph client without
+          // awaiting it, so the webhook still never waits on Meta.
+          await this.acknowledge(senderId, mid);
+          await this.reply(senderId, PAIRING_ACK);
           res.handled.push({ id: mid, kind: 'dm_pairing', itemId: null, error: null });
         }
         return null;
@@ -655,7 +658,7 @@ export class InstagramChannel {
     // again. The reply is deduped on Meta's message id via the `ig_events` row above.
     if (STOP_KEYWORDS.has(text.toUpperCase())) {
       await this.deps.repo.recordIgPromptOptout(senderId, this.now());
-      void this.reply(senderId, STOP_REPLY);
+      await this.reply(senderId, STOP_REPLY);
       res.handled.push({ id: mid, kind: 'dm_optout', itemId: null, error: null });
       return null;
     }
@@ -663,7 +666,7 @@ export class InstagramChannel {
       res.ignored++;
       return null;
     }
-    if (await this.claimPrompt(senderId)) void this.reply(senderId, PAIRING_PROMPT);
+    if (await this.claimPrompt(senderId)) await this.reply(senderId, PAIRING_PROMPT);
     res.ignored++;
     return null;
   }
@@ -682,7 +685,10 @@ export class InstagramChannel {
     return true;
   }
 
-  /** Fire-and-forget DM text; never delays the webhook 200. */
+  /**
+   * DM text. The caller awaits only the token lookup; the Graph send itself is never awaited, so
+   * a slow Meta call still cannot delay the webhook 200.
+   */
   private async reply(senderId: string, text: string): Promise<void> {
     const t = await this.token();
     if (!t) return;
@@ -928,7 +934,9 @@ export class InstagramChannel {
       modeHint: 'auto',
       ...(note ? { note } : {}),
     };
-    const out = ingest(req, { repo, adapterFor: this.deps.adapterFor });
+    // `ingestAsync`, not `ingest`: the hosted dialect's repo reads are pg-lazy (ADR 0032), and a
+    // sync caller reads fields off a Promise. Awaiting is a no-op on SQLite.
+    const out = await ingestAsync(req, { repo, adapterFor: this.deps.adapterFor });
     repo.markIgEvent(eventId, { itemId: out.item.id });
     if (!out.deduplicated) this.storeMediaContext(out.item.id, media, comment, focus);
     if (media.media_url) this.hintCdn(out.item.id, media.media_url, media.id);
@@ -975,7 +983,10 @@ export class InstagramChannel {
 
   // ---- acknowledgement / completion ----
 
-  /** `love` on the DM as soon as its share was accepted. Mentions get nothing public. */
+  /**
+   * `love` on the DM as soon as its share was accepted. Mentions get nothing public. Like
+   * `reply`, the caller awaits the token lookup but never the Graph send.
+   */
   private async acknowledge(senderId: string, messageId: string): Promise<void> {
     const t = await this.token();
     if (!t) return;

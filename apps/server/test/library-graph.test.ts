@@ -44,7 +44,7 @@ function assertClosed(graph: LibraryGraph) {
 }
 
 describe('buildLibraryGraph', () => {
-  it('links things and tags to the chats that mention them and dedupes things by kind+name', () => {
+  it('links things and tags to the chats that mention them and dedupes things by kind+name', async () => {
     const a = seed({
       entities: [
         { kind: 'tool', name: 'Swix LF7' },
@@ -54,7 +54,7 @@ describe('buildLibraryGraph', () => {
     });
     const b = seed({ entities: [{ kind: 'tool', name: 'swix lf7' }], tags: ['skiing'] });
 
-    const graph = buildLibraryGraph(repo);
+    const graph = await buildLibraryGraph(repo);
     assertClosed(graph);
 
     const byKind = (kind: string) => graph.nodes.filter((nd) => nd.kind === kind);
@@ -90,11 +90,11 @@ describe('buildLibraryGraph', () => {
     });
   });
 
-  it('caps the graph and skips whatever would float as an orphan beyond the cap', () => {
+  it('caps the graph and skips whatever would float as an orphan beyond the cap', async () => {
     // n is at 2; the next chats get later timestamps, so chats 1-2 end up oldest.
     for (let i = 0; i < GRAPH_CAPS.chats; i++) seed();
     // A thing and a tag that exist only on the oldest chat must not appear at all.
-    const oldest = repo.listChats(1000).at(-1);
+    const oldest = (await repo.listChats(1000)).at(-1);
     if (!oldest) throw new Error('no chats seeded');
     repo.replaceEntities(oldest.item.id, 'run-old', [
       { kind: 'tool', name: 'Orphan Thing', attributes: {}, confidence: 0.9 },
@@ -109,7 +109,7 @@ describe('buildLibraryGraph', () => {
       })),
     });
 
-    const graph = buildLibraryGraph(repo);
+    const graph = await buildLibraryGraph(repo);
     assertClosed(graph);
 
     const byKind = (kind: string) => graph.nodes.filter((nd) => nd.kind === kind);

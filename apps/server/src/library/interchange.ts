@@ -49,18 +49,27 @@ export type KarakeepExport = z.infer<typeof KarakeepExport>;
 const MAX_TEXT = 20000;
 const MAX_NOTE = 4000;
 
-/** Owner note plus, after a rule, the first answer: what Karakeep shows under "Note". */
-function noteWithAnswer(repo: Repo, itemId: string, note: string | null): string | null {
-  const chat = repo.getChatByItem(itemId);
+/**
+ * Owner note plus, after a rule, the first answer: what Karakeep shows under "Note". Async
+ * because `getChatByItem`/`listMessages` are pg-lazy on the hosted dialect (repo.ts dialect
+ * contract, ADR 0032); on SQLite `await` is a no-op.
+ */
+async function noteWithAnswer(
+  repo: Repo,
+  itemId: string,
+  note: string | null,
+): Promise<string | null> {
+  const chat = await repo.getChatByItem(itemId);
   const answer = chat
-    ? repo.listMessages(chat.id).find((m) => m.role === 'assistant' && m.kind === 'answer')?.content
+    ? (await repo.listMessages(chat.id)).find((m) => m.role === 'assistant' && m.kind === 'answer')
+        ?.content
     : undefined;
   const parts = [note?.trim(), answer?.trim()].filter((p): p is string => !!p);
   return parts.length ? parts.join('\n\n---\n\n') : null;
 }
 
-export function exportKarakeep(repo: Repo): KarakeepExport {
-  const manual = repo.listCollections(true).filter((c) => c.manual);
+export async function exportKarakeep(repo: Repo): Promise<KarakeepExport> {
+  const manual = (await repo.listCollections(true)).filter((c) => c.manual);
   const lists = manual.map((c) => ({
     id: c.id,
     name: c.name,
@@ -71,7 +80,7 @@ export function exportKarakeep(repo: Repo): KarakeepExport {
     parentId: null,
   }));
   const bookmarks: KarakeepExport['bookmarks'] = [];
-  for (const item of repo.listItems(100_000)) {
+  for (const item of await repo.listItems(100_000)) {
     // Questions over the library are not saved things; nobody wants them in a bookmark manager.
     if (item.channel === 'library') continue;
     const url = item.canonicalUrl ?? item.sourceUrl;
@@ -84,10 +93,12 @@ export function exportKarakeep(repo: Repo): KarakeepExport {
     bookmarks.push({
       createdAt: Math.floor(new Date(item.createdAt).getTime() / 1000),
       title: item.title,
-      tags: repo.listTags(item.id),
-      lists: repo.collectionsForItem(item.id).filter((id) => manual.some((c) => c.id === id)),
+      tags: await repo.listTags(item.id),
+      lists: (await repo.collectionsForItem(item.id)).filter((id) =>
+        manual.some((c) => c.id === id),
+      ),
       content,
-      note: noteWithAnswer(repo, item.id, item.note),
+      note: await noteWithAnswer(repo, item.id, item.note),
       archived: false,
     });
   }
@@ -108,24 +119,23 @@ function memoTag(name: string): string {
   return `#${name.replace(/\s+/g, '-').replace(/[^\p{L}\p{N}_/-]/gu, '')}`;
 }
 
-export function exportMemos(repo: Repo): { memos: MemosMemo[] } {
+export async function exportMemos(repo: Repo): Promise<{ memos: MemosMemo[] }> {
   const memos: MemosMemo[] = [];
-  for (const item of repo.listItems(100_000)) {
+  for (const item of await repo.listItems(100_000)) {
     if (item.channel === 'library') continue;
     const url = item.canonicalUrl ?? item.sourceUrl;
     const lines: string[] = [`## ${item.title ?? 'Untitled'}`];
     if (url) lines.push('', url);
     else if (item.text) lines.push('', item.text);
     if (item.note?.trim()) lines.push('', `> ${item.note.trim().replace(/\n/g, '\n> ')}`);
-    const chat = repo.getChatByItem(item.id);
+    const chat = await repo.getChatByItem(item.id);
     const answer = chat
-      ? repo.listMessages(chat.id).find((m) => m.role === 'assistant' && m.kind === 'answer')
+      ? (await repo.listMessages(chat.id)).find(
+          (m) => m.role === 'assistant' && m.kind === 'answer',
+        )
       : undefined;
     if (answer) lines.push('', answer.content.trim());
-    const tags = repo
-      .listTags(item.id)
-      .map(memoTag)
-      .filter((t) => t.length > 1);
+    const tags = (await repo.listTags(item.id)).map(memoTag).filter((t) => t.length > 1);
     if (tags.length) lines.push('', tags.join(' '));
     memos.push({ content: lines.join('\n'), visibility: 'PRIVATE', create_time: item.createdAt });
   }
@@ -148,11 +158,11 @@ export interface ImportSummary {
   runs: number;
 }
 
-export function importKarakeep(
+export async function importKarakeep(
   repo: Repo,
   file: KarakeepExport,
   opts: ImportOptions = {},
-): ImportSummary {
+): Promise<ImportSummary> {
   const summary: ImportSummary = { imported: 0, skipped: 0, collections: 0, runs: 0 };
   // Karakeep list id → our collection id. Smart lists are queries in a syntax we do not speak;
   // only manual lists become collections, and only when a bookmark actually references them.
@@ -160,13 +170,13 @@ export function importKarakeep(
     (file.lists ?? []).filter((l) => l.type === 'manual').map((l) => [l.id, l]),
   );
   const collectionFor = new Map<string, string>();
-  const collectionId = (listId: string): string | null => {
+  const collectionId = async (listId: string): Promise<string | null> => {
     const known = collectionFor.get(listId);
     if (known) return known;
     const list = listById.get(listId);
     if (!list) return null;
     const name = list.name.trim().slice(0, 80) || 'Imported';
-    let id = repo.findCollectionByName(name)?.id;
+    let id = (await repo.findCollectionByName(name))?.id;
     if (!id) {
       id = repo.createCollection({ name, query: '', manual: true, auto: false });
       summary.collections += 1;
@@ -193,7 +203,7 @@ export function importKarakeep(
       }
       platform = det.platform;
       canonicalUrl = det.canonicalUrl;
-      if (repo.findItemByCanonicalUrl(canonicalUrl)) {
+      if (await repo.findItemByCanonicalUrl(canonicalUrl)) {
         summary.skipped += 1;
         continue;
       }
@@ -220,7 +230,7 @@ export function importKarakeep(
       };
       title = b.title?.trim() || titleFromText(text);
     }
-    const { item, chat } = repo.createItemWithChat(
+    const { item, chat } = await repo.createItemWithChat(
       req,
       platform,
       canonicalUrl,
@@ -232,7 +242,7 @@ export function importKarakeep(
     }
     for (const tag of b.tags) repo.addManualTag(item.id, tag);
     for (const listId of b.lists) {
-      const cid = collectionId(listId);
+      const cid = await collectionId(listId);
       if (cid) repo.addCollectionItem(cid, item.id);
     }
     if (note) repo.addMessage({ chatId: chat.id, role: 'user', kind: 'question', content: note });

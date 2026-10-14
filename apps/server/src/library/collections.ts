@@ -7,6 +7,11 @@
  * `manual` collections list items explicitly via `collection_items` instead.
  * Auto collections (one per category, one per entity kind) are seeded at boot and can only be
  * hidden, never deleted.
+ *
+ * Every function here is async: they read through `Repo`, whose pg dialect returns lazily-awaited
+ * values behind synchronous signatures (dialect contract at the top of `db/repo.ts`, ADR 0032).
+ * On SQLite the same calls are plain values and `await` is a no-op, so self-hosted behaviour is
+ * unchanged.
  */
 
 import { Category, EntityKind } from '@doubletake/shared';
@@ -52,18 +57,21 @@ const ENTITY_NAMES: Record<EntityKind, string> = {
 };
 
 /** Idempotent: inserts the auto collections that do not exist yet. Returns how many were added. */
-export function seedAutoCollections(repo: Repo, ctx?: TenantCtx | undefined): number {
+export async function seedAutoCollections(
+  repo: Repo,
+  ctx?: TenantCtx | undefined,
+): Promise<number> {
   let added = 0;
   for (const c of Category.options) {
     const query = `category:${c}`;
-    if (!repo.findCollectionByQuery(query, ctx)) {
+    if (!(await repo.findCollectionByQuery(query, ctx))) {
       repo.createCollection({ name: CATEGORY_NAMES[c], query, manual: false, auto: true }, ctx);
       added++;
     }
   }
   for (const k of EntityKind.options) {
     const query = `entity:${k}`;
-    if (!repo.findCollectionByQuery(query, ctx)) {
+    if (!(await repo.findCollectionByQuery(query, ctx))) {
       repo.createCollection({ name: ENTITY_NAMES[k], query, manual: false, auto: true }, ctx);
       added++;
     }
@@ -72,39 +80,43 @@ export function seedAutoCollections(repo: Repo, ctx?: TenantCtx | undefined): nu
 }
 
 /** Item ids matching a collection, in no particular order (the caller keeps chat-list order). */
-export function resolveCollection(
+export async function resolveCollection(
   repo: Repo,
   c: { id: string; query: string; manual: boolean },
   ctx?: TenantCtx | undefined,
-): Set<string> {
-  if (c.manual) return new Set(repo.collectionItemIds(c.id, ctx));
-  return new Set(resolveQuery(repo, c.query, ctx));
+): Promise<Set<string>> {
+  if (c.manual) return new Set(await repo.collectionItemIds(c.id, ctx));
+  return new Set(await resolveQuery(repo, c.query, ctx));
 }
 
-export function resolveQuery(repo: Repo, query: string, ctx?: TenantCtx | undefined): string[] {
+export async function resolveQuery(
+  repo: Repo,
+  query: string,
+  ctx?: TenantCtx | undefined,
+): Promise<string[]> {
   const q = query.trim();
   const m = q.match(/^(category|entity|tag):(.+)$/);
   if (m?.[1] && m[2] !== undefined) {
     const arg = m[2].trim().toLowerCase();
-    if (m[1] === 'category') return repo.itemIdsByCategory(arg, ctx);
-    if (m[1] === 'entity') return repo.itemIdsByEntityKind(arg, ctx);
-    return repo.itemIdsByTag(arg, ctx);
+    if (m[1] === 'category') return await repo.itemIdsByCategory(arg, ctx);
+    if (m[1] === 'entity') return await repo.itemIdsByEntityKind(arg, ctx);
+    return await repo.itemIdsByTag(arg, ctx);
   }
   if (!q) return [];
-  return repo.searchFts(ftsQuery(q), 500, ctx);
+  return await repo.searchFts(ftsQuery(q), 500, ctx);
 }
 
-export function listCollections(
+export async function listCollections(
   repo: Repo,
   includeHidden: boolean,
   onlyNonEmpty: boolean,
   /** Turns a share token into the public page URL (ADR 0025); omit → `shareUrl: null`. */
   toShareUrl?: (token: string) => string,
   ctx?: TenantCtx | undefined,
-): CollectionDto[] {
+): Promise<CollectionDto[]> {
   const out: CollectionDto[] = [];
-  for (const { shareToken, ...c } of repo.listCollections(includeHidden, ctx)) {
-    const count = resolveCollection(repo, c, ctx).size;
+  for (const { shareToken, ...c } of await repo.listCollections(includeHidden, ctx)) {
+    const count = (await resolveCollection(repo, c, ctx)).size;
     if (onlyNonEmpty && c.auto && count === 0) continue;
     out.push({ ...c, count, shareUrl: shareToken && toShareUrl ? toShareUrl(shareToken) : null });
   }

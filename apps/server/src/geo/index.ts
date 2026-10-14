@@ -127,7 +127,7 @@ export class Geocoder {
     if (own) return { ...own, label: null, source: 'brain' };
     const query = geocodeQuery(place);
     if (!query) return null;
-    const cached = this.repo.getPlaceGeo(query);
+    const cached = await this.repo.getPlaceGeo(query);
     if (cached) return toGeo(cached);
     if (!this.enabled) return null;
     let hit: { lat: number; lon: number; label: string } | null = null;
@@ -147,7 +147,7 @@ export class Geocoder {
 
   /** Locate every place of an item after a research run; failures only log. */
   async locateItem(itemId: string): Promise<void> {
-    for (const e of this.repo.listEntities(itemId)) {
+    for (const e of await this.repo.listEntities(itemId)) {
       if (e.kind !== 'place') continue;
       let attrs: Record<string, unknown> = {};
       try {

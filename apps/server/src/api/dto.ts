@@ -12,12 +12,16 @@ import type {
 import type { ChatRow, ItemRow, MessageRow, Repo, RunRow, TenantCtx } from '../db/repo.js';
 import { extractionText, parseExtraction } from '../extract/flatten.js';
 
-export function toChatSummary(
+/**
+ * Async because `listTags` is pg-lazy on the hosted dialect (dialect contract in `db/repo.ts`,
+ * ADR 0032); on SQLite the value is plain and `await` is a no-op.
+ */
+export async function toChatSummary(
   repo: Repo,
   chat: ChatRow,
   item: ItemRow,
   ctx?: TenantCtx | undefined,
-): ChatSummary {
+): Promise<ChatSummary> {
   return {
     id: chat.id,
     itemId: item.id,
@@ -30,7 +34,7 @@ export function toChatSummary(
     lastMessageAt: chat.lastMessageAt,
     createdAt: chat.createdAt,
     sourceUrl: item.canonicalUrl ?? item.sourceUrl,
-    tags: repo.listTags(item.id, ctx),
+    tags: await repo.listTags(item.id, ctx),
   };
 }
 
@@ -70,14 +74,14 @@ export function toRunDto(r: RunRow): RunDto {
   };
 }
 
-export function toChatDetail(
+export async function toChatDetail(
   repo: Repo,
   chat: ChatRow,
   item: ItemRow,
   ctx?: TenantCtx | undefined,
-): ChatDetail {
+): Promise<ChatDetail> {
   return {
-    chat: toChatSummary(repo, chat, item, ctx),
+    chat: await toChatSummary(repo, chat, item, ctx),
     item: {
       note: item.note,
       focus: item.focus,
@@ -87,18 +91,18 @@ export function toChatDetail(
       canonicalUrl: item.canonicalUrl,
       sourceUrl: item.sourceUrl,
       title: item.title,
-      preview: pickPreview(repo.listMediaAssets(item.id, ctx)),
+      preview: pickPreview(await repo.listMediaAssets(item.id, ctx)),
     },
-    messages: repo.listMessages(chat.id, ctx).map(toMessageDto),
-    runs: repo.listRuns(chat.id, ctx).map(toRunDto),
-    entities: repo.listEntities(item.id, ctx).map((e) => ({
+    messages: (await repo.listMessages(chat.id, ctx)).map(toMessageDto),
+    runs: (await repo.listRuns(chat.id, ctx)).map(toRunDto),
+    entities: (await repo.listEntities(item.id, ctx)).map((e) => ({
       kind: e.kind as ChatDetail['entities'][number]['kind'],
       name: e.name,
       attributes: safeJson(e.attributes),
       ...(e.url ? { url: e.url } : {}),
       confidence: e.confidence ?? 0.7,
     })),
-    extractions: latestExtractions(repo.listExtractions(item.id, ctx)),
+    extractions: latestExtractions(await repo.listExtractions(item.id, ctx)),
   };
 }
 

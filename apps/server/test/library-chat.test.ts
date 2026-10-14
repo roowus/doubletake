@@ -34,7 +34,7 @@ describe('cross-library chat (ADR 0021)', () => {
     await answered('Best sourdough starter schedule', 'baking', 'Feed twice a day at 78F.');
 
     // Retrieval alone: the wax chat matches, the bread chat does not.
-    const ctx = libraryContext(env.repo, 'what did I save about ski wax');
+    const ctx = await libraryContext(env.repo, 'what did I save about ski wax');
     expect(ctx.hits.map((h) => h.chatId)).toEqual([wax.chat.id]);
     expect(ctx.blocks[0]).toMatchObject({ source: 'library', kind: 'page_text' });
     expect(ctx.blocks[0]?.label).toContain(`/chat/${wax.chat.id}`);
@@ -84,7 +84,7 @@ describe('cross-library chat (ADR 0021)', () => {
     expect(msgs.at(-1)?.kind).toBe('answer');
 
     // A later question never retrieves the earlier library question itself.
-    const again = libraryContext(env.repo, 'ski wax');
+    const again = await libraryContext(env.repo, 'ski wax');
     expect(again.hits.map((h) => h.chatId)).toEqual([wax.chat.id]);
   });
 

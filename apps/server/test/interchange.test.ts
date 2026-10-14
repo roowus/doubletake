@@ -165,7 +165,7 @@ describe('export', () => {
     const res = await app.inject({ method: 'GET', url: '/api/export/karakeep', headers: auth() });
     expect(res.statusCode).toBe(200);
     expect(res.headers['content-disposition']).toContain('doubletake-karakeep-');
-    const out = res.json() as ReturnType<typeof exportKarakeep>;
+    const out = res.json() as Awaited<ReturnType<typeof exportKarakeep>>;
     expect(out.bookmarks).toHaveLength(3);
     expect(out.lists?.map((l) => l.name)).toEqual(['Ski']);
     const wax = out.bookmarks.find((b) => b.title === 'Wax guide');
@@ -180,9 +180,9 @@ describe('export', () => {
 
     const other = tempEnv('dt-ix2-');
     try {
-      const summary = importKarakeep(other.repo, out);
+      const summary = await importKarakeep(other.repo, out);
       expect(summary).toEqual({ imported: 3, skipped: 0, collections: 1, runs: 0 });
-      const again = exportKarakeep(other.repo);
+      const again = await exportKarakeep(other.repo);
       // Tag order is not part of the format (a set on both sides), so compare it sorted.
       const strip = (b: (typeof out.bookmarks)[number]) => ({
         ...b,
@@ -198,7 +198,7 @@ describe('export', () => {
   it('renders Memos-shaped markdown with #tags', async () => {
     const res = await app.inject({ method: 'GET', url: '/api/export/memos', headers: auth() });
     expect(res.statusCode).toBe(200);
-    const out = res.json() as ReturnType<typeof exportMemos>;
+    const out = res.json() as Awaited<ReturnType<typeof exportMemos>>;
     expect(out.memos).toHaveLength(3);
     const wax = out.memos.find((m) => m.content.startsWith('## Wax guide'));
     expect(wax?.content).toContain('https://www.youtube.com/watch?v=abc123def45');
