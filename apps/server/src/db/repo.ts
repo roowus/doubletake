@@ -578,7 +578,7 @@ export class Repo {
       this.fire(pgDb.insert(pg.runs).values(this.pgVals(row) as never));
       return row as RunRow;
     }
-    this.db.insert(s.runs).values(row).run();
+    this.exec(this.db.insert(s.runs).values(row));
     const created = this.getRun(row.id);
     if (!created) throw new Error('insert did not persist run');
     return created;
@@ -1746,35 +1746,42 @@ export class Repo {
       ...n,
       createdAt: nowIso(),
     };
-    this.db.insert(s.pendingNotifications).values(row).run();
+    this.exec(this.db.insert(s.pendingNotifications).values(row));
     return row;
   }
   listPendingNotifications() {
-    return this.db
-      .select()
-      .from(s.pendingNotifications)
-      .orderBy(s.pendingNotifications.createdAt)
-      .all();
+    return this.many<typeof s.pendingNotifications.$inferSelect>(
+      this.db
+        .select()
+        .from(s.pendingNotifications)
+        .orderBy(s.pendingNotifications.createdAt),
+    );
   }
   countPendingNotifications(): number {
-    return this.db.select({ n: sql<number>`count(*)` }).from(s.pendingNotifications).get()?.n ?? 0;
+    const row = this.one<{ n: number }>(
+      this.db.select({ n: sql<number>`count(*)` }).from(s.pendingNotifications),
+    );
+    return Number(row?.n ?? 0);
   }
   clearPendingNotifications(ids: string[]) {
     for (const id of ids)
-      this.db.delete(s.pendingNotifications).where(eq(s.pendingNotifications.id, id)).run();
+      this.exec(this.db.delete(s.pendingNotifications).where(eq(s.pendingNotifications.id, id)));
   }
 
   // ---- settings / devices ----
 
   getSetting(key: string): string | undefined {
-    return this.db.select().from(s.settings).where(eq(s.settings.key, key)).get()?.value;
+    return this.one<{ value: string }>(
+      this.db.select().from(s.settings).where(eq(s.settings.key, key)),
+    )?.value;
   }
   setSetting(key: string, value: string) {
-    this.db
-      .insert(s.settings)
-      .values({ key, value, updatedAt: nowIso() })
-      .onConflictDoUpdate({ target: s.settings.key, set: { value, updatedAt: nowIso() } })
-      .run();
+    this.exec(
+      this.db
+        .insert(s.settings)
+        .values({ key, value, updatedAt: nowIso() })
+        .onConflictDoUpdate({ target: s.settings.key, set: { value, updatedAt: nowIso() } }),
+    );
   }
 
   createDevice(name: string, platform: string, tokenHash: string, ctx?: TenantCtx) {
