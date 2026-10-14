@@ -313,6 +313,36 @@ describe('account', () => {
     expect(await ig.refreshIfDue()).toBe(false);
   });
 
+  /**
+   * The env seed (hosted communal account, ADR 0032) skips OAuth, so unlike `connect()` it never
+   * sees a `me` reply — it only has IG_ACCESS_TOKEN + IG_USER_ID. Without an explicit lookup the
+   * row kept `username: null`, and the settings row rendered the 17-digit app-scoped id as
+   * "@28030956743198301". It must ask Graph once and store the real handle.
+   */
+  it('resolves the handle when seeding the account from env', async () => {
+    env.repo.deleteIgAccount();
+    const seeded = new InstagramChannel({
+      cfg: { ...env.cfg, ig: { ...env.cfg.ig, accessTokenUserId: 'IG1', accessToken: 'env-tok' } },
+      repo: env.repo,
+      graph,
+      box,
+      adapterFor: (m) => worker.brains.forMode(m),
+      log,
+      now: () => now,
+    });
+    graph.calls = [];
+    expect(await seeded.seedAccountFromEnv()).toBe(true);
+    expect(graph.calls).toContain('me');
+    const row = env.repo.getIgAccount();
+    expect(row?.username).toBe('dt_shadow');
+    expect(box.open(row?.accessTokenEnc ?? '')).toBe('env-tok');
+
+    // Nothing changed, so a restart must be a no-op: no re-seal, and no second `me` lookup.
+    graph.calls = [];
+    expect(await seeded.seedAccountFromEnv()).toBe(false);
+    expect(graph.calls).not.toContain('me');
+  });
+
   it('verify reports granted scopes and re-subscribes missing webhook fields', async () => {
     graph.subscribed = ['messages'];
     const res = await app.inject({

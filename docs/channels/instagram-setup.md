@@ -245,6 +245,13 @@ In hosted mode the Instagram token is sealed with the **master keyfile**
 (`DOUBLETAKE_MASTER_KEY_FILE`) — the same key as the BYOK credential vault. Self-hosted keeps
 the data-dir keyfile.
 
+The seed also resolves the account's **handle** from Graph (`GET /me`) while the stored row has
+none, because this path never performs the OAuth exchange that would otherwise supply it. It
+asks only while the handle is unknown, so a steady-state restart stays a no-op and a Graph
+hiccup cannot block the boot. Without that lookup the row keeps `username: null` forever, and
+every surface rendering the account falls back to the raw app-scoped id — the settings row
+read `@28030956743198301` before this was fixed.
+
 # Instagram channel setup
 
 Doubletake uses Meta's official **Instagram API with Instagram Login** against a *shadow*

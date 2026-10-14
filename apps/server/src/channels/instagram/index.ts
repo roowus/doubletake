@@ -294,16 +294,31 @@ export class InstagramChannel {
    * Must be awaited: the repo's pg reads/writes are async on the hosted dialect.
    */
   async seedAccountFromEnv(): Promise<boolean> {
-    const { cfg, repo, box, log } = this.deps;
+    const { cfg, repo, box, log, graph } = this.deps;
     const igUserId = cfg.ig.accessTokenUserId;
     const token = cfg.ig.accessToken;
     if (!igUserId || !token) return false;
     const existing = await repo.getIgAccount();
+    let username = existing?.igUserId === igUserId ? existing.username : null;
+    // The env seed never performs an OAuth exchange, so unlike `connect()` it has no `me` reply
+    // to read a handle from. Without this lookup the row keeps `username: null` forever, and
+    // every surface that renders the account falls back to the raw numeric id — the settings
+    // row literally read "@28030956743198301". Ask Graph once, and only while it is still
+    // unknown, so a soft failure here can never block the seed.
+    if (!username) {
+      try {
+        const me = await graph.me(token);
+        username = me.username ?? null;
+      } catch (e) {
+        log.warn(`instagram: could not resolve the account handle: ${(e as Error).message}`);
+      }
+    }
     if (existing?.igUserId === igUserId) {
       // A row sealed under a different key (e.g. the self-hosted data-dir keyfile) must not throw
       // here: fall through and re-seal it with the current box instead.
       try {
-        if (box.open(existing.accessTokenEnc) === token) return false;
+        if (box.open(existing.accessTokenEnc) === token && existing.username === username)
+          return false;
       } catch {
         /* unreadable with this key — rewrite it below */
       }
@@ -311,13 +326,13 @@ export class InstagramChannel {
     const now = new Date(this.now());
     await repo.upsertIgAccount({
       igUserId,
-      username: existing?.igUserId === igUserId ? existing.username : null,
+      username,
       accessTokenEnc: box.seal(token),
       // The long-lived token's real expiry is unknown from env; the refresh job overwrites it.
       expiresAt: null,
       refreshedAt: now.toISOString(),
     });
-    log.info(`instagram: seeded account ${igUserId} from env`);
+    log.info(`instagram: seeded account ${username ? `@${username}` : igUserId} from env`);
     return true;
   }
 
