@@ -52,9 +52,12 @@ the flag boundary if hosted settings grow beyond what `config` can multiplex.
 
 - **Dialect contract in `Repo`**: method signatures stay synchronous (SQLite callers and all
   existing tests untouched). On the pg dialect, statements fire eagerly and resolve behind a
-  documented `lazy()` wrapper — pg callers must `await`. A full hosted-PG runtime requires an
-  eventual async sweep of all call sites; tracked as out of scope for H1 and impossible to
-  miss (contract block at the top of `repo.ts`).
+  documented `lazy()` wrapper — pg callers must `await`. The async sweep of all call sites is
+  **done** (2026-10-14): every consumer awaits, hosted runs the whole app on Postgres, and
+  `apps/server/test/hosted-pg-await.test.ts` pins it. Two sync-by-contract surfaces remain by
+  design: `Repo.transaction(fn)` (better-sqlite3 requires a sync callback) and the legacy
+  `ingest()`/`ingestUpload()` shims, which now **throw** on pg and point at
+  `ingestAsync()`/`ingestUploadAsync()` instead of silently mangling a Promise.
 - **pg FTS stopgap**: hosted search is tenant-scoped `ILIKE` until the tsvector + GIN port
   (TODO in `schema.pg.ts`).
 - **`tags.name` stays globally unique on pg** — cross-user tag-name collisions are possible
@@ -66,5 +69,8 @@ the flag boundary if hosted settings grow beyond what `config` can multiplex.
 - **Registration** behind `DOUBLETAKE_INVITE_CODE` (first user bootstraps without it).
 - **Instagram pairing** (2026-10-13): hosted DMs are ingested only from senders paired via a
   single-use code (Settings → Instagram); `ingestForUser()` in the channel replicates DM-share
-  ingest per user on the pg dialect (plain `ingest()` remains a sync call-site of the
-  documented async sweep).
+  ingest per user on the pg dialect. The sweep above also fixed four latent pg bugs the first
+  hosted run exposed: `getSetting`/`countOpenTodos`/`bumpPushFailure` derived scalars through
+  `this.one(...)?.field` (which yields `undefined`, not a Promise, so nothing could recover
+  them — every hosted settings read was empty), `graphData` returned two independently lazy
+  arrays, and `pgVals` was missing `manual`/`auto`.
