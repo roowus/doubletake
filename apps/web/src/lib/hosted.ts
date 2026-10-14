@@ -18,7 +18,7 @@ export const HOSTED_OFF: HostedStatus = { hosted: false, inviteRequired: false }
 let current: HostedStatus | null = null;
 const subscribers = new Set<() => void>();
 
-function publish(next: HostedStatus): void {
+function publish(next: HostedStatus | null): void {
   current = next;
   for (const s of subscribers) s();
 }
@@ -40,6 +40,15 @@ export function useHosted(): HostedStatus | null {
 /** True once detection has finished and the server reported hosted mode. */
 export function isHostedSnapshot(): boolean {
   return current?.hosted === true;
+}
+
+/**
+ * Test seam: put the module's store into a known state (or back to "not yet detected" with
+ * `null`) so a component that branches on `useHosted()` can be mounted in either mode. The
+ * boot probe is the only production writer; tests call this instead of stubbing `fetch`.
+ */
+export function setHostedForTest(status: HostedStatus | null): void {
+  publish(status);
 }
 
 /**
