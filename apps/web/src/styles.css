@@ -387,7 +387,9 @@ code {
 :focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
-  border-radius: var(--radius-sm);
+  /* No `border-radius` here: the outline follows the element's own corners, so forcing
+     --radius-sm made every focused pill snap from 999px to 10px the moment it was focused.
+     Restyling the radius on focus is never what was wanted — the ring is the affordance. */
 }
 
 /* ---- Controls ------------------------------------------------------------ */
