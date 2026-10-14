@@ -581,7 +581,12 @@ Login/Register toggle and invite-code field when `inviteRequired`; "Sign in with
 via `/api/auth/google`; OAuth returns capture `#dth_token=` into the existing token store),
 `/settings/account` (Connect OpenRouter, paste-key form with monthly/per-run caps and the
 encryption disclaimer, credential cards with wipe-on-revoke, sessions with revoke, one-time
-MCP agent tokens with Claude Code/Truss config snippets, monthly spend), hosted-only Log
+MCP agent tokens with Claude Code/Truss config snippets, monthly spend), `/settings/instagram`
+(**Connect Instagram**: the three DM steps and a Connect button that mints the pairing code;
+the code shown large and monospace with a live "Expires in mm:ss" countdown and copy-code /
+copy-the-DM buttons; Connect again replaces a live or expired code; once linked, "@handle" with
+its linked date and an **Unlink** behind a confirm — the self-hosted Instagram controls stay
+exactly as they were), hosted-only Log
 out, and run-failure copy mapping `no_credential`/`cap_reached`/`per_run_cap` to fix-it
 messages. Hosted+anonymous traffic gates to `/login`; when `hosted` is false the PWA is
 byte-identical to self-hosted.
