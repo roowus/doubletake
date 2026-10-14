@@ -14,6 +14,7 @@ import type { Config } from '../src/config/index.js';
 import { type OpenedPgDb, openPgDb } from '../src/db/pg.js';
 import { Repo, type TenantCtx } from '../src/db/repo.js';
 import { igAccounts, items, pendingNotifications } from '../src/db/schema.pg.js';
+import { ingest, ingestAsync } from '../src/ingest/index.js';
 import { libraryContext } from '../src/library/ask.js';
 import { listCollections, resolveQuery, seedAutoCollections } from '../src/library/collections.js';
 import { buildLibraryGraph } from '../src/library/graph.js';
@@ -157,20 +158,28 @@ describe.skipIf(!url)('hosted pg-lazy repo reads are awaited at every consumer (
     await settle();
 
     const sink = new RecordingSink();
-    // `force` skips quiet hours, which is what the timer/route does outside the window.
+    // `force` skips quiet hours, which is what the timer/route does outside the window. The gate
+    // is repo-global by design, so a parallel sibling test's rows may be digested alongside ours:
+    // this asserts only that OUR three rows are gone and that a digest went out.
     const gate = new DigestGate(repo, sink, 'https://dt.example', () => new Date());
     const flushed = await gate.flush(true);
+    // `clearPendingNotifications` issues per-id deletes that land on the pg orderng tail, so
+    // drain it before reading the table back raw.
+    await settle();
 
-    // Only this run's rows are asserted on (the table is shared), so count our own tag namespace.
+    // Only this run's rows are asserted on: `pending_notifications` is shared with the sibling
+    // digest.test.ts running in parallel, so never assert on the table as a whole.
     const parked = await opened.db
       .select({ chatId: pendingNotifications.chatId })
       .from(pendingNotifications);
     const mine = parked.filter((p) => p.chatId.startsWith(`${run}-chat-`));
     expect(mine).toHaveLength(0); // cleared after the digest went out
     expect(flushed.sent).toBeGreaterThanOrEqual(3);
-    expect(sink.sent.at(-1)?.title).toContain('answers ready');
     // The digest body is built with `.slice`/`.map` over the awaited rows — the old crash site.
-    expect(sink.sent.at(-1)?.body).toContain('Answer 0 ready');
+    // It lists the first three parked titles in insertion order, so our own first row is there.
+    const digest = sink.sent.at(-1);
+    expect(digest?.title).toContain('answers ready');
+    expect(digest?.body).toContain(`Answer 0 ready`);
   });
 
   it('(1b) getSetting-backed reads resolve to real values, not Promises', async () => {
@@ -302,6 +311,36 @@ describe.skipIf(!url)('hosted pg-lazy repo reads are awaited at every consumer (
     // Export path reads chats/messages/tags/collections for every item.
     const memos = await exportMemos(repo);
     expect(Array.isArray(memos.memos)).toBe(true);
+  });
+
+  it('(4b) the sync SQLite-only ingest() entry point refuses to run on the pg dialect', async () => {
+    // The one sync contract that intentionally remains (self-hosted callers and tests) must not
+    // silently mangle a Promise into an outcome: it throws instead.
+    expect(() =>
+      ingest(
+        {
+          url: `https://example.com/${run}/sync-guard`,
+          channel: 'compose',
+          focus: 'whole',
+          modeHint: 'standard',
+        },
+        { repo, ctx, adapterFor: () => ({ adapter: { id: 'test-brain' }, model: null }) },
+      ),
+    ).toThrow(/ingest\(\) is the synchronous \(SQLite\) entry point/);
+
+    // The async twin is the supported hosted path and really creates the rows.
+    const out = await ingestAsync(
+      {
+        url: `https://example.com/${run}/sync-guard`,
+        channel: 'compose',
+        focus: 'whole',
+        modeHint: 'standard',
+      },
+      { repo, ctx, adapterFor: () => ({ adapter: { id: 'test-brain' }, model: null }) },
+    );
+    expect(out.item.id).toBeTruthy();
+    expect(out.chat.id).toBeTruthy();
+    expect(out.run.id).toBeTruthy();
   });
 
   it('(5) values are real, not Promises: the same reads satisfy sync-shaped assertions', async () => {
