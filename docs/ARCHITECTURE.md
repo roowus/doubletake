@@ -353,7 +353,7 @@ status are applied client-side on the summaries. Filters live in the URL (`?tag=
 `?collection=`, `?platform=`, `?status=`) so Library tiles and shared links land on a filtered
 inbox. The list itself is split into an **Unread** section and the rest, each row showing the
 platform (or channel) glyph, the title in the prose face, a one-line meta row (status while a
-run is working or has failed, category, up to three tags in clay) and the age with an unread
+run is working or has failed, category, up to three tags in ochre) and the age with an unread
 count. Collections are managed from the Library tab: each tile has an overflow menu
 (`components/Menu.tsx`, Base UI Menu) with hide, **share** as a read-only page whose link is
 copied to the clipboard ([ADR 0025](adr/0025-shareable-collection-pages.md)) and delete, the
@@ -584,7 +584,8 @@ encryption disclaimer, credential cards with wipe-on-revoke, sessions with revok
 MCP agent tokens with Claude Code/Truss config snippets, monthly spend), `/settings/instagram`
 (**Connect Instagram**: the three DM steps and a Connect button that mints the pairing code;
 the code shown large and monospace with a live "Expires in mm:ss" countdown and copy-code /
-copy-the-DM buttons; Connect again replaces a live or expired code; once linked, "@handle" with
+copy-the-DM buttons; Connect again replaces a live or expired code; **the screen notices the
+link by itself** — see below; once linked, "@handle" with
 its linked date and an **Unlink** behind a confirm — the self-hosted Instagram controls stay
 exactly as they were), hosted-only Log
 out, and run-failure copy mapping `no_credential`/`cap_reached`/`per_run_cap` to fix-it
@@ -603,3 +604,23 @@ Two details that have bitten us, both now pinned by tests:
   corners from the pill to 10px — the login fields changed shape the instant you clicked them.
   `apps/web/scripts/audit-mobile.mjs` covers hit-target and overflow regressions;
   the focus sweep is the visual/e2e suite's job.
+
+#### Live pairing feedback
+
+Redeeming a code happens entirely on Instagram's side: the user DMs the code, our webhook
+stores the `ig_links` row, and nothing in the browser tab is told. Without a poll the screen
+sits on a code that has already been spent, looking as though the DM did nothing — which is
+exactly how it read in practice.
+
+`HostedInstagramSettings` therefore polls `GET /api/account/instagram` every 4 s, but only
+while `waiting` is true: a code is on screen, it has not expired, and the account is not yet
+linked. The loop stops on link (nothing left to wait for), on expiry, and whenever
+`document.visibilityState` is hidden — the user is in the Instagram app sending the DM, so
+polling then is pure waste. Coming back to the tab re-checks immediately rather than waiting
+out the interval, because that is the moment the answer is most likely to have changed.
+
+The transition is then announced three ways, so it is not missable: the linked row appears, a
+`role="status"` note says "You're paired.", and a toast fires. A poll that fails is swallowed —
+a transient network error must not tear the code off the screen while it is still valid.
+Pinned by `apps/web/src/pages/settings/Instagram.test.tsx` ("live pairing") under fake timers,
+and by `e2e/` driving a status route that flips to linked while the page sits untouched.

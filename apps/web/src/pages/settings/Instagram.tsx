@@ -9,6 +9,14 @@ import { errText, Group, Note, Row, SettingsPage } from './parts';
 /** The communal hosted account unpaired senders are told to DM; the prompt names it too. */
 const SHARED_IG_ACCOUNT = '@dt.save';
 
+/**
+ * How often to re-check for a pairing while a code is on screen. The user has to leave the app
+ * to send the DM and comes back, so this only has to beat "noticeably stale", not a real-time
+ * feed; 4 s keeps a webhook+Graph round trip covered without hammering the server. The loop
+ * stops the moment the account links, when there is no live code, and while the tab is hidden.
+ */
+const PAIRING_POLL_MS = 4000;
+
 /** 8 chars from an unambiguous alphabet (no 0/O/1/I); server-side TTL is 15 minutes. */
 function CodeBlock({ code }: { code: IgPairingCode }) {
   const [left, setLeft] = useState(() => Date.parse(code.expiresAt) - Date.now());
@@ -68,6 +76,8 @@ export function HostedInstagramSettings() {
   const [unlinkOpen, setUnlinkOpen] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [isErr, setIsErr] = useState(false);
+  /** True for the moment right after a poll discovers the link, so the screen can say so. */
+  const [justLinked, setJustLinked] = useState(false);
 
   const load = () =>
     api
@@ -81,6 +91,57 @@ export function HostedInstagramSettings() {
   useEffect(() => {
     void load();
   }, []);
+
+  /**
+   * Live pairing (ADR 0032). Redeeming a code happens on Instagram's side — the user DMs the
+   * code, our webhook stores the link — so nothing in this tab knows it happened. Without this
+   * the screen sits on a stale code looking like the DM did nothing. Poll while an unexpired
+   * code is on screen, then stop: on link (the job is done), on expiry (nothing left to wait
+   * for), and whenever the tab is hidden (the user is in the Instagram app sending the DM).
+   */
+  const waiting = state !== null && !state.linked && Boolean(state.expiresAt);
+  useEffect(() => {
+    if (!waiting) return;
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout>;
+
+    const tick = async () => {
+      if (stopped) return;
+      if (document.visibilityState === 'visible') {
+        try {
+          const next = await api.igLinkStatus();
+          if (stopped) return;
+          if (next.linked) {
+            setState(next);
+            setJustLinked(true);
+            toast('Instagram linked', 'Send it a post and it lands in your library.');
+            return; // The poll is done: there is nothing left to wait for.
+          }
+          // A regenerated or expired code replaces what is on screen.
+          if (next.linked === false) setState(next);
+        } catch {
+          // A transient failure must not tear the screen down; the code is still valid.
+        }
+      }
+      timer = setTimeout(() => void tick(), PAIRING_POLL_MS);
+    };
+
+    timer = setTimeout(() => void tick(), PAIRING_POLL_MS);
+    // Coming back to the tab is the moment the answer is most likely to have changed, so
+    // re-check immediately rather than making the user wait out the rest of the interval.
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        clearTimeout(timer);
+        timer = setTimeout(() => void tick(), 0);
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      stopped = true;
+      clearTimeout(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [waiting]);
 
   async function create() {
     setBusy(true);
@@ -109,6 +170,12 @@ export function HostedInstagramSettings() {
           title="Linked account"
           foot="Reels and posts you send after unlinking are not saved."
         >
+          {justLinked && (
+            <div className="pair-success" role="status">
+              <strong>You're paired.</strong> Doubletake is connected to your Instagram account.
+              Send it a post and it lands in your library.
+            </div>
+          )}
           <Row
             icon="instagram"
             label={state.igUsername ? `@${state.igUsername}` : 'Instagram account'}
@@ -174,6 +241,7 @@ export function HostedInstagramSettings() {
             .igUnlink()
             .then(() => {
               toast('Instagram unlinked');
+              setJustLinked(false);
               return load();
             })
             .catch((e) => {

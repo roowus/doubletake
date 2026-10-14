@@ -85,3 +85,23 @@ screenshots rather than by eye.
   extend Base UI first; if the brain adapters start emitting chart specs the renderer cannot
   draw, grow the spec rather than adding a chart library; when iOS ships, verify the sticky
   follow-up composer against the keyboard on a real device.
+
+## Addendum (2026-10-14, the landing palette supersedes the pine accent)
+
+- **The accent is the landing's clay, not pine.** The decision above reserved clay for tag
+  chips and made a deep pine the single accent. That held while the app and the marketing
+  landing were separate surfaces. They are one product now, and the landing's
+  [`DESIGN-LANGUAGE.md`](../../../doubletake-cloud-existing/docs/DESIGN-LANGUAGE.md) makes
+  clay (`--rail: #C45A3C`) its accent — so the app adopted it, and the two surfaces no longer
+  read as different products.
+- **The landing's exact value did not pass contrast, so the app darkens it.** `#C45A3C` is
+  3.89:1 on `--paper` and 4.31:1 behind white; the app ships `#a8432a` (5.4:1 / 6.0:1), the
+  same hue family (11.9° vs 13.2°). Ink ships `#e5805f`.
+- **Tag chips moved to ochre (`--accent-2`).** The old secondary `#a8541e` was itself a clay,
+  so once clay became primary a tag chip and a primary button would have read as the same
+  ink. `--accent-2` is now `#7d5a10`, 1.2:1 from the accent.
+- **The margin rail is unchanged in meaning.** `--rail` was already `var(--accent)`, so the
+  signature 3 px rule is clay now, exactly as the landing names its own accent token.
+- **Unchanged:** the field-notebook direction, the four-tab shell, the bundled fonts (the
+  landing's OS stack is still not adopted), the answer-block contract, and the rule that only
+  answers carry a coloured left rule.

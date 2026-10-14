@@ -24,12 +24,17 @@
  *                              over --card -> #e6e3d9. --border-strong stays app-only.
  *   --r-md/--r-lg <- --r-md 16px / --r-lg 24px, --shadow-md/--shadow-lg <- --shadow-soft /
  *                    --shadow.
- * Deliberately NOT adopted: the landing's --rail:#C45A3C (its accent) and its system font
- * stacks. The app's signature element is the *margin rail*, a 3 px rule beside every answer,
- * and that rail must stay the pine accent (ADR 0030); the landing's clay already has a home in
- * the app as --accent-2. The app bundles Newsreader / Instrument Sans / JetBrains Mono
- * (@fontsource-variable) where the landing uses the OS stack and is used signed-out, so there is
- * no shared surface to reconcile — the families are listed side by side below for reference.
+ *   --accent   <- --rail #C45A3C, the landing's clay. Adopted in full, so the app and the
+ *                 landing now share one accent. The landing ships the exact value; the app
+ *                 darkens it to #a8432a because #C45A3C is only 3.89:1 on --paper and 4.31:1
+ *                 against white (both under WCAG AA), while the same hue at #a8432a is 5.41:1
+ *                 and 6.00:1. Same hue family (11.9 deg vs 13.2 deg), so it reads as the
+ *                 landing's red, just deep enough to be legible as text and as a button fill.
+ *                 --rail itself is `var(--accent)`, so the margin rail (ADR 0030's signature
+ *                 3 px rule) becomes clay with it, matching the landing's own --rail name.
+ * The landing's system font stacks are still NOT adopted — the app bundles Newsreader /
+ * Instrument Sans / JetBrains Mono (@fontsource-variable) where the landing uses the OS stack,
+ * and the app is used signed-in with dense prose the landing never renders.
  *
  * The app also carries a full ink (dark) theme the landing does not have. Ink keeps the same
  * shape — radii, geometry, motion, font sizes — and only re-points the colours, so nothing below
@@ -54,29 +59,34 @@
   --border-strong: #b9b09d;
   --text: #1c1b18;
   --text-muted: #6b675f;
-  --accent: #1f6f5b;
+  --accent: #a8432a;
   --on-accent: #ffffff;
-  --accent-soft: rgba(31, 111, 91, 0.12);
-  --accent-text: #1a5f4e;
-  --accent-2: #a8541e;
-  --accent-2-soft: rgba(168, 84, 30, 0.12);
+  --accent-soft: rgba(168, 67, 42, 0.12);
+  --accent-text: #963a24;
+  /* Secondary accent: tags, chips, the second chart series. Clay is the primary now, so this
+     moved from the old clay-ish #a8541e to a deep ochre — same warm family, still clearly a
+     different ink at chip size (the two are 1.2:1 apart, i.e. distinguishable side by side). */
+  --accent-2: #7d5a10;
+  --accent-2-soft: rgba(125, 90, 16, 0.12);
   --ok: #2f7a3d;
   --warn: #9a6a00;
   --err: #b3261e;
-  --focus: #1f6f5b;
+  --focus: #a8432a;
   --scrim: rgba(28, 27, 24, 0.45);
   --code-bg: #f1ebdc;
   /* Chart series: pine, clay, slate blue, ochre, plum, teal, rust, moss. Distinct in both
      themes and legible on paper; charts also emit their data as a table, so colour is never
      the only carrier. */
-  --chart-1: #1f6f5b;
-  --chart-2: #a8541e;
+  --chart-1: #a8432a;
+  --chart-2: #7d5a10;
   --chart-3: #3f5f8f;
   --chart-4: #b08a1f;
   --chart-5: #7b4b8a;
   --chart-6: #2a8f8f;
   --chart-7: #9a3b2e;
   --chart-8: #5f7a2e;
+  /* ADR 0030's signature element: the 3 px margin rule beside every answer. Bound to the accent,
+     so it is now the landing's clay — the same colour the landing calls --rail. */
   --rail: var(--accent);
   /* Soft layered shadows, the landing's --shadow-soft / --shadow (`none` is kept as a valid
      value other rules rely on). */
@@ -190,20 +200,20 @@ body::before {
     --border-strong: #46505a;
     --text: #e9e6df;
     --text-muted: #9d9a91;
-    --accent: #5fb59a;
-    --on-accent: #0f1a16;
-    --accent-soft: rgba(95, 181, 154, 0.16);
-    --accent-text: #7cc7ae;
-    --accent-2: #e0925f;
-    --accent-2-soft: rgba(224, 146, 95, 0.16);
+    --accent: #e5805f;
+    --on-accent: #2a1008;
+    --accent-soft: rgba(229, 128, 95, 0.18);
+    --accent-text: #f0a184;
+    --accent-2: #e2b53c;
+    --accent-2-soft: rgba(226, 181, 60, 0.16);
     --ok: #6ccf7b;
     --warn: #e2b53c;
     --err: #ff7b6e;
-    --focus: #5fb59a;
+    --focus: #e5805f;
     --scrim: rgba(0, 0, 0, 0.6);
     --code-bg: #0c0e10;
-    --chart-1: #5fb59a;
-    --chart-2: #e0925f;
+    --chart-1: #e5805f;
+    --chart-2: #e2b53c;
     --chart-3: #8aa6d9;
     --chart-4: #e2b53c;
     --chart-5: #c48ad1;
@@ -230,20 +240,20 @@ body::before {
   --border-strong: #46505a;
   --text: #e9e6df;
   --text-muted: #9d9a91;
-  --accent: #5fb59a;
-  --on-accent: #0f1a16;
-  --accent-soft: rgba(95, 181, 154, 0.16);
-  --accent-text: #7cc7ae;
-  --accent-2: #e0925f;
-  --accent-2-soft: rgba(224, 146, 95, 0.16);
+  --accent: #e5805f;
+  --on-accent: #2a1008;
+  --accent-soft: rgba(229, 128, 95, 0.18);
+  --accent-text: #f0a184;
+  --accent-2: #e2b53c;
+  --accent-2-soft: rgba(226, 181, 60, 0.16);
   --ok: #6ccf7b;
   --warn: #e2b53c;
   --err: #ff7b6e;
-  --focus: #5fb59a;
+  --focus: #e5805f;
   --scrim: rgba(0, 0, 0, 0.6);
   --code-bg: #0c0e10;
-  --chart-1: #5fb59a;
-  --chart-2: #e0925f;
+  --chart-1: #e5805f;
+  --chart-2: #e2b53c;
   --chart-3: #8aa6d9;
   --chart-4: #e2b53c;
   --chart-5: #c48ad1;
@@ -260,18 +270,18 @@ body::before {
   --map-sea: #1f3037;
 }
 
-/* Ink keeps the landing's texture, re-pointed: the pine accent blooms instead of the clay, and
-   the ruled-paper hairlines become light-on-dark. */
+/* Ink keeps the landing's texture, re-pointed: the clay accent blooms and the ruled-paper
+   hairlines become light-on-dark. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="paper"]) body::before {
     background:
-      radial-gradient(1200px 600px at 80% -10%, rgba(95, 181, 154, 0.05), transparent 60%),
+      radial-gradient(1200px 600px at 80% -10%, rgba(229, 128, 95, 0.06), transparent 60%),
       repeating-linear-gradient(0deg, transparent 0 2px, rgba(233, 230, 223, 0.014) 2px 4px);
   }
 }
 :root[data-theme="ink"] body::before {
   background:
-    radial-gradient(1200px 600px at 80% -10%, rgba(95, 181, 154, 0.05), transparent 60%),
+    radial-gradient(1200px 600px at 80% -10%, rgba(229, 128, 95, 0.06), transparent 60%),
     repeating-linear-gradient(0deg, transparent 0 2px, rgba(233, 230, 223, 0.014) 2px 4px);
 }
 
@@ -3345,6 +3355,41 @@ input.switch {
   color: var(--text-muted);
   text-decoration: line-through;
 }
+/* The moment a pairing lands (hosted Instagram): the screen was showing a code and waiting, so
+   say plainly that it worked. Tinted with the accent, not a full success-green banner — the
+   account row below already carries the ok dot, and this is a note, not a second status. */
+.pair-success {
+  margin: var(--space-3) var(--space-4) 0;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--accent-soft);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  font-size: var(--text-sm);
+  color: var(--text);
+  animation: pair-success-in var(--dur-slow) var(--ease-out) both;
+}
+.pair-success strong {
+  color: var(--accent-text);
+}
+@keyframes pair-success-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pair-success {
+    animation: none;
+  }
+}
+:root[data-motion="reduce"] .pair-success {
+  animation: none;
+}
+
 /* Numbered steps of a pairing flow (hosted Instagram connect), inside a stacked row. */
 .steps {
   margin: 0;

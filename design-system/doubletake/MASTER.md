@@ -68,28 +68,42 @@ rule, never the accent, so they read as margin notes rather than as another answ
 Light (**paper**) is the default; dark (**ink**) follows `prefers-color-scheme` or a manual
 choice in Settings → Appearance (`data-theme="paper|ink"` on `<html>`). Ratios are WCAG
 contrast against the surface named in the row; body text reaches 4.5:1 and UI glyphs 3:1 in
-both themes. Paper is deliberately cooler and greyer than "cream", and the accent is a deep
-pine, so the palette does not collapse into the cream-and-terracotta AI default.
+both themes. The palette is now shared with the landing page — the token block at the top of
+`apps/web/src/styles.css` records the landing's `:root` and the reconciliation, and these
+values are the app's side of it.
+
+The accent is the landing's **clay**, not a pine. The landing ships `#C45A3C`, which is only
+3.89:1 on paper and 4.31:1 behind white text, so the app darkens it to `#a8432a` (5.4:1 and
+6.0:1): the same hue family, deep enough to be legible as text and as a button fill.
 
 | Token | Paper (light) | Ink (dark) | Role |
 |---|---|---|---|
-| `--bg` | `#f7f4ee` | `#101214` | app background |
-| `--surface` | `#fffdf9` | `#171a1d` | cards, sheets, header |
-| `--surface-2` | `#efeae0` | `#1f2327` | inputs, code, nested rows |
-| `--border` | `#d9d2c4` | `#2e343a` | hairlines, dividers |
+| `--bg` | `#f7f3e9` | `#101214` | app background |
+| `--surface` | `#fffdf7` | `#171a1d` | cards, sheets, header |
+| `--surface-2` | `#f1ebdc` | `#1f2327` | inputs, code, nested rows |
+| `--surface-3` | `#eae2cf` | `#0c0e10` | inset wells (segmented track, media placeholder) |
+| `--border` | `#e6e3d9` | `#2e343a` | hairlines, dividers |
 | `--border-strong` | `#b9b09d` | `#46505a` | control outlines |
-| `--text` | `#1c1b18` (15.6:1) | `#e9e6df` (14.1:1) | primary text |
-| `--text-muted` | `#645f56` (5.9:1) | `#9d9a91` (6.5:1) | meta, secondary |
-| `--accent` | `#1f6f5b` pine | `#5fb59a` | primary buttons, rail, active tab |
-| `--on-accent` | `#ffffff` (5.6:1) | `#0f1a16` (8.9:1) | text on accent |
-| `--accent-text` | `#1a5f4e` | `#7cc7ae` | links, accent text on surfaces |
-| `--accent-soft` | accent @ 12% | accent @ 16% | pressed chips, selected rows |
-| `--accent-2` | `#a8541e` clay | `#e0925f` | **tag chips only**, never buttons |
+| `--text` | `#1c1b18` (15.7:1) | `#e9e6df` (14.1:1) | primary text |
+| `--text-muted` | `#6b675f` (5.5:1) | `#9d9a91` (6.5:1) | meta, secondary |
+| `--accent` | `#a8432a` clay (5.4:1) | `#e5805f` (6.8:1) | buttons, rail, active tab, focus |
+| `--on-accent` | `#ffffff` (6.0:1) | `#2a1008` (6.5:1) | text on accent |
+| `--accent-text` | `#963a24` (6.5:1) | `#f0a184` (9.1:1) | links, accent text on surfaces |
+| `--accent-soft` | accent @ 12% | accent @ 18% | pressed chips, selected rows |
+| `--accent-2` | `#7d5a10` ochre | `#e2b53c` | **tag chips only**, never buttons |
 | `--ok` / `--warn` / `--err` | `#2f7a3d` / `#9a6a00` / `#b3261e` | `#6ccf7b` / `#e2b53c` / `#ff7b6e` | claim verdicts, run status, destructive |
-| `--focus` | `= --accent` | `= --accent` | focus ring |
+| `--focus` | `= --accent` | `= --accent` | focus ring — the ring only, never a radius |
 | `--scrim` | `rgba(28,27,24,.45)` | `rgba(0,0,0,.6)` | behind sheets and menus |
-| `--chart-1…8` | pine, clay, slate, ochre, plum, teal, brick, olive | lighter variants | chart series and legend swatches |
+| `--chart-1…8` | clay, ochre, slate, ochre-deep, plum, teal, brick, olive | lighter variants | chart series and legend swatches |
 | `--rail` | `= --accent` | `= --accent` | the margin rail |
+
+`--accent-2` moved when clay became the primary: the old `#a8541e` was itself a clay, so a tag
+chip and a primary button read as the same ink. The ochre keeps the warm family and sits 1.2:1
+from the accent, i.e. clearly a different chip when the two are side by side.
+
+`--focus` must stay a **ring**. It must not carry `border-radius`: doing so resnapped every pill
+control to `--radius-sm` the moment it was focused, which read as the control changing shape
+under the cursor.
 
 Status tints use the status colour at 12–16 % alpha as background with the full colour as
 text. Charts never rely on colour alone: every series is also named in the legend and in a
@@ -153,7 +167,8 @@ page navigations in the View Transitions API when present and motion is not redu
   `danger`; `small` is 36 px for secondary actions inside cards. Icon-only buttons are 44×44
   with an `aria-label`. Pressed scales to .98 over `--dur-fast`.
 - **Chips** — 36 px, `white-space: nowrap`; filter chips are `--radius-sm` with
-  `aria-pressed`; **tag chips** are the only pills and the only use of clay.
+  `aria-pressed`; **tag chips** are the only pills and use `--accent-2` (ochre), never the
+  primary accent — a tag and a primary button must never read as the same ink.
 - **Inputs** — 44 px (textarea min 96 px), `--surface-2`, 1 px `--border-strong` on focus a
   2 px `--focus` ring; visible `<label>`, helper and error text under the field via
   `aria-describedby`.
@@ -229,9 +244,11 @@ italics so it is never mistaken for the answer.
 ## 11. Anti-patterns (do not ship)
 
 Chat bubbles for the answer · cream + terracotta + serif everywhere (the AI default) · drop
-shadows on paper · clay on a button · emoji as icons · placeholder-only labels · text under
+shadows on paper · two competing accents (a tag chip in the button colour, or any second
+"primary") · emoji as icons · placeholder-only labels · text under
 12 px · chips that wrap mid-label · inline `style={{}}` · raw hex in components · hover-only
-affordances · 0 ms state changes · removing focus rings · fixed pixel container widths · chip
+affordances · 0 ms state changes · removing focus rings · a focus rule that changes an
+element's shape · fixed pixel container widths · chip
 rows stacked above a list · a coloured left rule on anything that is not an answer · a
 second component library.
 

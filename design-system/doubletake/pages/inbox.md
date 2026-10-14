@@ -13,7 +13,7 @@ list, not a dashboard: no chip rows, no counters, no cards inside cards.
    clear button. Filters live in the URL (`?tag= ?collection= ?platform= ?status=`).
 3. **Unread** section, then the rest, newest first. Row: platform or channel glyph, title in
    the prose face (17 px, two lines max), one meta line (status while a run is working or
-   failed, category, up to three tag chips in clay), trailing age in mono and an unread count
+   failed, category, up to three tag chips in ochre), trailing age in mono and an unread count
    in the accent.
 4. Empty state: one line, plus a link to Add.
 
