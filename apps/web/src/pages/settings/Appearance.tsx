@@ -9,10 +9,13 @@ import {
 } from '../../appearance';
 import { Choice, Group, Row, SettingsPage, Switch } from './parts';
 
+/* The ids are the design language's names (paper/ink, ADR 0030) and stay as they are, but the
+   labels name what you actually get: "Paper" and "Ink" alone do not tell you which one is the
+   light theme, which is exactly the question a reader arrives with. */
 const THEMES: { id: Theme; label: string }[] = [
-  { id: 'system', label: 'System' },
-  { id: 'paper', label: 'Paper' },
-  { id: 'ink', label: 'Ink' },
+  { id: 'system', label: 'Match device' },
+  { id: 'paper', label: 'Light' },
+  { id: 'ink', label: 'Dark' },
 ];
 const SIZES: { id: ProseSize; label: string }[] = [
   { id: 's', label: 'S' },
@@ -34,7 +37,7 @@ export function AppearanceSettings() {
     <SettingsPage title="Appearance" intro="Applies to this device only and takes effect at once.">
       <Group
         title="Theme"
-        foot="Paper is the light notebook, Ink the dark one. System follows the device."
+        foot="Light is the warm cream paper the landing page uses. Dark is the same layout on a warm ink ground. Match device follows your system setting."
       >
         <Row
           icon={a.theme === 'ink' ? 'moon' : 'sun'}

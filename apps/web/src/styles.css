@@ -548,7 +548,8 @@ input[type="checkbox"] {
 select {
   appearance: none;
   padding-right: var(--space-8);
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' fill='none' stroke='%23645f56' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  /* Data-URI, so it cannot read a token: the stroke is --text-muted (#6b675f) by hand. */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' fill='none' stroke='%236b675f' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 8px center;
 }
@@ -3742,7 +3743,6 @@ input.switch {
   background: var(--surface);
   color: var(--text);
   border: 1px solid var(--border);
-  border-left: 3px solid var(--accent);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-md);
   font-size: var(--text-sm);
@@ -3786,7 +3786,9 @@ input.switch {
 }
 
 /* ---- To do (ADR 0031) ------------------------------------------------------ */
-/* Library entry: one wide row above the Things tiles, because the list is the owner's own. */
+/* Library entry: one wide row above the Things tiles, because the list is the owner's own.
+   No left accent bar: the rail is ADR 0030's signature for *answers* only, and a second
+   coloured left rule elsewhere competes with it. This is a card like any other. */
 .todo-row {
   display: flex;
   align-items: center;
@@ -3795,16 +3797,27 @@ input.switch {
   padding: var(--space-3) var(--space-4);
   background: var(--surface);
   border: 1px solid var(--border);
-  border-left: 3px solid var(--accent);
   border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
   color: var(--text);
   transition:
-    border-color var(--dur) var(--ease),
-    background var(--dur) var(--ease);
+    transform var(--dur) var(--ease-out),
+    box-shadow var(--dur) var(--ease-out),
+    border-color var(--dur) var(--ease-out);
 }
 .todo-row:hover {
   text-decoration: none;
-  background: var(--surface-2);
+  border-color: var(--border-strong);
+  transform: translateY(var(--lift));
+  box-shadow: var(--shadow-hover);
+}
+@media (prefers-reduced-motion: reduce) {
+  .todo-row:hover {
+    transform: none;
+  }
+}
+:root[data-motion="reduce"] .todo-row:hover {
+  transform: none;
 }
 .todo-row > svg:first-child {
   color: var(--accent-text);

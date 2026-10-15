@@ -105,3 +105,24 @@ screenshots rather than by eye.
 - **Unchanged:** the field-notebook direction, the four-tab shell, the bundled fonts (the
   landing's OS stack is still not adopted), the answer-block contract, and the rule that only
   answers carry a coloured left rule.
+
+## Addendum (2026-10-14, paper is the default, and the rail stays with answers)
+
+- **`theme` defaults to `paper`, not `system`.** The decision above said ink follows
+  `prefers-color-scheme`, and it did — but the landing page is light-only and is most people's
+  first sight of the product, so a dark-mode laptop opened the app in ink and the two surfaces
+  read as different products. New visitors now get paper regardless of the OS. `system` is
+  still selectable, ink is still one tap away, and both keep working: the stored preference
+  wins, and `applyAppearance()` still runs before the first paint so there is no flash.
+  Rejected alternative: leave the default and change the landing instead — the landing is the
+  marketing surface and cannot ask a visitor's OS to change.
+- **The coloured left rule belongs to answers only.** The anti-pattern list already said "a
+  coloured left rule on anything that is not an answer", but two other surfaces had grown a
+  3 px accent bar: the Library To-do row and the toast. Both are removed. A second coloured
+  left rule competes with the margin rail, which is the one element that is supposed to mean
+  "an answer starts here". The To-do row is now a plain card (soft shadow, hover lift) like
+  the tiles beside it.
+- **Chrome colours follow the tokens.** `index.html`'s `theme-color` pair and
+  `updateThemeColor()`'s forced-theme values still carried the pre-landing cream and cool grey,
+  so a forced theme painted the wrong colour into the browser chrome. Both now match `--bg`.
+  Same for the Mermaid renderer's fallback palette, which still held the old cream and pine.
