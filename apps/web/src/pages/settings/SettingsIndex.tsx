@@ -157,8 +157,13 @@ export function SettingsIndex() {
                 : { value: 'Not connected', status: 'warn' },
         data: { value: '' },
         appearance: {
+          // Kept in step with the Appearance page's own labels (Light / Dark / Match device).
           value:
-            appearance.theme === 'system' ? 'System' : appearance.theme === 'ink' ? 'Ink' : 'Paper',
+            appearance.theme === 'system'
+              ? 'Match device'
+              : appearance.theme === 'ink'
+                ? 'Dark'
+                : 'Light',
         },
         about: { value: '' },
       }),

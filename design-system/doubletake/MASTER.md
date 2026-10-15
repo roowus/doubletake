@@ -63,12 +63,20 @@ starts. While a run is live the rule is a progress bar: it fills as run events a
 settles to solid when the run is done. Blockquotes inside answers use a hairline `--border`
 rule, never the accent, so they read as margin notes rather than as another answer.
 
+That exclusivity is the whole point, and the code had drifted from it: the Library To-do row
+and the toast had each grown their own 3 px accent bar, which diluted the one signal the
+reader is meant to trust. Both are gone (2026-10-14). If a surface needs emphasis, it is a
+card (`--radius-md`, `--shadow-sm`, `--lift` on hover) — not a second rail.
+
 ## 2. Colour tokens
 
-Light (**paper**) is the default; dark (**ink**) follows `prefers-color-scheme` or a manual
-choice in Settings → Appearance (`data-theme="paper|ink"` on `<html>`). Ratios are WCAG
+Light (**paper**) is the default, and it is the default *unconditionally* — the app does not
+open in ink just because the OS is dark. The landing is light-only and is most people's first
+sight of the product, so `theme` defaults to `paper` and ink is a choice in Settings →
+Appearance (`data-theme="paper|ink"` on `<html>`; absent = follow the OS, which is still
+selectable as **Match device**). Ratios are WCAG
 contrast against the surface named in the row; body text reaches 4.5:1 and UI glyphs 3:1 in
-both themes. The palette is now shared with the landing page — the token block at the top of
+both themes. The palette is shared with the landing page — the token block at the top of
 `apps/web/src/styles.css` records the landing's `:root` and the reconciliation, and these
 values are the app's side of it.
 

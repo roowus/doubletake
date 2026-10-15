@@ -17,7 +17,14 @@ export interface Appearance {
 }
 
 const KEY = 'doubletake.appearance';
-const DEFAULTS: Appearance = { theme: 'system', prose: 'm', motion: 'system' };
+/**
+ * Paper by default, not `system`. The landing page (doubletake.gg) is light-only and is most
+ * people's first sight of the product; opening the app in ink on a dark-mode laptop made the
+ * two look like different products, which is exactly the confusion this default caused. Ink is
+ * one tap away in Settings → Appearance, and `system` stays a valid choice for anyone who
+ * wants to follow the OS.
+ */
+const DEFAULTS: Appearance = { theme: 'paper', prose: 'm', motion: 'system' };
 const THEMES = new Set<Theme>(['system', 'paper', 'ink']);
 const SIZES = new Set<ProseSize>(['s', 'm', 'l']);
 const MOTIONS = new Set<Motion>(['system', 'reduce']);
@@ -61,7 +68,14 @@ export function writeAppearance(patch: Partial<Appearance>): Appearance {
   return next;
 }
 
-/** Keep the browser chrome (address bar, PWA title bar) matching a forced theme. */
+/**
+ * Keep the browser chrome (address bar, PWA title bar) matching a forced theme. These two
+ * values are `--bg` from styles.css for each theme and must be kept in step with it; they had
+ * drifted a design pass behind (the old cream/cool-grey pair), so a forced theme painted the
+ * wrong colour into the browser chrome.
+ */
+const CHROME_BG: Record<'paper' | 'ink', string> = { paper: '#f7f3e9', ink: '#16130f' };
+
 function updateThemeColor(theme: Theme): void {
   const metas = document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]');
   for (const m of metas) {
@@ -72,7 +86,7 @@ function updateThemeColor(theme: Theme): void {
     } else {
       // One meta wins: give it the forced colour and drop the media queries.
       m.removeAttribute('media');
-      m.setAttribute('content', theme === 'ink' ? '#101214' : '#f7f4ee');
+      m.setAttribute('content', CHROME_BG[theme]);
     }
   }
 }

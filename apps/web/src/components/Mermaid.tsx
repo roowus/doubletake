@@ -29,13 +29,16 @@ function themeVariables() {
       matchMedia('(prefers-color-scheme: dark)').matches);
   return {
     darkMode: dark,
-    background: cssVar('--surface', dark ? '#171a1d' : '#fffdf9'),
-    primaryColor: cssVar('--accent-soft', dark ? '#1f3a33' : '#e3efea'),
-    primaryTextColor: cssVar('--text', dark ? '#e9e6df' : '#1c1b18'),
-    primaryBorderColor: cssVar('--accent', dark ? '#5fb59a' : '#1f6f5b'),
-    lineColor: cssVar('--text-muted', dark ? '#9d9a91' : '#645f56'),
-    secondaryColor: cssVar('--surface-2', dark ? '#1f2327' : '#efeae0'),
-    tertiaryColor: cssVar('--bg', dark ? '#101214' : '#f7f4ee'),
+    // Fallbacks only — `cssVar` reads the live token first. They mirror styles.css so a diagram
+    // still looks right if a token is ever missing, and were stale (pre-landing cream + pine)
+    // until the palette moved to the landing's clay on warm ink.
+    background: cssVar('--surface', dark ? '#1e1a15' : '#fffdf7'),
+    primaryColor: cssVar('--accent-soft', dark ? 'rgba(229,128,95,.18)' : 'rgba(168,67,42,.12)'),
+    primaryTextColor: cssVar('--text', dark ? '#ece7dd' : '#1c1b18'),
+    primaryBorderColor: cssVar('--accent', dark ? '#e5805f' : '#a8432a'),
+    lineColor: cssVar('--text-muted', dark ? '#a49b8c' : '#6b675f'),
+    secondaryColor: cssVar('--surface-2', dark ? '#262119' : '#f1ebdc'),
+    tertiaryColor: cssVar('--bg', dark ? '#16130f' : '#f7f3e9'),
     fontFamily: cssVar('--font-sans', 'system-ui, sans-serif'),
     fontSize: '14px',
   };
