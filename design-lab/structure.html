@@ -1,0 +1,866 @@
+<!doctype html>
+<html lang="en" data-q="tabs" data-v="current" data-screen="inbox" data-theme="paper" data-cmp="off">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Doubletake — structure options</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ============================================================================
+   Structure lab. Soft Paper + Figtree, fixed. Each question renders its options
+   side by side at phone width. Nothing here is meant for the app yet.
+   ========================================================================= */
+
+*{box-sizing:border-box;margin:0;padding:0}
+
+:root{
+  --font-ui:"Figtree",system-ui,sans-serif;
+  --font-prose:var(--font-ui);
+  --font-mono:"JetBrains Mono",ui-monospace,monospace;
+  --bg:#f8f4ea; --surface:#fffdf7; --surface-2:#f2ecdd; --surface-3:#eae1ce;
+  --line:#e7e1d2; --line-strong:#cfc5ae;
+  --text:#1e1b16; --muted:#6d675c;
+  --accent:#b0472c; --accent-text:#9c3d25; --accent-soft:rgba(176,71,44,.11);
+  --accent-2:#7d5a10;
+  --ok:#2f7a3d; --warn:#9a6a00; --err:#b3261e;
+  --r-xs:10px; --r-sm:12px; --r-md:18px; --r-lg:24px;
+  --shadow:0 10px 30px -14px rgba(60,45,30,.20), 0 2px 6px -3px rgba(60,45,30,.08);
+  --shadow-lift:0 20px 44px -18px rgba(60,45,30,.26);
+  --gutter:22px; --measure:64ch;
+  --tap:44px; --dur:180ms; --ease:cubic-bezier(.2,.8,.2,1);
+}
+[data-theme="ink"]{
+  --bg:#17130e; --surface:#201b15; --surface-2:#282218; --surface-3:#100d09;
+  --line:#372f24; --line-strong:#4f4636;
+  --text:#eee8db; --muted:#a89d8b;
+  --accent:#e8865f; --accent-text:#f2a984; --accent-soft:rgba(232,134,95,.16);
+  --accent-2:#e2b53c; --ok:#6ccf7b; --warn:#e2b53c; --err:#ff7b6e;
+  --shadow:0 10px 30px -14px rgba(0,0,0,.6), 0 2px 6px -3px rgba(0,0,0,.4);
+  --shadow-lift:0 20px 44px -18px rgba(0,0,0,.66);
+}
+
+body{
+  font-family:var(--font-ui); background:var(--bg); color:var(--text);
+  font-size:15px; line-height:1.55; letter-spacing:-.004em;
+  -webkit-font-smoothing:antialiased; transition:background var(--dur) var(--ease),color var(--dur) var(--ease);
+}
+
+/* ============================ LAB CHROME ============================ */
+.lab{position:sticky;top:0;z-index:99;background:#151210;color:#f2ecdf;border-bottom:1px solid #2b2620}
+.lab-in{max-width:1480px;margin:0 auto;padding:9px 20px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.lab-brand{font-size:13px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#c9bfa9}
+.seg{display:flex;background:#221e19;border-radius:999px;padding:2px;gap:2px}
+.seg button{
+  border:0;background:transparent;color:#b6ac99;font:inherit;font-size:12px;font-weight:600;
+  padding:6px 11px;border-radius:999px;cursor:pointer;transition:all var(--dur) var(--ease);white-space:nowrap;
+}
+.seg button[aria-pressed="true"]{background:#f2ecdf;color:#1b1712}
+.seg button:hover:not([aria-pressed="true"]){color:#eee6d6}
+.vr{width:1px;height:22px;background:#3a342c;margin:0 4px}
+
+.stage{max-width:1480px;margin:0 auto;padding:26px 20px 90px}
+.hero-note{max-width:74ch;margin:0 0 26px;font-size:14.5px;color:var(--muted);line-height:1.6}
+.hero-note b{color:var(--text);font-weight:600}
+
+/* phone shell */
+.frames{display:flex;gap:34px;align-items:flex-start;flex-wrap:wrap}
+.frame-cap{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);font-weight:600;margin-bottom:10px}
+.frame-cap b{color:var(--text);font-weight:700;letter-spacing:.04em}
+.phone{
+  width:392px;flex:none;border-radius:44px;padding:10px;
+  background:linear-gradient(160deg,#2a2622,#171412);
+  box-shadow:0 30px 60px -26px rgba(30,22,12,.5),inset 0 0 0 1.5px #3b352e;
+}
+.phone-screen{border-radius:35px;overflow:hidden;background:var(--surface);height:820px;display:flex;flex-direction:column;position:relative}
+
+/* desktop shell */
+.desk{
+  flex:1;min-width:640px;border-radius:18px;overflow:hidden;background:var(--bg);
+  box-shadow:0 30px 70px -34px rgba(30,22,12,.4),inset 0 0 0 1px var(--line);
+  display:flex;height:820px;
+}
+.main{flex:1;min-width:0;overflow-y:auto;overflow-x:hidden}
+.page{padding:var(--gutter) var(--gutter) 40px;max-width:820px}
+.desk .page{max-width:780px;margin:0 auto;padding:34px 34px 60px}
+
+/* nav */
+.nav{flex:none;display:flex;flex-direction:column;gap:4px;padding:18px 12px;width:216px}
+.desk .nav{border-right:1px solid var(--line);padding:22px 14px}
+.nav-brand{display:flex;align-items:center;gap:9px;padding:8px 10px 20px;font-weight:700;font-size:16px;letter-spacing:-.01em}
+.nav-mark{width:26px;height:26px;border-radius:8px;background:var(--accent);display:grid;place-items:center;flex:none}
+.nav-mark svg{width:15px;height:15px;stroke:#fff;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.nav-item{display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:var(--r-sm);color:var(--muted);font-size:14px;font-weight:500;text-decoration:none;transition:all var(--dur) var(--ease)}
+.nav-item svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.nav-item:hover{color:var(--text);background:var(--surface-2)}
+.nav-item[aria-current="page"]{color:var(--text);font-weight:600;background:var(--surface)}
+.nav-add{margin:auto 0 0;display:flex;align-items:center;justify-content:center;gap:8px;height:42px;border-radius:var(--r-sm);background:var(--accent);color:#fff;font-size:13.5px;font-weight:600;text-decoration:none}
+.nav-add svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round}
+.nav-sub{display:flex;flex-direction:column;gap:1px;padding-left:30px}
+.nav-sub a{font-size:13px;color:var(--muted);text-decoration:none;padding:6px 10px;border-radius:var(--r-xs)}
+.nav-sub a[aria-current="page"]{color:var(--accent-text);font-weight:600;background:var(--accent-soft)}
+
+/* phone tab bar + fab */
+.tabbar{display:flex;flex:none;border-top:1px solid var(--line);padding:8px 6px calc(8px + env(safe-area-inset-bottom));background:var(--surface)}
+.tabbar a{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;font-size:10.5px;color:var(--muted);text-decoration:none;font-weight:500;padding:4px 0}
+.tabbar a svg{width:21px;height:21px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.tabbar a[aria-current="page"]{color:var(--accent-text);font-weight:600}
+.fab{position:absolute;right:18px;bottom:calc(76px + env(safe-area-inset-bottom));width:56px;height:56px;border-radius:50%;background:var(--accent);border:0;display:grid;place-items:center;box-shadow:0 12px 26px -10px rgba(120,45,25,.6);cursor:pointer;z-index:3}
+.fab svg{width:24px;height:24px;fill:none;stroke:#fff;stroke-width:2.3;stroke-linecap:round}
+
+/* header search */
+.hdr{display:flex;align-items:center;gap:10px;padding:10px var(--gutter);border-bottom:1px solid var(--line);background:var(--surface);flex:none}
+.hdr .h-title{font-size:15px;font-weight:650;letter-spacing:-.015em;flex:none}
+.hdr .input{height:36px;font-size:13.5px;flex:1;min-width:0}
+.hdr .hbtn{width:36px;height:36px;border-radius:10px;border:1px solid var(--line);background:transparent;display:grid;place-items:center;color:var(--muted);cursor:pointer;flex:none}
+.hdr .hbtn svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round}
+.kbd{font-family:var(--font-mono);font-size:10.5px;color:var(--muted);border:1px solid var(--line);border-radius:6px;padding:1px 6px}
+
+/* type */
+h1.page-title{font-size:27px;font-weight:700;letter-spacing:-.025em;line-height:1.15}
+h2.section{font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--accent-text);margin:26px 0 10px}
+.prose{font-family:var(--font-prose);max-width:var(--measure);font-size:17.5px;line-height:1.62}
+.prose p{margin:0 0 1.05em}
+.prose h3{font-family:var(--font-ui);font-size:19px;font-weight:650;letter-spacing:-.018em;margin:1.7em 0 .55em}
+.mono{font-family:var(--font-mono);font-size:11.5px;letter-spacing:.02em;color:var(--muted)}
+.meta{font-size:12.5px;color:var(--muted)}
+
+/* controls */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:44px;padding:0 18px;border-radius:var(--r-sm);border:1px solid transparent;font:inherit;font-size:14.5px;font-weight:600;cursor:pointer;transition:all var(--dur) var(--ease);text-decoration:none;white-space:nowrap}
+.btn.primary{background:var(--accent);color:#fff;box-shadow:0 6px 16px -8px var(--accent)}
+.btn.ghost{background:transparent;color:var(--muted);border-color:var(--line)}
+.btn.icon{width:44px;padding:0;background:transparent;color:var(--muted);border-color:transparent}
+.btn.icon svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.input{width:100%;height:44px;padding:0 14px;border-radius:var(--r-sm);border:1px solid var(--line);background:var(--surface-2);color:var(--text);font:inherit;font-size:14.5px}
+.input::placeholder{color:var(--muted)}
+.searchbar{display:flex;align-items:center;gap:10px}
+.searchbar .input{padding-left:40px;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='17' height='17' viewBox='0 0 24 24' fill='none' stroke='%236d675c' stroke-width='2' stroke-linecap='round'><circle cx='11' cy='11' r='7'/><path d='M20 20l-4-4'/></svg>");background-repeat:no-repeat;background-position:14px center}
+
+.chip{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px;border-radius:999px;border:1px solid var(--line);background:var(--surface);font-size:12.5px;font-weight:500;color:var(--muted)}
+.chip.tag{background:var(--accent-soft);border-color:transparent;color:var(--accent-text);font-family:var(--font-mono);font-size:11px;letter-spacing:.02em}
+.badge{display:inline-grid;place-items:center;min-width:22px;height:22px;padding:0 6px;border-radius:999px;background:var(--accent);color:#fff;font-size:11.5px;font-weight:700;font-family:var(--font-mono)}
+
+/* list */
+.list{display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-md);overflow:hidden;box-shadow:var(--shadow)}
+.list.flat{box-shadow:none}
+.row{display:flex;gap:13px;align-items:flex-start;padding:14px 16px;text-decoration:none;color:inherit;border-bottom:1px solid var(--line);transition:background var(--dur) var(--ease)}
+.row:last-child{border-bottom:0}
+.row:hover{background:var(--surface-2)}
+.row-glyph{width:30px;height:30px;border-radius:var(--r-xs);display:grid;place-items:center;flex:none;background:var(--surface-2);color:var(--muted);margin-top:1px}
+.row-glyph svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.row-body{flex:1;min-width:0}
+.row-title{font-size:15.5px;font-weight:550;letter-spacing:-.011em;line-height:1.3;margin-bottom:4px}
+.row-meta{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:12px;color:var(--muted)}
+.row-trail{display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex:none}
+.row-age{font-family:var(--font-mono);font-size:10.5px;color:var(--muted);letter-spacing:.02em}
+.phone .row-meta{gap:5px}
+.phone .chip.tag{height:23px;padding:0 7px;font-size:10px;letter-spacing:0}
+.phone .chip{height:29px;padding:0 10px;font-size:12px}
+
+/* answer */
+.answer-title{font-size:26px;font-weight:700;letter-spacing:-.026em;line-height:1.16;margin:10px 0 12px;max-width:22ch}
+.answer-metabar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-family:var(--font-mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent-text)}
+.clip{display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap;padding:13px 15px;border-radius:var(--r-md);border:1px solid var(--line);background:var(--surface);margin-bottom:26px;color:inherit;text-decoration:none}
+.clip-thumb{width:52px;height:52px;border-radius:var(--r-xs);flex:none;background:linear-gradient(150deg,#3a3128,#241f19);display:grid;place-items:center;color:#c4b9a5}
+.clip-thumb svg{width:20px;height:20px;fill:currentColor}
+.clip-title{font-size:13.5px;font-weight:600;line-height:1.35;margin-bottom:3px}
+.clip-url{font-family:var(--font-mono);font-size:10.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:34ch}
+.phone .clip-title{font-size:12.5px}
+.phone .clip-tags{flex-basis:100%;display:flex;gap:5px;flex-wrap:wrap;padding-top:6px}
+.body-rail{display:flex;gap:16px;align-items:flex-start}
+.rail{width:3px;border-radius:2px;background:color-mix(in srgb, var(--accent) 42%, transparent);flex:none;align-self:stretch;min-height:340px}
+.answer-body{flex:1;min-width:0}
+.answer-metabar a{margin-left:auto;color:var(--accent-text);text-decoration:none;border-bottom:1px dotted var(--line-strong);padding-bottom:1px;text-transform:uppercase;letter-spacing:.08em}
+.callout{padding:14px 16px;border-radius:var(--r-md);background:var(--surface-2);margin:22px 0}
+.callout p{margin:0;font-size:15.5px;line-height:1.55}
+table.cmp{width:100%;border-collapse:collapse;font-family:var(--font-ui);font-size:13.5px;margin:14px 0 6px}
+table.cmp th,table.cmp td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line)}
+table.cmp th{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:600}
+table.cmp td:first-child{color:var(--muted)}
+table.cmp tr:last-child td{border-bottom:0}
+
+.tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);margin-top:32px}
+.tabs button{border:0;background:transparent;font:inherit;font-size:13.5px;font-weight:550;color:var(--muted);padding:11px 12px;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;display:flex;align-items:center;gap:6px}
+.tabs button[aria-selected="true"]{color:var(--text);border-bottom-color:var(--accent)}
+.tabs .n{font-family:var(--font-mono);font-size:10.5px;color:var(--muted);background:var(--surface-2);padding:1px 5px;border-radius:5px}
+.sec-block{margin-top:34px;padding-top:24px;border-top:1px solid var(--line)}
+.sec-block h3{font-size:16px;font-weight:650;letter-spacing:-.015em;margin-bottom:12px;display:flex;align-items:center;gap:9px}
+.sec-block h3 .n{font-family:var(--font-mono);font-size:10.5px;font-weight:500;color:var(--muted);background:var(--surface-2);padding:1px 6px;border-radius:5px}
+
+.composer{display:flex;align-items:center;gap:10px;padding:12px var(--gutter);border-top:1px solid var(--line);background:var(--surface);flex:none}
+.composer .input{border-radius:999px;height:42px}
+.send{width:42px;height:42px;border-radius:50%;background:var(--accent);border:0;display:grid;place-items:center;flex:none;cursor:pointer}
+.send svg{width:17px;height:17px;fill:none;stroke:#fff;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+
+/* library */
+.tiles{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.tile{padding:15px;border-radius:var(--r-md);border:1px solid var(--line);background:var(--surface);display:flex;flex-direction:column;gap:20px;text-decoration:none;color:inherit;transition:all var(--dur) var(--ease);box-shadow:var(--shadow)}
+.tile:hover{transform:translateY(-2px);box-shadow:var(--shadow-lift)}
+.tile-icon{width:26px;height:26px;color:var(--accent-text)}
+.tile-icon svg{width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.tile-foot{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+.tile-label{font-size:14px;font-weight:600}
+.tile-count{font-family:var(--font-mono);font-size:11.5px;color:var(--muted)}
+.todo-pin{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:var(--r-md);background:var(--accent-soft);border:1px solid transparent;color:inherit;text-decoration:none;margin-bottom:18px}
+.todo-pin .row-glyph{background:transparent;color:var(--accent-text)}
+.hub{display:grid;gap:14px;margin-top:8px}
+.hub-card{display:flex;gap:15px;align-items:center;padding:20px;border-radius:var(--r-lg);background:var(--surface);border:1px solid var(--line);box-shadow:var(--shadow);text-decoration:none;color:inherit}
+.hub-card .tile-icon{width:34px;height:34px;flex:none;color:var(--accent-text)}
+.hub-card h3{font-size:17px;font-weight:650;letter-spacing:-.018em;margin-bottom:3px}
+.hub-card p{font-size:13px;color:var(--muted);line-height:1.45}
+.hub-card .go{margin-left:auto;color:var(--line-strong);flex:none;width:18px;height:18px}
+.hub-card .go svg{width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:1.8}
+.subnav{display:flex;gap:6px;margin-bottom:20px}
+.subnav a{font-size:13px;font-weight:600;color:var(--muted);text-decoration:none;padding:7px 13px;border-radius:999px;border:1px solid var(--line)}
+.subnav a[aria-current="page"]{background:var(--accent);border-color:var(--accent);color:#fff}
+
+/* settings + compose */
+.sgroup{margin-bottom:22px}
+.sgroup-title{font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--accent-text);font-weight:700;margin:0 0 8px}
+.sgroup-body{border-radius:var(--r-md);border:1px solid var(--line);background:var(--surface);overflow:hidden;box-shadow:var(--shadow)}
+.srow{display:flex;align-items:center;gap:12px;padding:13px 15px;border-bottom:1px solid var(--line);font-size:14.5px;min-height:52px}
+.srow:last-child{border-bottom:0}
+.srow-icon{width:20px;height:20px;color:var(--muted);flex:none}
+.srow-icon svg{width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.srow-text{flex:1;min-width:0}
+.srow-label{font-weight:500}
+.srow-hint{font-size:12px;color:var(--muted);margin-top:1px}
+.srow-value{font-size:13px;color:var(--muted);font-family:var(--font-mono)}
+.srow-chev{width:16px;height:16px;color:var(--line-strong);flex:none}
+.srow-chev svg{width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.field{margin-bottom:16px}
+.field label{display:block;font-size:12.5px;font-weight:600;margin-bottom:7px}
+.field .input{height:auto;padding:12px 14px;min-height:100px;resize:none;line-height:1.5;font-size:15px}
+.segmented{display:flex;background:var(--surface-2);border-radius:var(--r-sm);padding:3px;gap:2px}
+.segmented button{flex:1;border:0;background:transparent;font:inherit;font-size:13px;font-weight:550;color:var(--muted);padding:9px 0;border-radius:calc(var(--r-sm) - 3px);cursor:pointer}
+.segmented button[aria-pressed="true"]{background:var(--surface);color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,.08)}
+
+/* palette mock */
+.palette{position:absolute;inset:0;background:rgba(28,27,24,.58);backdrop-filter:blur(2px);display:flex;align-items:flex-start;justify-content:center;padding-top:70px;z-index:4}
+.palette-box{width:86%;background:var(--surface);border-radius:var(--r-lg);box-shadow:0 30px 60px -24px rgba(30,22,12,.5);overflow:hidden}
+.palette-box .input{height:50px;border:0;border-bottom:1px solid var(--line);border-radius:0;background:transparent;padding-left:42px;font-size:15px;outline:none;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='17' height='17' viewBox='0 0 24 24' fill='none' stroke='%236d675c' stroke-width='2' stroke-linecap='round'><circle cx='11' cy='11' r='7'/><path d='M20 20l-4-4'/></svg>");background-repeat:no-repeat;background-position:15px center}
+.palette-list{display:flex;flex-direction:column}
+.palette-list a{display:flex;gap:11px;align-items:center;padding:11px 16px;text-decoration:none;color:inherit;font-size:13.5px;border-bottom:1px solid var(--line)}
+.palette-list a:last-child{border-bottom:0}
+.palette-list .row-glyph{width:24px;height:24px;margin:0}
+.palette-foot{font-size:11px;color:var(--muted);padding:8px 16px;border-top:1px solid var(--line);display:flex;gap:14px}
+
+/* compare row */
+#compareWrap{display:none;gap:26px;flex-wrap:wrap;align-items:flex-start}
+html[data-cmp="on"] #singleWrap{display:none}
+html[data-cmp="on"] #compareWrap{display:flex}
+#compareWrap .phone{transform:none;width:342px}
+#compareWrap .phone-screen{height:700px}
+#compareWrap .frame-cap{margin-bottom:8px}
+#compareWrap .page{padding:18px 18px 30px}
+#compareWrap .answer-title{font-size:23px}
+#compareWrap .page-title{font-size:24px}
+
+@media (max-width:900px){
+  .desk{display:none}
+  .frames{justify-content:center}
+  .phone{width:100%;max-width:392px}
+}
+</style>
+</head>
+<body>
+
+<div class="lab">
+  <div class="lab-in">
+    <span class="lab-brand">Structure</span>
+    <div class="seg" id="segQ">
+      <button type="button" data-q="tabs" aria-pressed="true">1 · Tab bar</button>
+      <button type="button" data-q="search" aria-pressed="false">2 · Search</button>
+      <button type="button" data-q="library" aria-pressed="false">3 · Library</button>
+      <button type="button" data-q="answer" aria-pressed="false">4 · Answer</button>
+    </div>
+    <span class="vr"></span>
+    <div class="seg" id="segV"></div>
+    <span class="vr"></span>
+    <div class="seg" id="segScreen">
+      <button type="button" data-screen="inbox" aria-pressed="true">Inbox</button>
+      <button type="button" data-screen="answer" aria-pressed="false">Answer</button>
+      <button type="button" data-screen="library" aria-pressed="false">Library</button>
+      <button type="button" data-screen="settings" aria-pressed="false">Settings</button>
+      <button type="button" data-screen="todo" aria-pressed="false">To do</button>
+    </div>
+    <span class="vr"></span>
+    <div class="seg" id="segTheme">
+      <button type="button" data-theme="paper" aria-pressed="true">Paper</button>
+      <button type="button" data-theme="ink" aria-pressed="false">Ink</button>
+    </div>
+    <span class="vr"></span>
+    <div class="seg" id="segCompare">
+      <button type="button" data-cmp="off" aria-pressed="true">Single</button>
+      <button type="button" data-cmp="on" aria-pressed="false">Compare all</button>
+    </div>
+  </div>
+</div>
+
+<div class="stage">
+  <p class="hero-note" id="heroNote"></p>
+
+  <div class="frames" id="singleWrap">
+    <div>
+      <div class="frame-cap" id="capPhone">Phone · 390</div>
+      <div class="phone">
+        <div class="phone-screen" id="phoneScreen"></div>
+      </div>
+    </div>
+    <div style="flex:1;min-width:660px">
+      <div class="frame-cap" id="capDesk">Desktop · 1280</div>
+      <div class="desk" id="deskShell"></div>
+    </div>
+  </div>
+
+  <div id="compareWrap"></div>
+</div>
+
+<script>
+/* ------------------------------------------------------------------ icons */
+const SVG = {
+  inbox:'<svg viewBox="0 0 24 24"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.5 5.1 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.5-6.9A2 2 0 0 0 16.7 4H7.3a2 2 0 0 0-1.8 1.1z"/></svg>',
+  library:'<svg viewBox="0 0 24 24"><path d="M4 4h4v16H4zM10 4h4v16h-4zM16.5 5.5l3.5-.5 2 15-3.5.5z"/></svg>',
+  plus:'<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>',
+  settings:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>',
+  todo:'<svg viewBox="0 0 24 24"><path d="m4 12 4 4 8-9"/><path d="M17 17h4M17 21h4"/></svg>',
+  youtube:'<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>',
+  instagram:'<svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/></svg>',
+  tiktok:'<svg viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>',
+  reddit:'<svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 5v8"/></svg>',
+  web:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18 15 15 0 0 1 0-18z"/></svg>',
+  pin:'<svg viewBox="0 0 24 24"><path d="M12 21s-7-6-7-11a7 7 0 0 1 14 0c0 5-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>',
+  food:'<svg viewBox="0 0 24 24"><path d="M3 2v7a3 3 0 0 0 6 0V2M6 2v20"/><path d="M18 2c-2 0-3 3-3 7v3h3v10"/></svg>',
+  bag:'<svg viewBox="0 0 24 24"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4zM3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>',
+  film:'<svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 3v18M17 3v18M3 12h18"/></svg>',
+  people:'<svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.9"/></svg>',
+  bulb:'<svg viewBox="0 0 24 24"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1V18h6v-1.2c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2z"/></svg>',
+  wrench:'<svg viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.8-3.8a6 6 0 0 1-7.9 7.9l-7 7a2.1 2.1 0 0 1-3-3l7-7a6 6 0 0 1 7.9-7.9z"/></svg>',
+  map:'<svg viewBox="0 0 24 24"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/></svg>',
+  compass:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M16.2 7.8l-2.1 6.3-6.3 2.1 2.1-6.3z"/></svg>',
+  stack:'<svg viewBox="0 0 24 24"><path d="M12 3 3 8l9 5 9-5-9-5z"/><path d="m3 12 9 5 9-5"/><path d="m3 16 9 5 9-5"/></svg>',
+  hash:'<svg viewBox="0 0 24 24"><path d="M4 9h16M4 15h16M10 3 8 21M16 3l-2 18"/></svg>',
+  play:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>',
+  send:'<svg viewBox="0 0 24 24"><path d="M22 2 11 13M22 2 15 22l-4-9-9-4z"/></svg>',
+  chev:'<svg viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg>',
+  bell:'<svg viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/></svg>',
+  phone:'<svg viewBox="0 0 24 24"><rect x="6" y="2" width="12" height="20" rx="3"/><path d="M11 18h2"/></svg>',
+  brain:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>',
+  db:'<svg viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.7 4 3 9 3s9-1.3 9-3V5"/><path d="M3 12c0 1.7 4 3 9 3s9-1.3 9-3"/></svg>',
+  sun:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M1 12h2M21 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/></svg>',
+  info:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>',
+  check:'<svg viewBox="0 0 24 24"><path d="m5 12 5 5L20 7"/></svg>',
+  search:'<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>',
+  filter:'<svg viewBox="0 0 24 24"><path d="M22 3H2l8 9.5V19l4 2v-8.5z"/></svg>',
+  bookmark:'<svg viewBox="0 0 24 24"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>',
+};
+
+/* ------------------------------------------------------------------ fixtures */
+const ROWS = [
+  {icon:'youtube', title:'Osmo Pocket 3 vs Insta360 Ace Pro 2 for travel', cat:'Tech', tags:['camera','travel'], age:'Sep 7', unread:1},
+  {icon:'instagram', title:'Is the Lisbon tram 28 worth queuing for?', cat:'Travel', tags:['lisbon'], age:'Sep 7', unread:0},
+  {icon:'tiktok', title:'Sourdough focaccia, no-knead overnight', cat:'Food', tags:['recipe'], age:'Sep 7', unread:0},
+  {icon:'reddit', title:'Does the "80/20 sleep rule" thread hold up?', cat:'Health', tags:['sleep'], age:'Sep 7', unread:0},
+  {icon:'web', title:'Cheapest way to ship a bike frame within the EU', cat:'Shopping', tags:['cycling'], age:'Sep 7', unread:0},
+];
+
+const TODOS = [
+  {done:false, title:'Buy the creator kit for the Pocket 3', meta:'Shopping · from the Osmo answer'},
+  {done:false, title:'Ship the bike frame from Lisbon', meta:'Task · added Aug 30'},
+  {done:true, title:'Try the overnight focaccia', meta:'Task · ticked Sep 7'},
+];
+
+function rowHtml(r){
+  const tags = r.tags.map(t => `<span class="chip tag">#${t}</span>`).join('');
+  return `<a class="row" href="#">
+    <span class="row-glyph">${SVG[r.icon]}</span>
+    <span class="row-body">
+      <div class="row-title">${r.title}</div>
+      <div class="row-meta">${r.cat}${tags}</div>
+    </span>
+    <span class="row-trail">
+      <span class="row-age">${r.age}</span>
+      ${r.unread ? `<span class="badge">${r.unread}</span>` : ''}
+    </span>
+  </a>`;
+}
+
+/* ------------------------------------------------------------------ questions */
+const QUESTIONS = {
+  tabs: {
+    label:'Tab bar',
+    note:'<b>Where does To do live?</b> Add is a verb sitting among nouns, and To do has a full page but no tab. Every option gets the same content, only the chrome changes.',
+    screens:['inbox','answer','library','settings','todo'],
+    variants:[
+      {id:'current', label:'A · Current', screen:'inbox'},
+      {id:'todo', label:'B · To do tab + Add button', screen:'inbox'},
+      {id:'three', label:'C · 3 tabs, To do card', screen:'inbox'},
+    ],
+  },
+  search: {
+    label:'Search',
+    note:'<b>Where does search live?</b> It already searches the whole library, but the field only exists on Inbox, so it looks like an inbox filter and is missing everywhere else.',
+    screens:['inbox','answer','library','settings'],
+    variants:[
+      {id:'inbox', label:'A · Inbox only', screen:'inbox'},
+      {id:'header', label:'B · Header on every screen', screen:'answer'},
+      {id:'palette', label:'C · Palette only', screen:'inbox'},
+    ],
+  },
+  library: {
+    label:'Library',
+    note:'<b>Five jobs on one page, or two pages?</b> Today Library stacks the To do row, entity tiles, two map tiles, collections and an A-Z tag list. Same data in all three, arranged differently.',
+    screens:['library'],
+    variants:[
+      {id:'current', label:'A · Current, 5 groups', screen:'library'},
+      {id:'tight', label:'B · One page, tightened', screen:'library'},
+      {id:'hub', label:'C · Hub + 2 sub-pages', screen:'library'},
+    ],
+  },
+  answer: {
+    label:'Answer',
+    note:'<b>Four tabs, or three?</b> Run is already shown by the margin rail filling as the run progresses, so a Run tab beside it says the same thing twice.',
+    screens:['answer'],
+    variants:[
+      {id:'four', label:'A · 4 tabs', screen:'answer'},
+      {id:'three', label:'B · 3 tabs, Run in the rail', screen:'answer'},
+      {id:'scroll', label:'C · No tabs, one scroll', screen:'answer'},
+    ],
+  },
+};
+
+const state = { q:'tabs', v:'current', screen:'inbox', theme:'paper', cmp:'off' };
+
+// Deep links: ?q=library&v=hub&screen=library&theme=ink&cmp=on. Screenshots and shared
+// links need this; the toolbar is the same state.
+(function seedFromUrl(){
+  const p = new URLSearchParams(location.search);
+  const q = p.get('q'), v = p.get('v'), screen = p.get('screen');
+  const theme = p.get('theme'), cmp = p.get('cmp');
+  if (q && QUESTIONS[q]) {
+    state.q = q;
+    state.v = QUESTIONS[q].variants[0].id;
+    state.screen = QUESTIONS[q].screens[0];
+  }
+  if (v && QUESTIONS[state.q].variants.some(x => x.id === v)) state.v = v;
+  if (screen && QUESTIONS[state.q].screens.includes(screen)) state.screen = screen;
+  else {
+    const variant = QUESTIONS[state.q].variants.find(x => x.id === state.v);
+    if (variant && QUESTIONS[state.q].screens.includes(variant.screen)) state.screen = variant.screen;
+  }
+  if (theme === 'paper' || theme === 'ink') state.theme = theme;
+  if (cmp === 'on' || cmp === 'off') state.cmp = cmp;
+})();
+
+function writeUrl(){
+  const p = new URLSearchParams({ q: state.q, v: state.v, screen: state.screen, theme: state.theme, cmp: state.cmp });
+  history.replaceState(null, '', `${location.pathname}?${p}`);
+}
+
+/* ------------------------------------------------------------------ chrome */
+function tabSet(){
+  // The tab set depends on the answer to question 1, so it follows whichever
+  // variant of question 1 is selected, even while looking at another question.
+  const tabsVariant = state.q === 'tabs' ? state.v : 'current';
+  if (tabsVariant === 'todo') {
+    return [
+      {id:'inbox', label:'Inbox', icon:'inbox', to:'/'},
+      {id:'todo', label:'To do', icon:'todo', to:'/todo'},
+      {id:'library', label:'Library', icon:'library', to:'/library'},
+      {id:'settings', label:'Settings', icon:'settings', to:'/settings'},
+    ];
+  }
+  if (tabsVariant === 'three') {
+    return [
+      {id:'inbox', label:'Inbox', icon:'inbox', to:'/'},
+      {id:'library', label:'Library', icon:'library', to:'/library'},
+      {id:'settings', label:'Settings', icon:'settings', to:'/settings'},
+    ];
+  }
+  return [
+    {id:'inbox', label:'Inbox', icon:'inbox', to:'/'},
+    {id:'library', label:'Library', icon:'library', to:'/library'},
+    {id:'compose', label:'Add', icon:'plus', to:'/compose'},
+    {id:'settings', label:'Settings', icon:'settings', to:'/settings'},
+  ];
+}
+
+function hasFab(){
+  const tabsVariant = state.q === 'tabs' ? state.v : 'current';
+  return tabsVariant !== 'current';
+}
+
+function searchMode(){
+  return state.q === 'search' ? state.v : 'inbox';
+}
+
+function tabbarHtml(active){
+  const tabs = tabSet();
+  const addAsTab = tabs.some(t => t.id === 'compose');
+  return `<nav class="tabbar" aria-label="Primary">${
+    tabs.map(t => `<a href="#"${t.id === active ? ' aria-current="page"' : ''}>${SVG[t.icon]}${t.label}</a>`).join('')
+  }</nav>${addAsTab ? '' : '<button type="button" class="fab" aria-label="Add">' + SVG.plus + '</button>'}`;
+}
+
+function navHtml(active){
+  const tabs = tabSet();
+  const addAsTab = tabs.some(t => t.id === 'compose');
+  return `<nav class="nav" aria-label="Primary">
+    <div class="nav-brand"><span class="nav-mark"><svg viewBox="0 0 24 24"><path d="M9 3h8a2 2 0 0 1 2 2v10M5 7h9a2 2 0 0 1 2 2v12H7a2 2 0 0 1-2-2z"/></svg></span>Doubletake</div>
+    ${tabs.map(t => `<a class="nav-item" href="#"${t.id === active ? ' aria-current="page"' : ''}>${SVG[t.icon]}${t.label}</a>`).join('')}
+    ${addAsTab ? '' : `<a class="nav-add" href="#">${SVG.plus}Add</a>`}
+  </nav>`;
+}
+
+function headerHtml(){
+  const mode = searchMode();
+  if (mode === 'header') {
+    return `<div class="hdr"><span class="h-title">Doubletake</span><input class="input" placeholder="Search everything"><span class="kbd">⌘K</span></div>`;
+  }
+  if (mode === 'palette') {
+    return `<div class="hdr"><span class="h-title">Doubletake</span><span style="flex:1"></span><button type="button" class="hbtn" aria-label="Search">${SVG.search}</button></div>`;
+  }
+  return '';
+}
+
+/* ------------------------------------------------------------------ screens */
+const SCREENS = {};
+
+SCREENS.inbox = () => {
+  const mode = searchMode();
+  const showField = mode === 'inbox';
+  const pinned = (state.q === 'tabs' ? state.v : 'current') === 'three';
+  return `<div class="page">
+    <h1 class="page-title" style="margin-bottom:16px">Inbox</h1>
+    ${showField ? `<div class="searchbar" style="margin-bottom:22px">
+      <input class="input" placeholder="Search your library" style="flex:1">
+      <button type="button" class="btn icon" aria-label="Filters">${SVG.filter}</button>
+    </div>` : ''}
+    ${pinned ? `<a class="todo-pin" href="#">
+      <span class="row-glyph">${SVG.todo}</span>
+      <span style="flex:1;min-width:0"><span class="srow-label">To do</span><div class="meta" style="font-size:12.5px">2 open · Buy the creator kit · Ship the frame</div></span>
+      <span class="srow-chev">${SVG.chev}</span>
+    </a>` : ''}
+    <h2 class="section" style="margin-top:0">Unread · 1</h2>
+    <div class="list">${rowHtml(ROWS[0])}</div>
+    <h2 class="section">Earlier</h2>
+    <div class="list">${ROWS.slice(1).map(rowHtml).join('')}</div>
+  </div>${mode === 'palette' ? paletteHtml() : ''}`;
+};
+
+function paletteHtml(){
+  return `<div class="palette"><div class="palette-box">
+    <input class="input" placeholder="Search everything" autofocus>
+    <div class="palette-list">
+      <a href="#"><span class="row-glyph">${SVG.youtube}</span>Osmo Pocket 3 vs Insta360 Ace Pro 2</a>
+      <a href="#"><span class="row-glyph">${SVG.pin}</span>Lisbon · 3 places</a>
+      <a href="#"><span class="row-glyph">${SVG.todo}</span>To do · 2 open</a>
+    </div>
+    <div class="palette-foot"><span>↑↓ move</span><span>↵ open</span><span>esc close</span></div>
+  </div></div>`;
+}
+
+SCREENS.todo = () => `<div class="page">
+  <h1 class="page-title" style="margin-bottom:18px">To do</h1>
+  <h2 class="section" style="margin-top:0">Open · 2</h2>
+  <div class="list">
+    ${TODOS.filter(t => !t.done).map(t => `<div class="row">
+      <span class="row-glyph" style="border-radius:50%;background:transparent;border:1.5px solid var(--line-strong)"></span>
+      <span class="row-body"><div class="row-title">${t.title}</div><div class="row-meta">${t.meta}</div></span>
+    </div>`).join('')}
+  </div>
+  <h2 class="section">Done</h2>
+  <div class="list">
+    ${TODOS.filter(t => t.done).map(t => `<div class="row" style="opacity:.62">
+      <span class="row-glyph" style="border-radius:50%;background:var(--accent);color:#fff">${SVG.check}</span>
+      <span class="row-body"><div class="row-title" style="text-decoration:line-through">${t.title}</div><div class="row-meta">${t.meta}</div></span>
+    </div>`).join('')}
+  </div>
+</div>`;
+
+SCREENS.library = () => {
+  const v = state.q === 'library' ? state.v : 'current';
+  const tile = (icon,label,count,attrs='') => `<a class="tile" href="#"${attrs}><span class="tile-icon">${SVG[icon]}</span><span class="tile-foot"><span class="tile-label">${label}</span><span class="tile-count">${count}</span></span></a>`;
+  const tagRows = [['travel',2],['camera',1],['lisbon',1],['recipe',1],['sleep',1],['cycling',1]]
+    .map(([t,n])=>`<div class="row" style="align-items:center;padding-top:11px;padding-bottom:11px"><span class="row-glyph" style="background:transparent;color:var(--accent-text);width:20px;height:20px">${SVG.hash}</span><span class="row-body"><span style="font-size:14px">${t}</span></span><span class="row-age">${n}</span></div>`).join('');
+
+  if (v === 'hub') {
+    return `<div class="page">
+      <h1 class="page-title" style="margin-bottom:6px">Library</h1>
+      <div class="meta" style="margin-bottom:20px">Everything you kept, by kind.</div>
+      <div class="hub">
+        <a class="hub-card" href="#">
+          <span class="tile-icon">${SVG.pin}</span>
+          <span style="flex:1"><h3>Things</h3><p>Places, recipes, products, tools, tips, media and people. Plus the map.</p></span>
+          <span class="go">${SVG.chev}</span>
+        </a>
+        <a class="hub-card" href="#">
+          <span class="tile-icon">${SVG.library}</span>
+          <span style="flex:1"><h3>Collections</h3><p>Your lists, saved searches and every tag in use.</p></span>
+          <span class="go">${SVG.chev}</span>
+        </a>
+      </div>
+      <h2 class="section">To do</h2>
+      <a class="clip" href="#" style="align-items:center">
+        <span class="row-glyph" style="margin:0">${SVG.todo}</span>
+        <span style="flex:1"><span class="srow-label">2 open</span><div class="meta" style="font-size:12.5px">Buy the creator kit · Ship the frame</div></span>
+        <span class="srow-chev">${SVG.chev}</span>
+      </a>
+    </div>`;
+  }
+
+  const tight = v === 'tight';
+  return `<div class="page">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
+      <h1 class="page-title">Library</h1>
+      <button type="button" class="btn ghost" style="height:36px;font-size:13px">New collection</button>
+    </div>
+    ${tight ? '' : `<a class="clip" href="#" style="align-items:center;margin-bottom:24px">
+      <span class="row-glyph" style="margin:0">${SVG.todo}</span>
+      <span style="flex:1"><span class="srow-label">To do</span><div class="meta" style="font-size:12.5px">2 open · Buy the creator kit · Ship the frame</div></span>
+      <span class="srow-chev">${SVG.chev}</span>
+    </a>`}
+    <h2 class="section" style="margin-top:0">Things</h2>
+    <div class="tiles">${['pin Places 3','food Recipes 1','bag Products 2','wrench Tools 0','bulb Tips 4','film Media 1'].concat(tight ? [] : ['people People 0']).concat(['map Map 3']).map((s,i,arr) => {
+      const [icon,label,count] = s.split(' ');
+      return tile(icon, label, count, tight && i === arr.length - 1 ? ' style="grid-column:1/-1"' : '');
+    }).join('')}</div>
+    <h2 class="section">Collections</h2>
+    <div class="tiles">${tile('stack','Weekend trips',4)}${tile('stack','Kitchen',7)}</div>
+    ${tight ? `<h2 class="section">To do</h2>
+      <div class="list"><a class="row" href="#" style="align-items:center">
+        <span class="row-glyph">${SVG.todo}</span>
+        <span class="row-body"><span class="row-title" style="font-size:14.5px">2 open</span><span class="row-meta">Buy the creator kit · Ship the frame</span></span>
+        <span class="srow-chev">${SVG.chev}</span>
+      </a></div>` : ''}
+    <h2 class="section">Tags</h2>
+    <div class="list">${tagRows}</div>
+  </div>`;
+};
+
+SCREENS.answer = () => {
+  const v = state.q === 'answer' ? state.v : 'four';
+  // The tabbed variants are cut to one paragraph plus the callout so the tabs land inside the
+  // 820 px phone frame. The one-scroll variant keeps the long body because the point there is
+  // that the sections flow inline after the prose.
+  const compact = state.q === 'answer' && v !== 'scroll';
+  const body = compact
+    ? `<div class="prose">
+      <p><b>Short version:</b> the Osmo Pocket 3 is the better travel camera for most people; the Insta360 Ace Pro 2 wins only if you mostly shoot action or in the rain.</p>
+      <div class="callout"><p>You wrote: "which one for a two-week trip, mostly walking and food?" That pushes the answer toward pocketability and stabilisation over waterproofing.</p></div>
+    </div>`
+    : `<div class="prose">
+      <p><b>Short version:</b> the Osmo Pocket 3 is the better travel camera for most people; the Insta360 Ace Pro 2 wins only if you mostly shoot action or in the rain.</p>
+      <div class="callout"><p>You wrote: "which one for a two-week trip, mostly walking and food?" That pushes the answer toward pocketability and stabilisation over waterproofing.</p></div>
+      <h3>How they compare</h3>
+      <table class="cmp">
+        <tr><th></th><th>Osmo Pocket 3</th><th>Ace Pro 2</th></tr>
+        <tr><td>Sensor</td><td>1-inch</td><td>1/1.3-inch</td></tr>
+        <tr><td>Stabilisation</td><td>3-axis gimbal</td><td>Electronic</td></tr>
+        <tr><td>Waterproof</td><td>No</td><td>12 m</td></tr>
+      </table>
+      <h3>Which to buy</h3>
+      <p>If your footage is mostly walking, talking and food, the gimbal does the work an electronic crop cannot.</p>
+    </div>`;
+
+  const fourTabs = `<div class="tabs" role="tablist">
+      <button type="button" role="tab" aria-selected="true">Claims <span class="n">1</span></button>
+      <button type="button" role="tab" aria-selected="false">Things <span class="n">2</span></button>
+      <button type="button" role="tab" aria-selected="false">Sources <span class="n">2</span></button>
+      <button type="button" role="tab" aria-selected="false">Run</button>
+    </div>
+    <div style="padding:16px 0 8px;display:flex;gap:11px;align-items:flex-start">
+      <span class="status mono" style="color:var(--ok)">● True</span>
+      <span style="font-size:14px">The Pocket 3 has a 1-inch sensor.</span>
+    </div>`;
+
+  const threeTabs = `<div class="tabs" role="tablist">
+      <button type="button" role="tab" aria-selected="true">Claims <span class="n">1</span></button>
+      <button type="button" role="tab" aria-selected="false">Things <span class="n">2</span></button>
+      <button type="button" role="tab" aria-selected="false">Sources <span class="n">2</span></button>
+    </div>
+    <div style="padding:16px 0 8px;display:flex;gap:11px;align-items:flex-start">
+      <span class="mono" style="color:var(--ok)">● True</span>
+      <span style="font-size:14px">The Pocket 3 has a 1-inch sensor.</span>
+    </div>`;
+
+  const inlineSections = `<div class="sec-block"><h3>Claims <span class="n">1</span></h3>
+      <div style="display:flex;gap:11px;align-items:flex-start"><span class="mono" style="color:var(--ok)">● True</span><span style="font-size:14px">The Pocket 3 has a 1-inch sensor.</span></div>
+    </div>
+    <div class="sec-block"><h3>Things <span class="n">2</span></h3>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div style="display:flex;gap:10px;align-items:center"><span class="row-glyph" style="margin:0">${SVG.bag}</span><span style="font-size:14px">Osmo Pocket 3 creator kit</span></div>
+        <div style="display:flex;gap:10px;align-items:center"><span class="row-glyph" style="margin:0">${SVG.bag}</span><span style="font-size:14px">Insta360 Ace Pro 2</span></div>
+      </div>
+    </div>
+    <div class="sec-block"><h3>Sources <span class="n">2</span></h3>
+      <div class="meta">youtube.com/watch?v=fixture01 · dpreview.com/reviews/osmo-pocket-3</div>
+    </div>
+    <div class="sec-block"><h3>Run</h3>
+      <div class="meta mono" style="font-size:11px;letter-spacing:.05em;text-transform:uppercase">Standard · 2 min · $0.042 · 4 steps</div>
+    </div>`;
+
+  return `<div class="page">
+    <div class="answer-metabar" style="margin-bottom:6px"><span>youtube</span><span>·</span><span>standard</span><span>·</span><span>2 min</span><span>·</span><span>$0.042</span>${v === 'three' ? '<a href="#">Run detail</a>' : ''}</div>
+    <h1 class="answer-title">Osmo Pocket 3 vs Insta360 Ace Pro 2 for travel</h1>
+    <div class="clip">
+      <span class="clip-thumb">${SVG.play}</span>
+      <span style="flex:1;min-width:0"><div class="clip-title">Osmo Pocket 3 vs Insta360 Ace Pro 2 — which travel camera?</div><div class="clip-url">www.youtube.com/watch?v=fixture01</div></span>
+      <span class="clip-tags"><span class="chip tag">#camera</span><span class="chip tag">#travel</span></span>
+    </div>
+    <div class="body-rail">
+      <div class="rail"></div>
+      <div class="answer-body">
+        ${body}
+        ${v === 'four' ? fourTabs : v === 'three' ? threeTabs : inlineSections}
+      </div>
+    </div>
+  </div>
+  <div class="composer"><input class="input" placeholder="Ask a follow-up…"><button type="button" class="send" aria-label="Send">${SVG.send}</button></div>`;
+};
+
+SCREENS.settings = () => {
+  const row = (icon, label, hint, value) => `<div class="srow">
+    <span class="srow-icon">${SVG[icon]}</span>
+    <span class="srow-text"><span class="srow-label">${label}</span><div class="srow-hint">${hint}</div></span>
+    ${value ? `<span class="srow-value">${value}</span>` : ''}
+    <span class="srow-chev">${SVG.chev}</span>
+  </div>`;
+  return `<div class="page">
+    <h1 class="page-title" style="margin-bottom:18px">Settings</h1>
+    <div class="sgroup"><div class="sgroup-title">Account and devices</div><div class="sgroup-body">${row('phone','Devices','This device, pairing, revoke','2 paired')}</div></div>
+    <div class="sgroup"><div class="sgroup-title">Research</div><div class="sgroup-body">${row('brain','Brains and spend','Adapter health, daily cap, modes','$0.31 / $5')}</div></div>
+    <div class="sgroup"><div class="sgroup-title">Notifications and channels</div><div class="sgroup-body">${row('bell','Notifications','Push, quiet hours, digest','Off')}${row('instagram','Instagram','Shadow account and mentions','Not set up')}</div></div>
+    <div class="sgroup"><div class="sgroup-title">Data</div><div class="sgroup-body">${row('db','Import and export','Karakeep, Memos, notes folder')}</div></div>
+    <div class="sgroup"><div class="sgroup-title">App</div><div class="sgroup-body">${row('sun','Appearance','Theme, reading size, motion','Paper')}${row('info','About','Version, server, docs')}</div></div>
+  </div>`;
+};
+
+SCREENS.compose = () => `<div class="page">
+  <h1 class="page-title" style="margin-bottom:20px">Add</h1>
+  <div class="field"><label>Link or text</label><textarea class="input" placeholder="Paste a link, or type what you want researched">https://www.youtube.com/watch?v=fixture01</textarea></div>
+  <div class="field"><label>Your note</label><textarea class="input" style="min-height:72px">Which one for a two-week trip, mostly walking and food?</textarea></div>
+  <div class="field"><label>Depth</label><div class="segmented">
+    <button type="button" aria-pressed="true">Auto</button><button type="button" aria-pressed="false">Quick</button><button type="button" aria-pressed="false">Standard</button><button type="button" aria-pressed="false">Deep</button>
+  </div><div class="meta" style="margin-top:7px;font-size:12px">Auto picks standard for video, quick for short posts.</div></div>
+  <button type="button" class="btn primary" style="width:100%;margin-top:8px">Research</button>
+  <div class="mono" style="text-align:center;margin-top:10px">$0.31 of $5 used today</div>
+</div>`;
+
+/* ------------------------------------------------------------------ render */
+const phoneScreen = document.getElementById('phoneScreen');
+const deskShell = document.getElementById('deskShell');
+
+function renderSingle(){
+  const q = QUESTIONS[state.q];
+  const activeScreen = q.screens.includes(state.screen) ? state.screen : q.screens[0];
+  state.screen = activeScreen;
+  const html = SCREENS[activeScreen]();
+
+  const showTabbar = activeScreen !== 'answer';
+  const showFab = hasFab() && showTabbar;
+  phoneScreen.innerHTML = `${headerHtml()}<div class="main scroll">${html}</div>${
+    showTabbar ? tabbarHtml(activeScreen) : ''
+  }${showFab ? `<button type="button" class="fab" aria-label="Add">${SVG.plus}</button>` : ''}`;
+
+  deskShell.innerHTML = `${navHtml(activeScreen)}<div class="main scroll">${headerHtml()}${html}</div>`;
+  // The desktop header sits inside the scrolling column; wrap it so it spans the width.
+  const hdr = deskShell.querySelector('.main > .hdr');
+  if (hdr) hdr.style.margin = '0 -34px 0';
+
+  document.getElementById('heroNote').innerHTML = q.note;
+  document.getElementById('capPhone').innerHTML = `Phone · 390 · <b>${QUESTIONS[state.q].label}</b>`;
+  document.getElementById('capDesk').innerHTML = 'Desktop · 1280';
+}
+
+function renderCompare(){
+  const q = QUESTIONS[state.q];
+  document.getElementById('compareWrap').innerHTML = q.variants.map(v => {
+    const saved = { v: state.v, screen: state.screen };
+    state.v = v.id; state.screen = v.screen;
+    const html = SCREENS[v.screen] ? SCREENS[v.screen]() : '';
+    const active = v.screen;
+    const showTabbar = active !== 'answer';
+    const inner = `${headerHtml()}<div class="main scroll">${html}</div>${
+      showTabbar ? tabbarHtml(active) : ''
+    }${hasFab() && showTabbar ? `<button type="button" class="fab" aria-label="Add">${SVG.plus}</button>` : ''}`;
+    state.v = saved.v; state.screen = saved.screen;
+    return `<div><div class="frame-cap">${v.label}</div>
+      <div class="phone"><div class="phone-screen">${inner}</div></div></div>`;
+  }).join('');
+}
+
+function syncSegments(){
+  document.querySelectorAll('#segQ button').forEach(b => {
+    b.setAttribute('aria-pressed', String(b.dataset.q === state.q));
+  });
+  const variants = QUESTIONS[state.q].variants;
+  const segV = document.getElementById('segV');
+  segV.innerHTML = variants.map(v => `<button type="button" data-v="${v.id}" aria-pressed="${v.id === state.v}">${v.label}</button>`).join('');
+  document.querySelectorAll('#segScreen button').forEach(b => {
+    const ok = QUESTIONS[state.q].screens.includes(b.dataset.screen);
+    b.style.display = ok ? '' : 'none';
+    b.setAttribute('aria-pressed', String(b.dataset.screen === state.screen));
+  });
+  document.querySelectorAll('#segTheme button').forEach(b => {
+    b.setAttribute('aria-pressed', String(b.dataset.theme === state.theme));
+  });
+  document.querySelectorAll('#segCompare button').forEach(b => {
+    b.setAttribute('aria-pressed', String(b.dataset.cmp === state.cmp));
+  });
+  document.documentElement.dataset.q = state.q;
+  document.documentElement.dataset.v = state.v;
+  document.documentElement.dataset.screen = state.screen;
+  document.documentElement.dataset.theme = state.theme;
+  document.documentElement.dataset.cmp = state.cmp;
+}
+
+function render(){
+  syncSegments();
+  renderSingle();
+  if (state.cmp === 'on') renderCompare();
+  // After renderSingle, which may have corrected state.screen to a screen the variant owns.
+  writeUrl();
+}
+
+document.getElementById('segQ').addEventListener('click', (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  state.q = b.dataset.q;
+  state.v = QUESTIONS[state.q].variants[0].id;
+  state.screen = QUESTIONS[state.q].variants[0].screen;
+  render();
+});
+document.getElementById('segV').addEventListener('click', (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  state.v = b.dataset.v;
+  const v = QUESTIONS[state.q].variants.find(x => x.id === state.v);
+  if (v) state.screen = v.screen;
+  render();
+});
+document.getElementById('segScreen').addEventListener('click', (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  state.screen = b.dataset.screen;
+  render();
+});
+document.getElementById('segTheme').addEventListener('click', (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  state.theme = b.dataset.theme;
+  render();
+});
+document.getElementById('segCompare').addEventListener('click', (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  state.cmp = b.dataset.cmp;
+  render();
+});
+
+// Inert links inside the mock screens.
+document.addEventListener('click', (e) => {
+  const t = e.target.closest('a, .tabs button');
+  if (t) e.preventDefault();
+});
+
+render();
+</script>
+</body>
+</html>
