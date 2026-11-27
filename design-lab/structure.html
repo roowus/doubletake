@@ -177,6 +177,34 @@ h2.section{font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:up
 .callout{padding:14px 16px;border-radius:var(--r-md);background:var(--surface-2);margin:22px 0}
 .callout p{margin:0;font-size:15.5px;line-height:1.55}
 table.cmp{width:100%;border-collapse:collapse;font-family:var(--font-ui);font-size:13.5px;margin:14px 0 6px}
+
+/* ------------------------------------------------------------------ minimal answer
+   The answer page cut down to one source line, one title, two sentences and one detail
+   row. Nothing here is a card except where the thing being shown is a list. */
+.m-source{display:flex;align-items:center;gap:7px;font-family:var(--font-mono);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:14px}
+.m-source svg{width:13px;height:13px;fill:currentColor;flex:none;opacity:.75}
+.m-source .sep{opacity:.5}
+.m-title{font-size:24px;font-weight:700;letter-spacing:-.028em;line-height:1.18;margin:0 0 16px;max-width:24ch;text-wrap:balance}
+.m-lede{font-size:18px;font-weight:600;letter-spacing:-.017em;line-height:1.38;margin:0 0 12px;max-width:var(--measure);text-wrap:pretty}
+.m-lede.lg{font-size:22px;letter-spacing:-.022em;line-height:1.3;font-weight:650}
+.m-para{font-family:var(--font-prose);font-size:16.5px;line-height:1.62;margin:0 0 22px;max-width:var(--measure);color:var(--text)}
+.m-lede + .m-para{color:var(--muted)}
+.m-detail{display:flex;align-items:center;gap:7px;min-height:48px;width:100%;margin-top:6px;padding-top:14px;border:0;border-top:1px solid var(--line);background:transparent;text-align:left;cursor:pointer;font-family:var(--font-mono);font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)}
+.m-detail .n{color:var(--accent-text)}
+.m-detail .sep{opacity:.5}
+.m-detail svg{width:14px;height:14px;margin-left:auto;fill:none;stroke:var(--line-strong);stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.m-note{display:flex;gap:7px;align-items:baseline;margin:-12px 0 22px;padding-left:8px;border-left:2px solid var(--accent-soft);font-family:var(--font-ui);font-size:12px;line-height:1.45;color:var(--muted)}
+.m-note .n{font-family:var(--font-mono);font-size:10px;color:var(--accent-text);flex:none}
+.m-note .verdict{height:16px;padding:0 5px;font-size:8.5px;flex:none}
+.verdict{display:inline-flex;align-items:center;gap:4px;height:18px;padding:0 6px;border-radius:5px;font-family:var(--font-ui);font-size:9.5px;font-weight:650;letter-spacing:.02em;text-transform:lowercase;background:var(--surface-2);color:var(--muted);flex:none}
+.verdict.true{background:color-mix(in srgb, var(--ok) 13%, transparent);color:var(--ok)}
+.verdict.false{background:color-mix(in srgb, var(--err) 13%, transparent);color:var(--err)}
+.verdict.mixed{background:color-mix(in srgb, var(--warn) 15%, transparent);color:var(--warn)}
+.verdict.unverified{background:var(--surface-2);color:var(--muted)}
+.m-rail{display:flex;gap:14px;align-items:stretch}
+.m-rail .rail{width:2px;min-height:0}
+
+table.cmp{width:100%;border-collapse:collapse;font-family:var(--font-ui);font-size:13.5px;margin:14px 0 6px}
 table.cmp th,table.cmp td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line)}
 table.cmp th{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:600}
 table.cmp td:first-child{color:var(--muted)}
@@ -495,13 +523,13 @@ const QUESTIONS = {
   },
   answer: {
     label:'Answer',
-    note:'<b>Where do the claims, things and sources live?</b> Today they are four tabs under the whole conversation, so they describe only the newest answer and sit a scroll away from the prose they belong to. These four move the detail, not the tab count.',
+    note:'<b>How little can this page say?</b> The current page says the same thing five times: the source metabar, a generated title, a card repeating that title, tags, then a second metabar inside the answer, then a "you asked" echo, then a callout quoting the note again, then four tabs of counts. All four of these cut, they do not rearrange. Each is progressively further from the current page.',
     screens:['answer'],
     variants:[
-      {id:'under', label:'A · Tab strip under each answer', screen:'answer'},
-      {id:'aside', label:'B · Folded block after the prose', screen:'answer'},
-      {id:'margin', label:'C · Margin notes beside the claims', screen:'answer'},
-      {id:'eachturn', label:'D · Tabs pinned to the answer, not the page', screen:'answer'},
+      {id:'trimmed', label:'A · Trimmed, same shape', screen:'answer'},
+      {id:'bare', label:'B · No generated title', screen:'answer'},
+      {id:'ledefirst', label:'C · The answer leads', screen:'answer'},
+      {id:'inline', label:'D · Claims inline, no detail chrome', screen:'answer'},
     ],
   },
 };
@@ -721,126 +749,52 @@ SCREENS.library = () => {
 };
 
 SCREENS.answer = () => {
-  const v = state.q === 'answer' ? state.v : 'under';
+  const v = state.q === 'answer' ? state.v : 'trimmed';
 
-  const para1 = `<p><b>Short version:</b> the Osmo Pocket 3 is the better travel camera for most people; the Insta360 Ace Pro 2 wins only if you mostly shoot action or in the rain.<a class="ref-mark" href="#">1</a></p>`;
-  const callout = `<div class="callout"><p>You wrote: "which one for a two-week trip, mostly walking and food?" That pushes the answer toward pocketability and stabilisation over waterproofing.</p></div>`;
-  const para2 = `<p>If your footage is mostly walking, talking and food, the gimbal does the work an electronic crop cannot.<a class="ref-mark" href="#">2</a></p>`;
+  const lede = 'The Osmo Pocket 3 is the better travel camera for most people.';
+  const para = 'The Ace Pro 2 only wins if you mostly shoot action or in the rain. Walking, talking and food are exactly the cases where a gimbal beats a crop.';
 
-  const claimLine = (verdict, text) => `<div class="claim-line"><span class="verdict ${verdict}">${verdict}</span><span>${text}</span></div>`;
-  const thingLine = (name) => `<div class="thing-line"><span class="row-glyph">${SVG.bag}</span><span>${name}</span></div>`;
-  const srcLine = (url) => `<div class="src-line">${url}</div>`;
-  const claims = claimLine('true', 'The Pocket 3 has a 1-inch sensor.') + claimLine('mixed', 'The Ace Pro 2 is better in rain. Only above 12 m.');
-  const things = thingLine('Osmo Pocket 3 creator kit') + thingLine('Insta360 Ace Pro 2');
-  const sources = srcLine('youtube.com/watch?v=fixture01') + srcLine('dpreview.com/reviews/osmo-pocket-3');
+  const sep = '<span class="sep">·</span>';
+  const source = (extra = '') => `<div class="m-source">${SVG.play}<span>youtube</span>${extra}</div>`;
+  const counts = `<span>2 claims</span>${sep}<span>2 things</span>${sep}<span>2 sources</span>`;
+  const title = '<h1 class="m-title">Osmo Pocket 3 vs Insta360 Ace Pro 2 for travel</h1>';
 
-  const turnLabel = (who, when) => `<div class="mono" style="display:flex;gap:9px;margin-bottom:8px;text-transform:uppercase;letter-spacing:.07em;font-size:10px">${who}<span style="margin-left:auto">${when}</span></div>`;
+  const detail = `<button type="button" class="m-detail">${counts}${SVG.chev}</button>`;
+  const note = (n, text, verdict) => `<div class="m-note"><span class="n">${n}</span><span>${text}</span><span class="verdict ${verdict}">${verdict}</span></div>`;
 
-  // A. tabs under each answer, so the detail belongs to the turn above it
-  const under = (i) => `<div class="ans-turn">
-    ${turnLabel('You asked', 'Sep 7')}
-    <p class="prose" style="font-style:italic;margin-bottom:18px">Osmo Pocket 3 vs Insta360 Ace Pro 2 for a two-week trip?</p>
-    ${turnLabel('Answer · standard · 2 min · $0.042', 'Sep 7')}
-    <div class="body-rail">
-      <div class="rail" style="min-height:0"></div>
-      <div class="answer-body">
-        <div class="prose">${para1}${callout}${para2}</div>
-        <div class="tabs turn-tabs" role="tablist">
-          <button type="button" role="tab" aria-selected="true">Claims <span class="n">2</span></button>
-          <button type="button" role="tab" aria-selected="false">Things <span class="n">2</span></button>
-          <button type="button" role="tab" aria-selected="false">Sources <span class="n">2</span></button>
-          <button type="button" role="tab" aria-selected="false">Run</button>
-        </div>
-        <div style="padding-top:12px">${claims}</div>
-      </div>
-    </div>
+  // A. trimmed: the same page with the repeated chrome and the extra copy taken out
+  const trimmed = `<div class="page">
+    ${source()}
+    ${title}
+    <p class="m-para"><b>${lede}</b> ${para}</p>
+    ${detail}
   </div>`;
 
-  // B. everything folded into one block after the prose, closed by default
-  const folded = `<div class="ans-turn">
-    ${turnLabel('Answer · standard · 2 min · $0.042', 'Sep 7')}
-    <div class="body-rail">
-      <div class="rail" style="min-height:0"></div>
-      <div class="answer-body">
-        <div class="prose">${para1}${callout}${para2}</div>
-        <div class="fold">
-          <button type="button" class="fold-head" aria-expanded="true">What this is based on<span class="counts">2 claims · 2 things · 2 sources</span>${SVG.chev}</button>
-          <div class="fold-body">
-            <div class="sec-block"><h3>Claims</h3>${claims}</div>
-            <div class="sec-block"><h3>Things</h3>${things}</div>
-            <div class="sec-block"><h3>Sources</h3>${sources}</div>
-          </div>
-        </div>
-      </div>
-    </div>
+  // B. bare: no generated title at all, everything the page knows on one line at the top
+  const bare = `<div class="page">
+    ${source(`${sep}${counts}`)}
+    <p class="m-lede">${lede}</p>
+    <p class="m-para">${para}</p>
   </div>`;
 
-  // C. claims as numbered notes: a real margin column on desktop, inline chips on the phone
-  const mnotes = `
-    <div class="mnote"><span class="n">1</span><span>Pocket 3 has a 1-inch sensor</span><span class="verdict true">true</span></div>
-    <div class="mnote"><span class="n">2</span><span>Gimbal beats electronic crop when walking</span><span class="verdict true">true</span></div>`;
-  const margin = `<div class="ans-turn">
-    ${turnLabel('Answer · standard · 2 min · $0.042', 'Sep 7')}
-    <div class="body-rail">
-      <div class="rail" style="min-height:0"></div>
-      <div class="answer-body">
-        <div class="marginal">
-          <div>
-            <div class="prose">${para1}</div>
-            <div class="mnote-inline"><span class="n">1</span><span>Pocket 3 has a 1-inch sensor</span><span class="verdict true">true</span></div>
-            <div class="prose">${callout}${para2}</div>
-            <div class="mnote-inline"><span class="n">2</span><span>Gimbal beats electronic crop when walking</span><span class="verdict true">true</span></div>
-          </div>
-          <div class="margin-col">${mnotes}</div>
-        </div>
-        <div class="fold">
-          <button type="button" class="fold-head" aria-expanded="false">Things and sources<span class="counts">2 things · 2 sources</span>${SVG.chev}</button>
-        </div>
-      </div>
-    </div>
+  // C. lede first: the answer's own opening sentence replaces the generated title
+  const ledefirst = `<div class="page">
+    ${source(sep + '<span>Sep 7</span>')}
+    <p class="m-lede lg">${lede}</p>
+    <p class="m-para">${para}</p>
+    ${detail}
   </div>`;
 
-  // D. the detail bar is pinned above the composer and opens a sheet over the page; on the
-  // desktop frame there is room for it beside the prose, so it becomes a sticky rail.
-  const eachturn = `<div class="eachturn-wrap">
-    <div class="eachturn-main">
-      <div class="ans-turn">
-        ${turnLabel('Answer · standard · 2 min · $0.042', 'Sep 7')}
-        <div class="body-rail">
-          <div class="rail" style="min-height:0"></div>
-          <div class="answer-body">
-            <div class="prose">${para1}${callout}${para2}</div>
-          </div>
-        </div>
-      </div>
-    </div>
-    <div class="eachturn-rail">
-      <div class="pin-bar" role="tablist" aria-label="Answer detail">
-        <button type="button" role="tab" aria-selected="true">Claims <span class="n">2</span></button>
-        <button type="button" role="tab" aria-selected="false">Things <span class="n">2</span></button>
-        <button type="button" role="tab" aria-selected="false">Sources <span class="n">2</span></button>
-        <button type="button" role="tab" aria-selected="false">Run</button>
-      </div>
-      <div class="detail-dock">
-        <div class="dock-grab"></div>
-        <div class="dock-head"><h3>Claims</h3><span class="meta">2</span></div>
-        <div class="dock-body">${claims}</div>
-      </div>
-    </div>
+  // D. inline only: no detail row anywhere, each claim sits under the sentence it qualifies
+  const inline = `<div class="page">
+    ${source(sep + '<span>Sep 7</span>')}
+    ${title}
+    <p class="m-para">${lede}${note('1', 'Pocket 3 has a 1-inch sensor', 'true')}</p>
+    <p class="m-para">${para}${note('2', 'Gimbal beats a crop when walking', 'true')}</p>
   </div>`;
 
-  const turn = { under: under(1), aside: folded, margin, eachturn }[v] ?? under(1);
-
-  return `<div class="page${v === 'eachturn' ? ' page-wide' : ''}">
-    <div class="answer-metabar" style="margin-bottom:6px"><span>youtube</span><span>·</span><span>standard</span><span>·</span><span>2 min</span><span>·</span><span>$0.042</span></div>
-    <h1 class="answer-title">Osmo Pocket 3 vs Insta360 Ace Pro 2 for travel</h1>
-    <div class="clip">
-      <span class="clip-thumb">${SVG.play}</span>
-      <span style="flex:1;min-width:0"><div class="clip-title">Osmo Pocket 3 vs Insta360 Ace Pro 2 — which travel camera?</div><div class="clip-url">www.youtube.com/watch?v=fixture01</div></span>
-      <span class="clip-tags"><span class="chip tag">#camera</span><span class="chip tag">#travel</span></span>
-    </div>
-    ${turn}
-  </div>
+  const body = { trimmed, bare, ledefirst, inline }[v] ?? trimmed;
+  return `${body}
   <div class="composer"><input class="input" placeholder="Ask a follow-up…"><button type="button" class="send" aria-label="Send">${SVG.send}</button></div>`;
 };
 
