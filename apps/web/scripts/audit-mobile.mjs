@@ -41,7 +41,12 @@ for (const width of [390, 320]) {
 
       const report = await page.evaluate(() => {
         const de = document.documentElement;
-        const out = { overflow: de.scrollWidth - de.clientWidth, small: [], clipped: [], truncated: [] };
+        const out = {
+          overflow: de.scrollWidth - de.clientWidth,
+          small: [],
+          clipped: [],
+          truncated: [],
+        };
         const label = (el) => {
           const t = (el.getAttribute('aria-label') || el.textContent || '').trim().slice(0, 28);
           return `${el.tagName.toLowerCase()}.${(el.className || '').toString().split(' ')[0]}${

@@ -186,9 +186,7 @@ async function rootPage(app: FastifyInstance, hosted: HostedAuth): Promise<void>
       }
     }
     reply.header('cache-control', 'no-store');
-    const html = signedIn
-      ? LANDING_HTML.replace('</body>', `${OPEN_PILL}</body>`)
-      : LANDING_HTML;
+    const html = signedIn ? LANDING_HTML.replace('</body>', `${OPEN_PILL}</body>`) : LANDING_HTML;
     return reply.code(200).type('text/html; charset=utf-8').send(html);
   });
 }

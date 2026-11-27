@@ -91,7 +91,7 @@ screenshots rather than by eye.
 - **The accent is the landing's clay, not pine.** The decision above reserved clay for tag
   chips and made a deep pine the single accent. That held while the app and the marketing
   landing were separate surfaces. They are one product now, and the landing's
-  [`DESIGN-LANGUAGE.md`](../../../doubletake-cloud-existing/docs/DESIGN-LANGUAGE.md) makes
+  `DESIGN-LANGUAGE.md` (in the private cloud repo) makes
   clay (`--rail: #C45A3C`) its accent — so the app adopted it, and the two surfaces no longer
   read as different products.
 - **The landing's exact value did not pass contrast, so the app darkens it.** `#C45A3C` is
