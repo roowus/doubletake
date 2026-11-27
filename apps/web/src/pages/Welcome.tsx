@@ -53,7 +53,13 @@ export function Welcome({ onAuthed }: { onAuthed: () => void }) {
     api
       .health()
       .then((h) => setHasOwner(h.hasOwner))
-      .catch(() => setErr('Cannot reach the Doubletake server.'));
+      // A failed probe must not strand the form. `hasOwner` gates the button, but pairing never
+      // needs it, so assume the server has an owner (password + pairing code are both offered)
+      // and let the submit surface the real error. Leaving it `null` disables the button forever.
+      .catch(() => {
+        setHasOwner(true);
+        setErr('Cannot reach the Doubletake server.');
+      });
     const c = new URLSearchParams(location.search).get('code');
     if (c) {
       setCode(c.toUpperCase());

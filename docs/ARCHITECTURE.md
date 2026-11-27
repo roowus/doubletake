@@ -450,7 +450,9 @@ the `theme-color` meta so the browser chrome follows a forced theme. The service
 is a custom `src/sw.ts` (vite-plugin-pwa `injectManifest`): Workbox precache for the shell,
 never the API, plus `push` (shows the notification) and `notificationclick` (focuses an open
 window and navigates to `/chat/<id>`, else opens one) handlers. First run (`pages/Welcome.tsx`) asks for the owner password; other devices redeem a
-pairing code shown as a QR. The page is two columns from 900 px (the brand statement and the
+pairing code shown as a QR. A failed `health` probe assumes an owner exists (so both the password
+and the pairing-code paths stay reachable) and shows the error inline rather than leaving the
+submit button disabled. The page is two columns from 900 px (the brand statement and the
 three-step "how it works" list set against the margin rail, the form beside it) and one column
 on phones. Android wraps this in Capacitor and adds the native share activity and FCM.
 Desktop uses the installed PWA over Tailscale.
