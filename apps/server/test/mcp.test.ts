@@ -168,4 +168,73 @@ describe('MCP server', () => {
     expect(env.repo.getItem(env.repo.getChat(chatId)?.itemId ?? '')?.channel).toBe('library');
     await client.close();
   });
+
+  /**
+   * `limit` must count matching chats, not chats examined. The regression: filters were applied
+   * to an already-limited page, so a tag whose items sat outside the newest `limit` answered
+   * "No chats." Tags and collections both go through `repo.listChats(..., { itemIds })`.
+   */
+  it('list_chats filters by tag and collection before applying the limit', async () => {
+    const client = await connect(token);
+    // Two tagged chats that are OLDER than `limit` untagged ones, so a filter-after-limit page
+    // of 3 would never contain them.
+    const tagged: string[] = [];
+    for (const body of ['Tagged alpha note', 'Tagged beta note']) {
+      const out = textOf(await client.callTool({ name: 'save', arguments: { text: body } }));
+      const id = /chat `([^`]+)`/.exec(out)?.[1] ?? '';
+      const itemId = env.repo.getChat(id)?.itemId ?? '';
+      env.repo.setAutoTags(itemId, ['mcp-filter-probe']);
+      tagged.push(id);
+    }
+    for (const body of ['Untagged one', 'Untagged two', 'Untagged three']) {
+      await client.callTool({ name: 'save', arguments: { text: body } });
+    }
+
+    const byTag = textOf(
+      await client.callTool({
+        name: 'list_chats',
+        arguments: { tag: 'mcp-filter-probe', limit: 3 },
+      }),
+    );
+    for (const id of tagged) expect(byTag).toContain(`chat \`${id}\``);
+
+    const col = env.repo.createCollection(
+      { name: 'Probe', query: 'tag:mcp-filter-probe', manual: false, auto: false },
+      undefined,
+    );
+    const byCollection = textOf(
+      await client.callTool({ name: 'list_chats', arguments: { collection: col, limit: 3 } }),
+    );
+    for (const id of tagged) expect(byCollection).toContain(`chat \`${id}\``);
+
+    // Both filters intersect: a tag that does not overlap the collection yields nothing, and
+    // an unmatched tag is an honest empty answer rather than "no filter".
+    const wrongTag = textOf(
+      await client.callTool({ name: 'list_chats', arguments: { tag: 'no-such-tag', limit: 3 } }),
+    );
+    expect(wrongTag).toBe('No chats.');
+    await client.close();
+  });
+
+  /** The agent's natural flow is `save` then `get_chat`; the default wait must actually wait. */
+  it('get_chat waits for a just-saved run without an explicit wait_seconds', async () => {
+    const client = await connect(token);
+    // Without a delay the fake brain finishes before `get_chat` is even called, so the test
+    // would pass on a default of 0 and prove nothing. Slow it enough to still be in flight.
+    brain.delayMs = 1500;
+    try {
+      const saved = textOf(
+        await client.callTool({ name: 'save', arguments: { text: 'Default wait probe' } }),
+      );
+      const chatId = /chat `([^`]+)`/.exec(saved)?.[1] ?? '';
+      const detail = textOf(
+        await client.callTool({ name: 'get_chat', arguments: { chat_id: chatId } }),
+      );
+      expect(detail).toContain('Researched answer.');
+      expect(detail).not.toContain('_No answer yet._');
+    } finally {
+      brain.delayMs = 0;
+    }
+    await client.close();
+  });
 });

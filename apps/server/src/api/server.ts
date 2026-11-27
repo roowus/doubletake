@@ -19,6 +19,7 @@ import type { Repo, TenantCtx } from '../db/repo.js';
 import { brainCoords, type Geocoder, geocodeQuery } from '../geo/index.js';
 import { IngestError, ingestAsync, ingestUploadAsync } from '../ingest/index.js';
 import {
+  intersectFilters,
   listCollections,
   resolveCollection,
   resolveQuery,
@@ -442,21 +443,23 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
       })
       .parse(req.query);
     const ctx = tenantCtx(req);
-    let rows = await repo.listChats(q.limit, ctx);
+    // Resolve every filter to one id set first, then let SQL apply the limit: filtering a
+    // limited page afterwards dropped matches whenever the newest `limit` chats did not
+    // include them. `undefined` means "no filter at all", an empty set means "nothing matches".
+    const filters: Set<string>[] = [];
     if (q.collection) {
       const c = await repo.getCollection(q.collection, ctx);
       if (!c) return reply.code(404).send({ error: 'collection not found' });
-      const ids = await resolveCollection(repo, c, ctx);
-      rows = rows.filter((r) => ids.has(r.item.id));
+      filters.push(await resolveCollection(repo, c, ctx));
     }
-    if (q.q?.trim()) {
-      const ids = new Set(await repo.searchFts(ftsQuery(q.q), q.limit, ctx));
-      rows = rows.filter((r) => ids.has(r.item.id));
-    }
-    if (q.tag?.trim()) {
-      const ids = new Set(await repo.itemIdsByTag(q.tag, ctx));
-      rows = rows.filter((r) => ids.has(r.item.id));
-    }
+    if (q.q?.trim()) filters.push(new Set(await repo.searchFts(ftsQuery(q.q), q.limit, ctx)));
+    if (q.tag?.trim()) filters.push(new Set(await repo.itemIdsByTag(q.tag, ctx)));
+    const itemIds = intersectFilters(filters);
+    const rows = await repo.listChats(
+      q.limit,
+      ctx,
+      itemIds ? { itemIds: [...itemIds] } : undefined,
+    );
     return await Promise.all(rows.map((r) => toChatSummary(repo, r.chat, r.item, ctx)));
   });
 

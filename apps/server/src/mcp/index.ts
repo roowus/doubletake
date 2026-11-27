@@ -26,7 +26,7 @@ import type { Session } from '../auth/index.js';
 import type { ChatRow, ItemRow, Repo, TenantCtx } from '../db/repo.js';
 import { ingestAsync } from '../ingest/index.js';
 import { LIBRARY_TOOL } from '../library/ask.js';
-import { listCollections, resolveCollection } from '../library/collections.js';
+import { intersectFilters, listCollections, resolveCollection } from '../library/collections.js';
 import type { QueueWorker } from '../queue/worker.js';
 
 export const MCP_PATH = '/mcp';
@@ -34,6 +34,13 @@ const SERVER_NAME = 'doubletake';
 const SERVER_VERSION = '0.1.0';
 /** `get_chat` may block this long waiting for a run to finish (clients poll beyond that). */
 const MAX_WAIT_S = 120;
+/**
+ * The default wait. An agent's usual flow is `save` then `get_chat`, and a run takes ~25 s;
+ * defaulting to 0 answered `_No answer yet._` every time. A chat that is already answered
+ * returns immediately, so this only blocks while a run is genuinely in flight, and it stays
+ * under the SDK client's 60 s default request timeout.
+ */
+const DEFAULT_WAIT_S = 15;
 
 export interface McpDeps {
   repo: Repo;
@@ -238,17 +245,21 @@ export function buildMcpServer(
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     async ({ collection, tag, limit }) => {
-      let rows = await repo.listChats(limit, ctx);
+      // Resolve filters first so SQL applies the limit to matching chats. Filtering a limited
+      // page here used to drop matches: a tag with three chats answered one at `limit: 10`.
+      const filters: Set<string>[] = [];
       if (collection) {
         const c = await repo.getCollection(collection, ctx);
         if (!c) return { ...text(`Collection ${collection} not found.`), isError: true };
-        const ids = await resolveCollection(repo, c, ctx);
-        rows = rows.filter((r) => ids.has(r.item.id));
+        filters.push(await resolveCollection(repo, c, ctx));
       }
-      if (tag?.trim()) {
-        const ids = new Set(await repo.itemIdsByTag(tag, ctx));
-        rows = rows.filter((r) => ids.has(r.item.id));
-      }
+      if (tag?.trim()) filters.push(new Set(await repo.itemIdsByTag(tag, ctx)));
+      const itemIds = intersectFilters(filters);
+      const rows = await repo.listChats(
+        limit,
+        ctx,
+        itemIds ? { itemIds: [...itemIds] } : undefined,
+      );
       return text(
         rows.length
           ? (await Promise.all(rows.map((r) => summaryLine(repo, r.chat, r.item, ctx)))).join('\n')
@@ -264,11 +275,13 @@ export function buildMcpServer(
       description:
         'The saved item, its note, the researched answer with claims and sources, entities and ' +
         'follow-ups. Set include_extractions for the raw transcript/OCR/comments (long, untrusted). ' +
-        `wait_seconds (≤${MAX_WAIT_S}) blocks until the current run finishes; call again if it is still running.`,
+        `wait_seconds (≤${MAX_WAIT_S}, default ${DEFAULT_WAIT_S}) blocks until the current run finishes; ` +
+        'it returns at once when the chat is already answered, so call it straight after `save` and ' +
+        'raise the wait or call again if the run is still going.',
       inputSchema: {
         chat_id: z.string().min(1),
         include_extractions: z.boolean().default(false),
-        wait_seconds: z.number().int().min(0).max(MAX_WAIT_S).default(0),
+        wait_seconds: z.number().int().min(0).max(MAX_WAIT_S).default(DEFAULT_WAIT_S),
       },
       annotations: { readOnlyHint: true, openWorldHint: false },
     },

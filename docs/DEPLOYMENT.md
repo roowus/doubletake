@@ -179,6 +179,23 @@ which queue work exactly like the share sheet; the answer arrives in the app and
 wait for it with `get_chat { wait_seconds }`. The endpoint is refused on the tunnel hostname,
 so it is reachable over the tailnet only. Revoke the agent from Settings → Devices.
 
+The usual agent flow is `save` then `get_chat` on the returned chat id. `get_chat` waits 15
+seconds by default, so that pair works in one call; it returns immediately when the chat is
+already answered. Raise `wait_seconds` (max 120) or call again if a run is still going. The
+SDK client's own default request timeout is 60 s, so keep a single call under that.
+
+`list_chats` filters by `tag` and `collection` in the query, so `limit` counts matching chats
+rather than chats examined: a tag with three matches returns three even at `limit: 3`.
+
+Limitations, so you know what to expect:
+
+- **Tools only.** The server exposes no MCP resources or prompts, so the library is reachable
+  by tool call, not by browsing. There is no push either; the agent polls `get_chat`.
+- **Streamable HTTP only.** The older HTTP+SSE transport (`GET /mcp` opening an event stream)
+  is not served: `GET` and `DELETE` answer `405`. Use a Streamable-HTTP client or `mcp-remote`.
+- **Not for browser clients.** CORS allows only the app's own origins and does not expose the
+  `mcp-*` headers, so a page cannot drive `/mcp`. Server-side agents are unaffected.
+
 ### Karakeep and Memos
 Settings → **Import and export** ([ADR 0024](adr/0024-karakeep-memos-interchange.md)).
 

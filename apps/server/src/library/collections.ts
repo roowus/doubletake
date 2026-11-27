@@ -79,6 +79,24 @@ export async function seedAutoCollections(
   return added;
 }
 
+/**
+ * Intersect the resolved filters into the one id set `repo.listChats` can apply in SQL.
+ * `undefined` = no filter at all; an empty set = nothing matches (callers pass it through so
+ * the query short-circuits rather than returning everything).
+ */
+export function intersectFilters(sets: Set<string>[]): Set<string> | undefined {
+  if (sets.length === 0) return undefined;
+  const [first, ...rest] = sets;
+  if (!first) return undefined;
+  let out = first;
+  for (const s of rest) {
+    const next = new Set<string>();
+    for (const id of out) if (s.has(id)) next.add(id);
+    out = next;
+  }
+  return out;
+}
+
 /** Item ids matching a collection, in no particular order (the caller keeps chat-list order). */
 export async function resolveCollection(
   repo: Repo,

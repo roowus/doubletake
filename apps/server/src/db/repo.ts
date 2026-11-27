@@ -447,13 +447,28 @@ export class Repo {
     );
   }
 
-  listChats(limit = 200, ctx?: TenantCtx): { chat: ChatRow; item: ItemRow }[] {
+  /**
+   * Newest first. `opts.itemIds` filters in SQL, so `limit` counts matching chats rather than
+   * chats examined: filtering a limited page in the caller silently drops matches (a tag with
+   * three chats returned one at `limit: 10`). An empty id list is a real answer ("nothing
+   * matches"), not "no filter" — and it must short-circuit, because `inArray` with an empty
+   * array emits invalid SQL.
+   */
+  listChats(
+    limit = 200,
+    ctx?: TenantCtx,
+    opts?: { itemIds?: string[] },
+  ): { chat: ChatRow; item: ItemRow }[] {
+    const itemIds = opts?.itemIds;
+    if (itemIds && itemIds.length === 0) return [];
+    const filters = [...this.scope('chats', ctx)];
+    if (itemIds) filters.push(inArray(this.t.chats.itemId, itemIds));
     return this.many<{ chat: ChatRow; item: ItemRow }>(
       this.db
         .select({ chat: this.t.chats, item: this.t.items })
         .from(this.t.chats)
         .innerJoin(this.t.items, eq(this.t.items.id, this.t.chats.itemId))
-        .where(and(...this.scope('chats', ctx)))
+        .where(and(...filters))
         .orderBy(desc(sql`coalesce(${this.t.chats.lastMessageAt}, ${this.t.chats.createdAt})`))
         .limit(limit),
     );
