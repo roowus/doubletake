@@ -61,8 +61,10 @@ body{
 .vr{width:1px;height:22px;background:#3a342c;margin:0 4px}
 
 .stage{max-width:1480px;margin:0 auto;padding:26px 20px 90px}
-.hero-note{max-width:74ch;margin:0 0 26px;font-size:14.5px;color:var(--muted);line-height:1.6}
+.hero-note{max-width:74ch;margin:0 0 18px;font-size:14.5px;color:var(--muted);line-height:1.6}
 .hero-note b{color:var(--text);font-weight:600}
+.locked{max-width:74ch;margin:0 0 26px;padding:10px 14px;border-radius:var(--r-sm);background:var(--accent-soft);color:var(--accent-text);font-size:12.5px;line-height:1.5}
+.locked b{text-transform:uppercase;letter-spacing:.12em;font-size:10.5px;margin-right:8px}
 
 /* phone shell */
 .frames{display:flex;gap:34px;align-items:flex-start;flex-wrap:wrap}
@@ -79,7 +81,7 @@ body{
 .desk{
   flex:1;min-width:640px;border-radius:18px;overflow:hidden;background:var(--bg);
   box-shadow:0 30px 70px -34px rgba(30,22,12,.4),inset 0 0 0 1px var(--line);
-  display:flex;height:820px;
+  display:flex;height:820px;position:relative;
 }
 .main{flex:1;min-width:0;overflow-y:auto;overflow-x:hidden}
 .page{padding:var(--gutter) var(--gutter) 40px;max-width:820px}
@@ -188,7 +190,73 @@ table.cmp tr:last-child td{border-bottom:0}
 .sec-block h3{font-size:16px;font-weight:650;letter-spacing:-.015em;margin-bottom:12px;display:flex;align-items:center;gap:9px}
 .sec-block h3 .n{font-family:var(--font-mono);font-size:10.5px;font-weight:500;color:var(--muted);background:var(--surface-2);padding:1px 6px;border-radius:5px}
 
-.composer{display:flex;align-items:center;gap:10px;padding:12px var(--gutter);border-top:1px solid var(--line);background:var(--surface);flex:none}
+/* answer detail, four placements */
+.ans-turn + .ans-turn{margin-top:30px;padding-top:26px;border-top:1px solid var(--line)}
+.tabs.turn-tabs{margin-top:20px}
+.fold{margin-top:24px;border:1px solid var(--line);border-radius:var(--r-md);background:var(--surface);overflow:hidden}
+.fold-head{display:flex;flex-wrap:wrap;align-items:center;gap:3px 10px;padding:13px 15px;font-size:13.5px;font-weight:600;color:var(--text);background:transparent;border:0;font-family:inherit;width:100%;text-align:left;cursor:pointer;white-space:nowrap}
+.fold-head svg{order:1;width:15px;height:15px;margin-left:auto;fill:none;stroke:var(--muted);stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none;transform:rotate(90deg)}
+.fold-head .counts{order:2;flex-basis:100%;font-family:var(--font-mono);font-size:10px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);font-weight:500;overflow:hidden;text-overflow:ellipsis}
+.fold-body{padding:2px 15px 14px;border-top:1px solid var(--line)}
+.fold-body .sec-block{margin-top:16px;padding-top:14px}
+.fold-body .sec-block:first-child{margin-top:14px;padding-top:0;border-top:0}
+/* Margin notes: a real right-hand column in the desktop frame, inline chips after each
+   paragraph in the phone frame, since 390 px has no margin to write in. Scoped by frame
+   class, not a media query, because the frames are mocks inside one viewport. */
+.marginal{display:block}
+.desk .marginal{display:grid;grid-template-columns:minmax(0,1fr) 210px;column-gap:26px;align-items:start}
+.margin-col{padding-top:6px;display:none}
+.desk .margin-col{display:block}
+.mnote{margin-bottom:16px;font-size:12px;line-height:1.45;color:var(--muted);display:flex;gap:7px;align-items:baseline}
+.mnote .n{font-family:var(--font-mono);font-size:10px;color:var(--accent-text);flex:none}
+.mnote .verdict{height:17px;padding:0 5px;font-size:9.5px;margin-left:auto;flex:none}
+.mnote-inline{display:flex;gap:8px;align-items:baseline;margin:-2px 0 18px;padding:7px 11px;border-radius:var(--r-xs);background:var(--surface-2);font-size:12px;line-height:1.4;color:var(--muted)}
+.mnote-inline .n{font-family:var(--font-mono);font-size:10px;color:var(--accent-text);flex:none}
+.mnote-inline .verdict{height:16px;padding:0 5px;font-size:9px;margin-left:auto;flex:none}
+.desk .mnote-inline{display:none}
+.ref-mark{font-family:var(--font-mono);font-size:9px;color:var(--accent-text);vertical-align:super;text-decoration:none;padding:0 1px}
+
+/* A dock above the composer: the detail panel grows up out of the tab bar, the bar never
+   moves. One tap from anywhere on the page to the claims, and the prose stays behind it. */
+.detail-dock{position:absolute;left:0;right:0;bottom:112px;z-index:3;background:var(--surface);border-radius:var(--r-lg) var(--r-lg) 0 0;box-shadow:0 -14px 40px -22px rgba(30,22,12,.4)}
+.dock-head{display:flex;align-items:baseline;gap:9px;padding:11px 16px 9px}
+.dock-head h3{font-size:14px;font-weight:650;letter-spacing:-.015em}
+.dock-head .meta{margin-left:auto}
+.dock-grab{width:34px;height:4px;border-radius:2px;background:var(--line-strong);margin:7px auto 0}
+.dock-body{padding:0 16px 10px;max-height:214px;overflow-y:auto}
+
+/* The pinned detail bar itself. */
+.pin-bar{position:absolute;left:0;right:0;bottom:67px;z-index:4;display:flex;gap:2px;border-top:1px solid var(--line);background:var(--surface);padding:0 8px}
+.pin-bar button{flex:1;display:inline-flex;align-items:center;justify-content:center;gap:5px;min-height:44px;border:0;background:transparent;font:inherit;font-size:12.5px;font-weight:550;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap}
+.pin-bar button[aria-selected="true"]{color:var(--text);border-bottom-color:var(--accent)}
+.pin-bar .n{font-family:var(--font-mono);font-size:10px;color:var(--muted);background:var(--surface-2);padding:1px 5px;border-radius:5px}
+
+/* D on desktop: there is room for the dock to stay open beside the prose instead of
+   covering it. The pinned bar becomes the rail's header, the dock its body, and the
+   absolute offsets that make it a bottom dock on the phone are dropped. */
+.eachturn-wrap{display:block}
+.eachturn-rail{display:contents}
+.desk .page-wide{max-width:1010px}
+.desk .eachturn-wrap{display:grid;grid-template-columns:minmax(0,1fr) 268px;column-gap:26px;align-items:start}
+.desk .eachturn-rail{display:flex;flex-direction:column;position:sticky;top:18px;border:1px solid var(--line);border-radius:var(--r-md);background:var(--surface);overflow:hidden;box-shadow:var(--shadow)}
+.desk .eachturn-rail .pin-bar{order:-1;position:static;padding:0 4px;border-top:0;border-bottom:1px solid var(--line);background:transparent}
+.desk .eachturn-rail .pin-bar button{font-size:11.5px;min-height:40px;padding:0 2px}
+.desk .eachturn-rail .detail-dock{position:static;border-radius:0;background:transparent;box-shadow:none}
+.desk .eachturn-rail .dock-grab{display:none}
+.desk .eachturn-rail .dock-head{display:none}
+.desk .eachturn-rail .dock-body{max-height:none;overflow:visible;padding-bottom:12px}
+
+/* claims, expanded, for the per-turn and folded variants */
+.claim-line{display:flex;gap:10px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--line);font-size:13.5px;line-height:1.45}
+.claim-line:last-child{border-bottom:0}
+.claim-line .verdict{height:18px;padding:0 6px;font-size:9.5px;margin-top:1px}
+.thing-line{display:flex;gap:10px;align-items:center;padding:8px 0;font-size:13.5px}
+.thing-line .row-glyph{width:24px;height:24px;margin:0}
+.src-line{font-family:var(--font-mono);font-size:10.5px;color:var(--muted);padding:5px 0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* Sticky to the bottom of the frame, as FollowUp is in the app, so the follow-up field is
+   always in reach and the answer variants are judged against the real chrome. */
+.composer{position:sticky;bottom:0;z-index:5;display:flex;align-items:center;gap:10px;padding:12px var(--gutter);border-top:1px solid var(--line);background:var(--surface);flex:none}
 .composer .input{border-radius:999px;height:42px}
 .send{width:42px;height:42px;border-radius:50%;background:var(--accent);border:0;display:grid;place-items:center;flex:none;cursor:pointer}
 .send svg{width:17px;height:17px;fill:none;stroke:#fff;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
@@ -299,6 +367,7 @@ html[data-cmp="on"] #compareWrap{display:flex}
 </div>
 
 <div class="stage">
+  <div class="locked" id="locked" hidden></div>
   <p class="hero-note" id="heroNote"></p>
 
   <div class="frames" id="singleWrap">
@@ -308,8 +377,8 @@ html[data-cmp="on"] #compareWrap{display:flex}
         <div class="phone-screen" id="phoneScreen"></div>
       </div>
     </div>
-    <div style="flex:1;min-width:660px">
-      <div class="frame-cap" id="capDesk">Desktop · 1280</div>
+    <div style="flex:1 1 100%;min-width:0">
+      <div class="frame-cap" id="capDesk">Desktop</div>
       <div class="desk" id="deskShell"></div>
     </div>
   </div>
@@ -391,9 +460,11 @@ const QUESTIONS = {
   tabs: {
     label:'Tab bar',
     note:'<b>Where does To do live?</b> Add is a verb sitting among nouns, and To do has a full page but no tab. Every option gets the same content, only the chrome changes.',
+    settled:'Current four tabs, To do reached from Library.',
+    settledV:'current',
     screens:['inbox','answer','library','settings','todo'],
     variants:[
-      {id:'current', label:'A · Current', screen:'inbox'},
+      {id:'current', label:'A · Current 4 tabs', screen:'inbox'},
       {id:'todo', label:'B · To do tab + Add button', screen:'inbox'},
       {id:'three', label:'C · 3 tabs, To do card', screen:'inbox'},
     ],
@@ -401,6 +472,8 @@ const QUESTIONS = {
   search: {
     label:'Search',
     note:'<b>Where does search live?</b> It already searches the whole library, but the field only exists on Inbox, so it looks like an inbox filter and is missing everywhere else.',
+    settled:'Inbox only, as it is today. The field names the library so it stops reading as a filter.',
+    settledV:'inbox',
     screens:['inbox','answer','library','settings'],
     variants:[
       {id:'inbox', label:'A · Inbox only', screen:'inbox'},
@@ -411,6 +484,8 @@ const QUESTIONS = {
   library: {
     label:'Library',
     note:'<b>Five jobs on one page, or two pages?</b> Today Library stacks the To do row, entity tiles, two map tiles, collections and an A-Z tag list. Same data in all three, arranged differently.',
+    settled:'Hub with two sub-pages, and To do as a row at the very top.',
+    settledV:'hub',
     screens:['library'],
     variants:[
       {id:'current', label:'A · Current, 5 groups', screen:'library'},
@@ -420,12 +495,13 @@ const QUESTIONS = {
   },
   answer: {
     label:'Answer',
-    note:'<b>Four tabs, or three?</b> Run is already shown by the margin rail filling as the run progresses, so a Run tab beside it says the same thing twice.',
+    note:'<b>Where do the claims, things and sources live?</b> Today they are four tabs under the whole conversation, so they describe only the newest answer and sit a scroll away from the prose they belong to. These four move the detail, not the tab count.',
     screens:['answer'],
     variants:[
-      {id:'four', label:'A · 4 tabs', screen:'answer'},
-      {id:'three', label:'B · 3 tabs, Run in the rail', screen:'answer'},
-      {id:'scroll', label:'C · No tabs, one scroll', screen:'answer'},
+      {id:'under', label:'A · Tab strip under each answer', screen:'answer'},
+      {id:'aside', label:'B · Folded block after the prose', screen:'answer'},
+      {id:'margin', label:'C · Margin notes beside the claims', screen:'answer'},
+      {id:'eachturn', label:'D · Tabs pinned to the answer, not the page', screen:'answer'},
     ],
   },
 };
@@ -459,10 +535,16 @@ function writeUrl(){
 }
 
 /* ------------------------------------------------------------------ chrome */
+/** The answer already given for a question, if it has one. The chrome follows these
+ *  everywhere else, so an open question is judged against the settled app. */
+function settledVariant(qid){
+  if (state.q === qid) return state.v;
+  const q = QUESTIONS[qid];
+  return q && q.settledV ? q.settledV : null;
+}
+
 function tabSet(){
-  // The tab set depends on the answer to question 1, so it follows whichever
-  // variant of question 1 is selected, even while looking at another question.
-  const tabsVariant = state.q === 'tabs' ? state.v : 'current';
+  const tabsVariant = settledVariant('tabs') ?? 'current';
   if (tabsVariant === 'todo') {
     return [
       {id:'inbox', label:'Inbox', icon:'inbox', to:'/'},
@@ -487,12 +569,12 @@ function tabSet(){
 }
 
 function hasFab(){
-  const tabsVariant = state.q === 'tabs' ? state.v : 'current';
+  const tabsVariant = settledVariant('tabs') ?? 'current';
   return tabsVariant !== 'current';
 }
 
 function searchMode(){
-  return state.q === 'search' ? state.v : 'inbox';
+  return settledVariant('search') ?? 'inbox';
 }
 
 function tabbarHtml(active){
@@ -530,7 +612,7 @@ const SCREENS = {};
 SCREENS.inbox = () => {
   const mode = searchMode();
   const showField = mode === 'inbox';
-  const pinned = (state.q === 'tabs' ? state.v : 'current') === 'three';
+  const pinned = settledVariant('tabs') === 'three';
   return `<div class="page">
     <h1 class="page-title" style="margin-bottom:16px">Inbox</h1>
     ${showField ? `<div class="searchbar" style="margin-bottom:22px">
@@ -580,15 +662,20 @@ SCREENS.todo = () => `<div class="page">
 </div>`;
 
 SCREENS.library = () => {
-  const v = state.q === 'library' ? state.v : 'current';
+  const v = settledVariant('library') ?? 'current';
   const tile = (icon,label,count,attrs='') => `<a class="tile" href="#"${attrs}><span class="tile-icon">${SVG[icon]}</span><span class="tile-foot"><span class="tile-label">${label}</span><span class="tile-count">${count}</span></span></a>`;
   const tagRows = [['travel',2],['camera',1],['lisbon',1],['recipe',1],['sleep',1],['cycling',1]]
     .map(([t,n])=>`<div class="row" style="align-items:center;padding-top:11px;padding-bottom:11px"><span class="row-glyph" style="background:transparent;color:var(--accent-text);width:20px;height:20px">${SVG.hash}</span><span class="row-body"><span style="font-size:14px">${t}</span></span><span class="row-age">${n}</span></div>`).join('');
 
   if (v === 'hub') {
     return `<div class="page">
-      <h1 class="page-title" style="margin-bottom:6px">Library</h1>
-      <div class="meta" style="margin-bottom:20px">Everything you kept, by kind.</div>
+      <h1 class="page-title" style="margin-bottom:16px">Library</h1>
+      <a class="clip" href="#" style="align-items:center;margin-bottom:22px">
+        <span class="row-glyph" style="margin:0">${SVG.todo}</span>
+        <span style="flex:1"><span class="srow-label">To do</span><div class="meta" style="font-size:12.5px">2 open · Buy the creator kit · Ship the frame</div></span>
+        <span class="srow-chev">${SVG.chev}</span>
+      </a>
+      <div class="meta" style="margin-bottom:12px">Everything else you kept, by kind.</div>
       <div class="hub">
         <a class="hub-card" href="#">
           <span class="tile-icon">${SVG.pin}</span>
@@ -601,12 +688,6 @@ SCREENS.library = () => {
           <span class="go">${SVG.chev}</span>
         </a>
       </div>
-      <h2 class="section">To do</h2>
-      <a class="clip" href="#" style="align-items:center">
-        <span class="row-glyph" style="margin:0">${SVG.todo}</span>
-        <span style="flex:1"><span class="srow-label">2 open</span><div class="meta" style="font-size:12.5px">Buy the creator kit · Ship the frame</div></span>
-        <span class="srow-chev">${SVG.chev}</span>
-      </a>
     </div>`;
   }
 
@@ -640,82 +721,125 @@ SCREENS.library = () => {
 };
 
 SCREENS.answer = () => {
-  const v = state.q === 'answer' ? state.v : 'four';
-  // The tabbed variants are cut to one paragraph plus the callout so the tabs land inside the
-  // 820 px phone frame. The one-scroll variant keeps the long body because the point there is
-  // that the sections flow inline after the prose.
-  const compact = state.q === 'answer' && v !== 'scroll';
-  const body = compact
-    ? `<div class="prose">
-      <p><b>Short version:</b> the Osmo Pocket 3 is the better travel camera for most people; the Insta360 Ace Pro 2 wins only if you mostly shoot action or in the rain.</p>
-      <div class="callout"><p>You wrote: "which one for a two-week trip, mostly walking and food?" That pushes the answer toward pocketability and stabilisation over waterproofing.</p></div>
-    </div>`
-    : `<div class="prose">
-      <p><b>Short version:</b> the Osmo Pocket 3 is the better travel camera for most people; the Insta360 Ace Pro 2 wins only if you mostly shoot action or in the rain.</p>
-      <div class="callout"><p>You wrote: "which one for a two-week trip, mostly walking and food?" That pushes the answer toward pocketability and stabilisation over waterproofing.</p></div>
-      <h3>How they compare</h3>
-      <table class="cmp">
-        <tr><th></th><th>Osmo Pocket 3</th><th>Ace Pro 2</th></tr>
-        <tr><td>Sensor</td><td>1-inch</td><td>1/1.3-inch</td></tr>
-        <tr><td>Stabilisation</td><td>3-axis gimbal</td><td>Electronic</td></tr>
-        <tr><td>Waterproof</td><td>No</td><td>12 m</td></tr>
-      </table>
-      <h3>Which to buy</h3>
-      <p>If your footage is mostly walking, talking and food, the gimbal does the work an electronic crop cannot.</p>
-    </div>`;
+  const v = state.q === 'answer' ? state.v : 'under';
 
-  const fourTabs = `<div class="tabs" role="tablist">
-      <button type="button" role="tab" aria-selected="true">Claims <span class="n">1</span></button>
-      <button type="button" role="tab" aria-selected="false">Things <span class="n">2</span></button>
-      <button type="button" role="tab" aria-selected="false">Sources <span class="n">2</span></button>
-      <button type="button" role="tab" aria-selected="false">Run</button>
-    </div>
-    <div style="padding:16px 0 8px;display:flex;gap:11px;align-items:flex-start">
-      <span class="status mono" style="color:var(--ok)">● True</span>
-      <span style="font-size:14px">The Pocket 3 has a 1-inch sensor.</span>
-    </div>`;
+  const para1 = `<p><b>Short version:</b> the Osmo Pocket 3 is the better travel camera for most people; the Insta360 Ace Pro 2 wins only if you mostly shoot action or in the rain.<a class="ref-mark" href="#">1</a></p>`;
+  const callout = `<div class="callout"><p>You wrote: "which one for a two-week trip, mostly walking and food?" That pushes the answer toward pocketability and stabilisation over waterproofing.</p></div>`;
+  const para2 = `<p>If your footage is mostly walking, talking and food, the gimbal does the work an electronic crop cannot.<a class="ref-mark" href="#">2</a></p>`;
 
-  const threeTabs = `<div class="tabs" role="tablist">
-      <button type="button" role="tab" aria-selected="true">Claims <span class="n">1</span></button>
-      <button type="button" role="tab" aria-selected="false">Things <span class="n">2</span></button>
-      <button type="button" role="tab" aria-selected="false">Sources <span class="n">2</span></button>
-    </div>
-    <div style="padding:16px 0 8px;display:flex;gap:11px;align-items:flex-start">
-      <span class="mono" style="color:var(--ok)">● True</span>
-      <span style="font-size:14px">The Pocket 3 has a 1-inch sensor.</span>
-    </div>`;
+  const claimLine = (verdict, text) => `<div class="claim-line"><span class="verdict ${verdict}">${verdict}</span><span>${text}</span></div>`;
+  const thingLine = (name) => `<div class="thing-line"><span class="row-glyph">${SVG.bag}</span><span>${name}</span></div>`;
+  const srcLine = (url) => `<div class="src-line">${url}</div>`;
+  const claims = claimLine('true', 'The Pocket 3 has a 1-inch sensor.') + claimLine('mixed', 'The Ace Pro 2 is better in rain. Only above 12 m.');
+  const things = thingLine('Osmo Pocket 3 creator kit') + thingLine('Insta360 Ace Pro 2');
+  const sources = srcLine('youtube.com/watch?v=fixture01') + srcLine('dpreview.com/reviews/osmo-pocket-3');
 
-  const inlineSections = `<div class="sec-block"><h3>Claims <span class="n">1</span></h3>
-      <div style="display:flex;gap:11px;align-items:flex-start"><span class="mono" style="color:var(--ok)">● True</span><span style="font-size:14px">The Pocket 3 has a 1-inch sensor.</span></div>
-    </div>
-    <div class="sec-block"><h3>Things <span class="n">2</span></h3>
-      <div style="display:flex;flex-direction:column;gap:10px">
-        <div style="display:flex;gap:10px;align-items:center"><span class="row-glyph" style="margin:0">${SVG.bag}</span><span style="font-size:14px">Osmo Pocket 3 creator kit</span></div>
-        <div style="display:flex;gap:10px;align-items:center"><span class="row-glyph" style="margin:0">${SVG.bag}</span><span style="font-size:14px">Insta360 Ace Pro 2</span></div>
+  const turnLabel = (who, when) => `<div class="mono" style="display:flex;gap:9px;margin-bottom:8px;text-transform:uppercase;letter-spacing:.07em;font-size:10px">${who}<span style="margin-left:auto">${when}</span></div>`;
+
+  // A. tabs under each answer, so the detail belongs to the turn above it
+  const under = (i) => `<div class="ans-turn">
+    ${turnLabel('You asked', 'Sep 7')}
+    <p class="prose" style="font-style:italic;margin-bottom:18px">Osmo Pocket 3 vs Insta360 Ace Pro 2 for a two-week trip?</p>
+    ${turnLabel('Answer · standard · 2 min · $0.042', 'Sep 7')}
+    <div class="body-rail">
+      <div class="rail" style="min-height:0"></div>
+      <div class="answer-body">
+        <div class="prose">${para1}${callout}${para2}</div>
+        <div class="tabs turn-tabs" role="tablist">
+          <button type="button" role="tab" aria-selected="true">Claims <span class="n">2</span></button>
+          <button type="button" role="tab" aria-selected="false">Things <span class="n">2</span></button>
+          <button type="button" role="tab" aria-selected="false">Sources <span class="n">2</span></button>
+          <button type="button" role="tab" aria-selected="false">Run</button>
+        </div>
+        <div style="padding-top:12px">${claims}</div>
       </div>
     </div>
-    <div class="sec-block"><h3>Sources <span class="n">2</span></h3>
-      <div class="meta">youtube.com/watch?v=fixture01 · dpreview.com/reviews/osmo-pocket-3</div>
-    </div>
-    <div class="sec-block"><h3>Run</h3>
-      <div class="meta mono" style="font-size:11px;letter-spacing:.05em;text-transform:uppercase">Standard · 2 min · $0.042 · 4 steps</div>
-    </div>`;
+  </div>`;
 
-  return `<div class="page">
-    <div class="answer-metabar" style="margin-bottom:6px"><span>youtube</span><span>·</span><span>standard</span><span>·</span><span>2 min</span><span>·</span><span>$0.042</span>${v === 'three' ? '<a href="#">Run detail</a>' : ''}</div>
+  // B. everything folded into one block after the prose, closed by default
+  const folded = `<div class="ans-turn">
+    ${turnLabel('Answer · standard · 2 min · $0.042', 'Sep 7')}
+    <div class="body-rail">
+      <div class="rail" style="min-height:0"></div>
+      <div class="answer-body">
+        <div class="prose">${para1}${callout}${para2}</div>
+        <div class="fold">
+          <button type="button" class="fold-head" aria-expanded="true">What this is based on<span class="counts">2 claims · 2 things · 2 sources</span>${SVG.chev}</button>
+          <div class="fold-body">
+            <div class="sec-block"><h3>Claims</h3>${claims}</div>
+            <div class="sec-block"><h3>Things</h3>${things}</div>
+            <div class="sec-block"><h3>Sources</h3>${sources}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>`;
+
+  // C. claims as numbered notes: a real margin column on desktop, inline chips on the phone
+  const mnotes = `
+    <div class="mnote"><span class="n">1</span><span>Pocket 3 has a 1-inch sensor</span><span class="verdict true">true</span></div>
+    <div class="mnote"><span class="n">2</span><span>Gimbal beats electronic crop when walking</span><span class="verdict true">true</span></div>`;
+  const margin = `<div class="ans-turn">
+    ${turnLabel('Answer · standard · 2 min · $0.042', 'Sep 7')}
+    <div class="body-rail">
+      <div class="rail" style="min-height:0"></div>
+      <div class="answer-body">
+        <div class="marginal">
+          <div>
+            <div class="prose">${para1}</div>
+            <div class="mnote-inline"><span class="n">1</span><span>Pocket 3 has a 1-inch sensor</span><span class="verdict true">true</span></div>
+            <div class="prose">${callout}${para2}</div>
+            <div class="mnote-inline"><span class="n">2</span><span>Gimbal beats electronic crop when walking</span><span class="verdict true">true</span></div>
+          </div>
+          <div class="margin-col">${mnotes}</div>
+        </div>
+        <div class="fold">
+          <button type="button" class="fold-head" aria-expanded="false">Things and sources<span class="counts">2 things · 2 sources</span>${SVG.chev}</button>
+        </div>
+      </div>
+    </div>
+  </div>`;
+
+  // D. the detail bar is pinned above the composer and opens a sheet over the page; on the
+  // desktop frame there is room for it beside the prose, so it becomes a sticky rail.
+  const eachturn = `<div class="eachturn-wrap">
+    <div class="eachturn-main">
+      <div class="ans-turn">
+        ${turnLabel('Answer · standard · 2 min · $0.042', 'Sep 7')}
+        <div class="body-rail">
+          <div class="rail" style="min-height:0"></div>
+          <div class="answer-body">
+            <div class="prose">${para1}${callout}${para2}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="eachturn-rail">
+      <div class="pin-bar" role="tablist" aria-label="Answer detail">
+        <button type="button" role="tab" aria-selected="true">Claims <span class="n">2</span></button>
+        <button type="button" role="tab" aria-selected="false">Things <span class="n">2</span></button>
+        <button type="button" role="tab" aria-selected="false">Sources <span class="n">2</span></button>
+        <button type="button" role="tab" aria-selected="false">Run</button>
+      </div>
+      <div class="detail-dock">
+        <div class="dock-grab"></div>
+        <div class="dock-head"><h3>Claims</h3><span class="meta">2</span></div>
+        <div class="dock-body">${claims}</div>
+      </div>
+    </div>
+  </div>`;
+
+  const turn = { under: under(1), aside: folded, margin, eachturn }[v] ?? under(1);
+
+  return `<div class="page${v === 'eachturn' ? ' page-wide' : ''}">
+    <div class="answer-metabar" style="margin-bottom:6px"><span>youtube</span><span>·</span><span>standard</span><span>·</span><span>2 min</span><span>·</span><span>$0.042</span></div>
     <h1 class="answer-title">Osmo Pocket 3 vs Insta360 Ace Pro 2 for travel</h1>
     <div class="clip">
       <span class="clip-thumb">${SVG.play}</span>
       <span style="flex:1;min-width:0"><div class="clip-title">Osmo Pocket 3 vs Insta360 Ace Pro 2 — which travel camera?</div><div class="clip-url">www.youtube.com/watch?v=fixture01</div></span>
       <span class="clip-tags"><span class="chip tag">#camera</span><span class="chip tag">#travel</span></span>
     </div>
-    <div class="body-rail">
-      <div class="rail"></div>
-      <div class="answer-body">
-        ${body}
-        ${v === 'four' ? fourTabs : v === 'three' ? threeTabs : inlineSections}
-      </div>
-    </div>
+    ${turn}
   </div>
   <div class="composer"><input class="input" placeholder="Ask a follow-up…"><button type="button" class="send" aria-label="Send">${SVG.send}</button></div>`;
 };
@@ -770,6 +894,14 @@ function renderSingle(){
   if (hdr) hdr.style.margin = '0 -34px 0';
 
   document.getElementById('heroNote').innerHTML = q.note;
+  const locked = document.getElementById('locked');
+  const settled = [
+    QUESTIONS.tabs.settled && `Tabs: ${QUESTIONS.tabs.settled}`,
+    QUESTIONS.search.settled && `Search: ${QUESTIONS.search.settled}`,
+    QUESTIONS.library.settled && `Library: ${QUESTIONS.library.settled}`,
+  ].filter(Boolean);
+  locked.hidden = settled.length === 0;
+  locked.innerHTML = `<b>Settled</b>${settled.join(' &nbsp;·&nbsp; ')}`;
   document.getElementById('capPhone').innerHTML = `Phone · 390 · <b>${QUESTIONS[state.q].label}</b>`;
   document.getElementById('capDesk').innerHTML = 'Desktop · 1280';
 }
