@@ -135,7 +135,8 @@
   --space-8: 32px;
   --space-12: 48px;
   /* Landing --r-md / --r-lg, exact: generous, and the single most visible part of the look. */
-  --radius-sm: 10px;
+  --radius-xs: 10px;
+  --radius-sm: 12px;
   --radius-md: 18px;
   --radius-lg: 24px;
   --radius-pill: 999px;
@@ -366,17 +367,18 @@ p {
 }
 h1 {
   font-family: var(--font-prose);
-  font-size: var(--text-3xl);
-  line-height: 1.15;
-  font-weight: 600;
-  letter-spacing: -0.01em;
+  font-size: var(--display-2);
+  line-height: 1.14;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  text-wrap: balance;
 }
 h2 {
   font-family: var(--font-prose);
   font-size: var(--text-2xl);
   line-height: 1.2;
-  font-weight: 600;
-  letter-spacing: -0.005em;
+  font-weight: 650;
+  letter-spacing: -0.018em;
 }
 h3 {
   font-size: var(--text-lg);
@@ -434,8 +436,9 @@ button {
   padding: 0 var(--space-5);
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-sm);
   font-weight: 600;
+  letter-spacing: -0.005em;
   white-space: nowrap;
   cursor: pointer;
   user-select: none;
@@ -460,7 +463,7 @@ button.primary {
   background: var(--accent);
   color: var(--on-accent);
   border-color: transparent;
-  box-shadow: 0 8px 24px -8px color-mix(in srgb, var(--accent) 55%, transparent);
+  box-shadow: 0 6px 16px -8px color-mix(in srgb, var(--accent) 60%, transparent);
 }
 button.primary:hover {
   filter: brightness(1.06);
@@ -523,7 +526,7 @@ select {
   padding: 10px var(--space-4);
   background: var(--field-bg);
   border: 1px solid var(--border);
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-sm);
   transition:
     border-color var(--dur) var(--ease),
     background-color var(--dur) var(--ease);
@@ -660,9 +663,9 @@ select {
   min-width: 44px;
   min-height: 44px;
   color: var(--text-muted);
-  font-size: var(--text-xs);
+  font-size: 10.5px;
   font-weight: 500;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   transition:
     color var(--dur) var(--ease),
     background-color var(--dur) var(--ease);
@@ -673,6 +676,7 @@ select {
 }
 .tab[aria-current="page"] {
   color: var(--accent-text);
+  font-weight: 600;
 }
 /* A chat page owns the bottom edge on phones; the tab bar yields to its composer. */
 .shell.bare .shell-nav {
@@ -720,17 +724,18 @@ select {
     flex-direction: row;
     justify-content: flex-start;
     gap: var(--space-3);
-    height: 46px;
-    padding: 0 var(--space-4);
+    height: 42px;
+    padding: 0 var(--space-3);
     font-size: var(--text-md);
-    border-radius: var(--radius-pill);
+    border-radius: var(--radius-sm);
   }
   .tab:hover {
     background: var(--surface-2);
   }
   .tab[aria-current="page"] {
     background: var(--surface);
-    color: var(--accent-text);
+    color: var(--text);
+    font-weight: 600;
     box-shadow: var(--shadow-sm);
   }
   .shell.bare .page {
@@ -808,6 +813,16 @@ main {
   padding: var(--space-4);
   box-shadow: var(--shadow-sm);
 }
+/* The lab's section label: mono, quiet, tracked. Clay is reserved for evidence marks and the
+   accent itself, so a group heading is muted rather than coloured. */
+.section-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
 @media (min-width: 900px) {
   .page {
     padding-bottom: calc(var(--space-12) + var(--inset-bottom));
@@ -871,8 +886,12 @@ main {
   border-style: dashed;
 }
 .section-title {
-  font-size: var(--text-lg);
-  font-weight: 600;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
 }
 .muted {
   color: var(--text-muted);
@@ -977,8 +996,8 @@ ul.chips > li {
   align-items: center;
   gap: 6px;
   min-height: 40px;
-  padding: 0 var(--space-4);
-  border-radius: var(--radius-pill);
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border);
   background: var(--surface);
   color: var(--text);
@@ -999,17 +1018,17 @@ a.chip:hover {
   text-decoration: none;
 }
 .chip:hover {
-  border-color: var(--accent);
-  color: var(--accent-text);
-  box-shadow: var(--shadow-hover);
-  transform: translateY(var(--lift));
+  border-color: var(--border-strong);
+  color: var(--text);
+  background: var(--surface-2);
 }
 .chip.on,
 .chip[aria-pressed="true"],
 .chip[aria-current="page"] {
-  background: color-mix(in srgb, var(--accent) 18%, transparent);
-  border-color: var(--accent);
+  background: var(--accent-soft);
+  border-color: var(--border-strong);
   color: var(--accent-text);
+  font-weight: 600;
 }
 .chip .count {
   color: var(--text-muted);
@@ -1033,11 +1052,13 @@ a.chip:hover {
   height: 22px;
   padding: 0 8px;
   border-radius: var(--radius-pill);
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  color: var(--text-muted);
-  font-size: var(--text-xs);
+  background: var(--accent-soft);
+  border: 1px solid transparent;
+  color: var(--accent-text);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
   font-weight: 500;
+  letter-spacing: 0.02em;
   white-space: nowrap;
   max-width: 100%;
   overflow: hidden;
@@ -1156,15 +1177,18 @@ a.chip:hover {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  min-height: 48px;
-  padding: 0 var(--space-3);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  transition: border-color var(--dur) var(--ease);
+  min-height: 44px;
+  padding: 0 var(--space-3) 0 var(--space-4);
+  background: var(--surface-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  transition:
+    border-color var(--dur) var(--ease),
+    background-color var(--dur) var(--ease);
 }
 .searchbar:focus-within {
-  border-color: var(--focus);
+  border-color: var(--border-strong);
+  background: var(--surface);
 }
 .searchbar > svg {
   color: var(--text-muted);
@@ -1173,7 +1197,7 @@ a.chip:hover {
 .searchbar input {
   flex: 1;
   min-width: 0;
-  min-height: 46px;
+  min-height: 42px;
   padding: 0;
   border: 0;
   background: transparent;
@@ -2271,11 +2295,11 @@ a.clip:hover {
 .group-title {
   margin: 0;
   font-family: var(--font-mono);
-  font-size: var(--text-xs);
+  font-size: 10px;
   font-weight: 500;
   text-transform: uppercase;
-  letter-spacing: 0.18em;
-  color: var(--accent-text);
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
 }
 
 /* Claims: verdict, the claim itself, confidence bar and numbered sources. */
@@ -2497,10 +2521,10 @@ a.clip:hover {
 .menu-heading {
   padding: 8px var(--space-3) 4px;
   font-family: var(--font-mono);
-  font-size: var(--text-xs);
+  font-size: 10px;
   font-weight: 500;
   text-transform: uppercase;
-  letter-spacing: 0.18em;
+  letter-spacing: 0.1em;
   color: var(--text-muted);
 }
 .menu-item .hint {
@@ -3051,12 +3075,12 @@ details.card > summary + .md {
 .sgroup-title {
   margin: 0 var(--space-1);
   font-family: var(--font-mono);
-  font-size: var(--text-xs);
+  font-size: 10px;
   font-weight: 500;
-  /* The landing's `.eyebrow`: .18em, and clay rather than a grey label. */
-  letter-spacing: 0.18em;
+  /* The lab's section label: quiet mono, never clay (ADR 0034 — clay means evidence). */
+  letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--accent-text);
+  color: var(--text-muted);
 }
 .sgroup-body {
   display: flex;
@@ -3618,11 +3642,11 @@ input.switch {
    than the rest of the page. */
 .section-title {
   font-family: var(--font-mono);
-  font-size: var(--text-xs);
+  font-size: 10px;
   font-weight: 500;
-  letter-spacing: 0.18em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--accent-text);
+  color: var(--text-muted);
   margin: 0;
 }
 .tiles {
