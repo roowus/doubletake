@@ -2,39 +2,29 @@
  *
  * SHARED DESIGN TOKENS. The marketing landing at https://doubletake.gg (served from
  * apps/server/src/api/landing-html.ts, source of truth doubletake-cloud/website/landing.html)
- * and this app are one design language. The block below is the landing's `:root` verbatim under
- * the landing's own names, then reconciled onto the app's existing paper/ink system. Reconcile by
- * changing the app's *value*, never by rewriting a rule: the app's names (--bg, --surface,
- * --text, --accent, --radius-*, --shadow-*, --font-*) stay, so every deep in-app surface inherits
- * the new look without being restructured.
+ * and this app are one design language. The block below keeps the landing's own names, then
+ * reconciles them onto the app's paper/ink system. Reconcile by changing the app's *value*, never
+ * by rewriting a rule: the app's names (--bg, --surface, --text, --accent, --radius-*, --shadow-*,
+ * --font-*) stay, so every deep in-app surface inherits the look without being restructured.
  *
- * Landing `:root` (landing-html.ts), kept 1:1 so a diff against the landing is meaningful:
- *   --paper:#F7F3E9  --paper-2:#F1EBDC  --paper-3:#EAE2CF
- *   --card:#FFFDF7   --ink:#1C1B18     --graphite:#6B675F
- *   --line:rgba(28,27,24,.10)
+ * ADR 0034 (2026-11-27) moved the app onto "Soft Paper": a slightly warmer paper than the
+ * landing's #F7F3E9, a deeper clay accent, 18 px cards, warm-tinted shadows, and one typeface —
+ * Figtree — for both the UI and the prose. These are deliberate departures from the landing:
  *
- * Reconciliation decided here (both surfaces now share these exact values):
- *   --bg       <- --paper      #f7f3e9   (was #f7f4ee, a slightly cooler cream)
- *   --surface  <- --card       #fffdf7   (was #fffdf9)
- *   --surface-2<- --paper-2    #f1ebdc   (was #efeae0; --paper-3 #eae2cf is the deeper tone)
- *   --text     <- --ink        #1c1b18   (already identical)
- *   --text-muted <- --graphite #6b675f   (was #645f56, a warmer grey the landing does not use)
- *   --border   <- --line       the landing's line is rgba(28,27,24,.10); the app also needs a
- *                              border that is not inset over artwork, so it compounds --line
- *                              over --card -> #e6e3d9. --border-strong stays app-only.
- *   --r-md/--r-lg <- --r-md 16px / --r-lg 24px, --shadow-md/--shadow-lg <- --shadow-soft /
- *                    --shadow.
- *   --accent   <- --rail #C45A3C, the landing's clay. Adopted in full, so the app and the
- *                 landing now share one accent. The landing ships the exact value; the app
- *                 darkens it to #a8432a because #C45A3C is only 3.89:1 on --paper and 4.31:1
- *                 against white (both under WCAG AA), while the same hue at #a8432a is 5.41:1
- *                 and 6.00:1. Same hue family (11.9 deg vs 13.2 deg), so it reads as the
- *                 landing's red, just deep enough to be legible as text and as a button fill.
- *                 --rail itself is `var(--accent)`, so the margin rail (ADR 0030's signature
- *                 3 px rule) becomes clay with it, matching the landing's own --rail name.
- * The landing's system font stacks are still NOT adopted — the app bundles Newsreader /
- * Instrument Sans / JetBrains Mono (@fontsource-variable) where the landing uses the OS stack,
- * and the app is used signed-in with dense prose the landing never renders.
+ *   --bg       #f8f4ea   (landing --paper #F7F3E9; the app runs warmer and softer)
+ *   --surface  #fffdf7   (landing --card, identical)
+ *   --surface-2#f2ecdd   (landing --paper-2 #F1EBDC, a touch warmer)
+ *   --text     #1e1b16   (landing --ink #1C1B18, identical in effect)
+ *   --text-muted #6d675c (landing --graphite #6B675F)
+ *   --border   #e7e1d2   (the landing's line is rgba(28,27,24,.10); the app needs a border that
+ *                         is not inset over artwork, so it states the composited value)
+ *   --accent   #b0472c   (landing --rail #C45A3C is 3.89:1 on paper, under WCAG AA; the app
+ *                         darkens the same hue until body text on paper clears AA)
+ *   --radius-md 18px, --shadow-* warm-tinted (60,45,30 rather than neutral grey)
+ *
+ * The typeface is Figtree (@fontsource-variable, latin, bundled). The landing uses the OS stack;
+ * the app is used signed-in with dense prose and a phone-first reading column, so it ships a face
+ * with a large x-height that holds up at 15 px. JetBrains Mono stays for meta and code only.
  *
  * The app also carries a full ink (dark) theme the landing does not have. Ink keeps the same
  * shape — radii, geometry, motion, font sizes — and only re-points the colours, so nothing below
@@ -51,18 +41,18 @@
 
   /* Paper (default). Ink below, via prefers-color-scheme or [data-theme="ink"].
      Values are the landing's --paper / --card / --paper-2 above. */
-  --bg: #f7f3e9;
+  --bg: #f8f4ea;
   --surface: #fffdf7;
-  --surface-2: #f1ebdc;
-  --surface-3: #eae2cf; /* landing --paper-3: an inset well (segmented track, media placeholder) */
-  --border: #e6e3d9; /* landing --line (rgba(28,27,24,.10)) composited over --card */
-  --border-strong: #b9b09d;
-  --text: #1c1b18;
-  --text-muted: #6b675f;
-  --accent: #a8432a;
+  --surface-2: #f2ecdd;
+  --surface-3: #eae1ce; /* an inset well (segmented track, media placeholder) */
+  --border: #e7e1d2;
+  --border-strong: #cfc5ae;
+  --text: #1e1b16;
+  --text-muted: #6d675c;
+  --accent: #b0472c;
   --on-accent: #ffffff;
-  --accent-soft: rgba(168, 67, 42, 0.12);
-  --accent-text: #963a24;
+  --accent-soft: rgba(176, 71, 44, 0.11);
+  --accent-text: #9c3d25;
   /* Secondary accent: tags, chips, the second chart series. Clay is the primary now, so this
      moved from the old clay-ish #a8541e to a deep ochre — same warm family, still clearly a
      different ink at chip size (the two are 1.2:1 apart, i.e. distinguishable side by side). */
@@ -71,13 +61,13 @@
   --ok: #2f7a3d;
   --warn: #9a6a00;
   --err: #b3261e;
-  --focus: #a8432a;
+  --focus: #b0472c;
   --scrim: rgba(28, 27, 24, 0.45);
-  --code-bg: #f1ebdc;
-  /* Chart series: pine, clay, slate blue, ochre, plum, teal, rust, moss. Distinct in both
-     themes and legible on paper; charts also emit their data as a table, so colour is never
-     the only carrier. */
-  --chart-1: #a8432a;
+  --code-bg: #f2ecdd;
+  /* Chart series: clay, ochre, slate blue, gold, plum, teal, rust, moss. Distinct in both themes
+     and legible on paper; charts also emit their data as a table, so colour is never the only
+     carrier. */
+  --chart-1: #b0472c;
   --chart-2: #7d5a10;
   --chart-3: #3f5f8f;
   --chart-4: #b08a1f;
@@ -88,13 +78,12 @@
   /* ADR 0030's signature element: the 3 px margin rule beside every answer. Bound to the accent,
      so it is now the landing's clay — the same colour the landing calls --rail. */
   --rail: var(--accent);
-  /* Soft layered shadows, the landing's --shadow-soft / --shadow (`none` is kept as a valid
-     value other rules rely on). */
-  --shadow-sm: 0 12px 40px -18px rgba(28, 27, 24, 0.18);
-  --shadow-md: 0 12px 40px -18px rgba(28, 27, 24, 0.18);
-  --shadow-lg: 0 24px 60px -24px rgba(28, 27, 24, 0.22), 0 4px 14px -6px rgba(28, 27, 24, 0.1);
-  /* Hover lift: the landing raises a card 2-3 px and deepens its shadow; the app joins in. */
-  --shadow-hover: 0 24px 60px -24px rgba(28, 27, 24, 0.22), 0 4px 14px -6px rgba(28, 27, 24, 0.14);
+  /* Soft layered shadows; warm-tinted so a card sits on the paper rather than floating over it
+     (`none` is kept as a valid value other rules rely on). */
+  --shadow-sm: 0 10px 30px -14px rgba(60, 45, 30, 0.2), 0 2px 6px -3px rgba(60, 45, 30, 0.08);
+  --shadow-md: 0 10px 30px -14px rgba(60, 45, 30, 0.2), 0 2px 6px -3px rgba(60, 45, 30, 0.08);
+  --shadow-lg: 0 20px 44px -18px rgba(60, 45, 30, 0.26);
+  --shadow-hover: 0 20px 44px -18px rgba(60, 45, 30, 0.26);
 
   /* Legacy aliases still used by a few rules. */
   --panel: var(--surface);
@@ -106,7 +95,7 @@
   --field-bg: var(--surface-2);
   /* The landing's public header is a translucent blurred bar over the paper; the app's tab bar
      and desktop rail use the same treatment. */
-  --chrome-bg: rgba(247, 243, 233, 0.82);
+  --chrome-bg: rgba(248, 244, 234, 0.82);
   --chrome-blur: blur(10px);
 
   /* Fonts. The app bundles these (@fontsource-variable, latin subsets, precached). The landing
@@ -115,9 +104,11 @@
        landing --sans:  -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif
        landing --mono:  ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace */
   --font-sans:
-    "Instrument Sans Variable", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-    "Helvetica Neue", Arial, sans-serif;
-  --font-prose: "Newsreader Variable", "Iowan Old Style", Georgia, "Times New Roman", serif;
+    "Figtree Variable", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
+    Arial, sans-serif;
+  /* One voice: the reading face is the UI face (ADR 0034). Kept as a separate token so a future
+     design can pair two families again without touching a rule. */
+  --font-prose: var(--font-sans);
   --font-mono: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --text-xs: 12px;
   --text-sm: 13px;
@@ -145,7 +136,7 @@
   --space-12: 48px;
   /* Landing --r-md / --r-lg, exact: generous, and the single most visible part of the look. */
   --radius-sm: 10px;
-  --radius-md: 16px;
+  --radius-md: 18px;
   --radius-lg: 24px;
   --radius-pill: 999px;
   --tap: 44px;
@@ -218,27 +209,27 @@ body::before {
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="paper"]) {
     color-scheme: dark;
-    --bg: #16130f;
-    --surface: #1e1a15;
-    --surface-2: #262119;
-    --surface-3: #100e0b;
-    --border: #352f26;
-    --border-strong: #4d453a;
-    --text: #ece7dd;
-    --text-muted: #a49b8c;
-    --accent: #e5805f;
+    --bg: #17130e;
+    --surface: #201b15;
+    --surface-2: #282218;
+    --surface-3: #100d09;
+    --border: #372f24;
+    --border-strong: #4f4636;
+    --text: #eee8db;
+    --text-muted: #a89d8b;
+    --accent: #e8865f;
     --on-accent: #2a1008;
-    --accent-soft: rgba(229, 128, 95, 0.18);
-    --accent-text: #f0a184;
+    --accent-soft: rgba(232, 134, 95, 0.16);
+    --accent-text: #f2a984;
     --accent-2: #e2b53c;
     --accent-2-soft: rgba(226, 181, 60, 0.16);
     --ok: #6ccf7b;
     --warn: #e2b53c;
     --err: #ff7b6e;
-    --focus: #e5805f;
+    --focus: #e8865f;
     --scrim: rgba(10, 8, 5, 0.62);
-    --code-bg: #100e0b;
-    --chart-1: #e5805f;
+    --code-bg: #100d09;
+    --chart-1: #e8865f;
     --chart-2: #d8a13f;
     --chart-3: #8aa6d9;
     --chart-4: #b7d16a;
@@ -251,8 +242,8 @@ body::before {
     --shadow-lg: 0 16px 40px rgba(8, 6, 3, 0.55);
     --shadow-hover: 0 24px 60px -24px rgba(8, 6, 3, 0.66);
     --field-bg: var(--surface-2);
-    --chrome-bg: rgba(22, 19, 15, 0.82);
-    --texture-bloom: rgba(229, 128, 95, 0.06);
+    --chrome-bg: rgba(23, 19, 14, 0.82);
+    --texture-bloom: rgba(232, 134, 95, 0.06);
     --texture-rule: rgba(233, 230, 223, 0.014);
     --on-danger: #2a1008;
     --map-filter: invert(1) hue-rotate(180deg) brightness(0.8) contrast(0.9) saturate(0.6);
@@ -261,27 +252,27 @@ body::before {
 }
 :root[data-theme="ink"] {
   color-scheme: dark;
-  --bg: #16130f;
-  --surface: #1e1a15;
-  --surface-2: #262119;
-  --surface-3: #100e0b;
-  --border: #352f26;
-  --border-strong: #4d453a;
-  --text: #ece7dd;
-  --text-muted: #a49b8c;
-  --accent: #e5805f;
+  --bg: #17130e;
+  --surface: #201b15;
+  --surface-2: #282218;
+  --surface-3: #100d09;
+  --border: #372f24;
+  --border-strong: #4f4636;
+  --text: #eee8db;
+  --text-muted: #a89d8b;
+  --accent: #e8865f;
   --on-accent: #2a1008;
-  --accent-soft: rgba(229, 128, 95, 0.18);
-  --accent-text: #f0a184;
+  --accent-soft: rgba(232, 134, 95, 0.16);
+  --accent-text: #f2a984;
   --accent-2: #e2b53c;
   --accent-2-soft: rgba(226, 181, 60, 0.16);
   --ok: #6ccf7b;
   --warn: #e2b53c;
   --err: #ff7b6e;
-  --focus: #e5805f;
+  --focus: #e8865f;
   --scrim: rgba(10, 8, 5, 0.62);
-  --code-bg: #100e0b;
-  --chart-1: #e5805f;
+  --code-bg: #100d09;
+  --chart-1: #e8865f;
   --chart-2: #d8a13f;
   --chart-3: #8aa6d9;
   --chart-4: #b7d16a;
@@ -294,8 +285,8 @@ body::before {
   --shadow-lg: 0 16px 40px rgba(8, 6, 3, 0.55);
   --shadow-hover: 0 24px 60px -24px rgba(8, 6, 3, 0.66);
   --field-bg: var(--surface-2);
-  --chrome-bg: rgba(22, 19, 15, 0.82);
-  --texture-bloom: rgba(229, 128, 95, 0.06);
+  --chrome-bg: rgba(23, 19, 14, 0.82);
+  --texture-bloom: rgba(232, 134, 95, 0.06);
   --texture-rule: rgba(233, 230, 223, 0.014);
   --on-danger: #2a1008;
   --map-filter: invert(1) hue-rotate(180deg) brightness(0.8) contrast(0.9) saturate(0.6);

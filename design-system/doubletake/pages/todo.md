@@ -12,10 +12,10 @@ toast ("Saved to your list. Find it under Library, To do."); nothing navigates. 
 menu's **Add a task…** opens a Sheet with a title field and an optional note
 (`components/TaskForm.tsx`).
 
-**Library row.** Above the Things tiles: a full-width row with a 3 px accent rule on the left
-(the only accent rule outside the answer's margin rail, so it reads as "your own writing"),
-the check-square glyph, "To do", a one-line hint (loading, the empty-state sentence, or the
-first three open titles joined with " · "), the open count as a `count-badge`, a chevron.
+**Library row.** The very top of the Library hub, above the Things and Collections cards: the
+check-square glyph, "To do", a one-line hint (loading, the empty-state sentence, or the first
+three open titles joined with " · "), the open count as a `count-badge`, a chevron. No accent
+rule: the only coloured marks in the app are the answer's evidence marks (ADR 0034).
 
 **List page, top to bottom.**
 1. Header: back to Library, "To do" with the open count, a **Task** ghost button that unfolds

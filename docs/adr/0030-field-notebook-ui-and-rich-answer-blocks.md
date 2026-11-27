@@ -1,7 +1,7 @@
 # 0030 — "Field notebook" web UI, Base UI as the only component dependency, chart-spec + Mermaid answer blocks
 
 ## Status
-accepted
+accepted — typography, margin rail and answer tabs superseded by [0034](0034-soft-paper-and-one-typeface.md)
 
 ## Date
 2026-09-07

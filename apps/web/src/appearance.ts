@@ -76,7 +76,7 @@ export function writeAppearance(patch: Partial<Appearance>): Appearance {
  */
 // tokens-lint-ignore: runs before the stylesheet paints, so it cannot read a custom property.
 // `scripts/check-tokens.mjs` fails if these two stop equalling --bg in styles.css.
-const CHROME_BG: Record<'paper' | 'ink', string> = { paper: '#f7f3e9', ink: '#16130f' };
+const CHROME_BG: Record<'paper' | 'ink', string> = { paper: '#f8f4ea', ink: '#17130e' };
 
 function updateThemeColor(theme: Theme): void {
   const metas = document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]');

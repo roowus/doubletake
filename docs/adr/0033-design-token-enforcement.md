@@ -1,6 +1,6 @@
 # 0033 — Design-token enforcement, preview harness, and mobile audit in CI
 
-- Status: accepted
+- Status: accepted — `design-lab/` harness retired by [0034](0034-soft-paper-and-one-typeface.md); the token guard and mobile audit stand
 - Date: 2026-11-26
 
 ## Context

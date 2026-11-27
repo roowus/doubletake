@@ -42,7 +42,7 @@ channel; the Instagram bot is optional and documented as fragile.
 | Sharing | A manual list or saved search can be shared as a read-only page at `/s/<token>` (token = credential, script-free HTML, first answers only, never notes or extractions); links stay on the tailnet unless `DOUBLETAKE_SHARE_PUBLIC=on` | [0025](adr/0025-shareable-collection-pages.md) |
 | Multi-device | The media worker can run on another tailnet machine: same protocol over HTTP with a bearer token, server mirrors assets and frames into its own data dir (or trusts a shared filesystem path); database, brain, queue and vault never leave the server | [0026](adr/0026-remote-media-worker.md) |
 | Uploads | Photos and videos shared as files go to `POST /api/ingest/upload` (raw body, metadata in headers, 500 MiB cap) and become a `text` item with an `upload` media asset that the worker processes in place (`hints.local_path`, pushed to a remote worker with `PUT /files`); the Android sheet copies the file into private storage when queuing offline | [0029](adr/0029-media-uploads.md) |
-| Clients | One Vite/React PWA in the "field notebook" design system (paper default / ink dark, bundled Newsreader + Instrument Sans + JetBrains Mono, margin rail); four-tab shell Inbox / Library / Add / Settings; `@base-ui/react` is the only component dependency; answers render as full-width prose with ```chart, ```mermaid and ```svg blocks; Playwright visual regression in CI | [0030](adr/0030-field-notebook-ui-and-rich-answer-blocks.md) |
+| Clients | One Vite/React PWA in the "Soft Paper" design system (paper default / ink dark, one typeface: bundled Figtree, JetBrains Mono for meta only); four-tab shell Inbox / Library / Add / Settings; `@base-ui/react` is the only component dependency; the answer page is source line, title, prose with `[[n]]` evidence marks, then printed Claims and Sources reports; ```chart, ```mermaid and ```svg blocks render inline; Playwright visual regression in CI | [0034](adr/0034-soft-paper-and-one-typeface.md) |
 | Structure | Every run also extracts a category and typed entities (places, recipes, products, tools, tips); collections are automatic per category and entity kind; places are geocoded (brain coordinates first, else a Nominatim-compatible geocoder, cached) and shown on a Leaflet map | [0014](adr/0014-structured-extraction-and-categories.md), [0022](adr/0022-map-view-place-geocoding.md) |
 | Platforms | Server-side extractor registry, one file per platform, `web` fallback; v1: Instagram, TikTok, YouTube + Shorts, X, Reddit, AI-chat shares | [0015](adr/0015-platform-extractor-registry.md) |
 | Cost | Daily spend cap; runs queue as `capped` when hit; per-run cost shown in chat | [0012](adr/0012-cost-cap.md) |
@@ -276,15 +276,16 @@ WebView (origin `https://localhost` / `capacitor://localhost`) to `HOSTED_URL`
 (`https://doubletake.gg`) unless `doubletake.serverUrl` names the origin it is already on; a
 dev build pointed at a local server and the whole plain-web build are untouched. The hosted
 sign-in therefore happens in the hosted shell, not in the bundle — which only renders the
-self-hosted `Welcome` page, with its "Use my own server" path. Its visual language, the "field notebook"
-([ADR 0030](adr/0030-field-notebook-ui-and-rich-answer-blocks.md)), is defined in
+self-hosted `Welcome` page, with its "Use my own server" path. Its visual language, "Soft Paper"
+([ADR 0034](adr/0034-soft-paper-and-one-typeface.md), replacing the field-notebook palette of
+[ADR 0030](adr/0030-field-notebook-ui-and-rich-answer-blocks.md)), is defined in
 [`design-system/doubletake/MASTER.md`](../design-system/doubletake/MASTER.md) with one spec per
 screen under [`design-system/doubletake/pages/`](../design-system/doubletake/pages/): experience
 principles per moment (**Capture** = share sheet / compose, **Return** = the answer chat,
 **Browse** = list, collections, entities, map), colour tokens (**paper** light by default,
 **ink** dark via `prefers-color-scheme` or a `data-theme` attribute on `<html>`, contrast
-checked), typography (Instrument Sans for the interface, Newsreader for answer prose,
-JetBrains Mono for run meta and code), a 4/8 px spacing rhythm, 44 px touch targets,
+checked), typography (**Figtree** for both the interface and answer prose, JetBrains Mono for
+run meta and code — one family, no serif), a 4/8 px spacing rhythm, 44 px touch targets,
 component rules and anti-patterns. The app is a four-tab shell (`components/Shell.tsx`):
 **Inbox** `/`, **Library** `/library`, **Add** `/compose` and **Settings** `/settings`
 (sections at `/settings/<section>`), drawn as a bottom tab bar on phones (56 px plus the safe
@@ -306,9 +307,9 @@ rows with an `aria-busy` region and a visually hidden label, used by the inbox, 
 and chat lists) rather than spinners; empty states are one line that says what to do next; chips
 never wrap mid-word and use `aria-pressed` / `aria-current` for state; motion respects
 `prefers-reduced-motion`. Fonts are bundled, never fetched from a CDN: `src/fonts.css` declares
-the latin subsets of Instrument Sans, Newsreader and JetBrains Mono from `@fontsource-variable`
-and the service worker precaches the `woff2` files with the rest of the shell, so an installed
-app renders the same offline. `pnpm --filter @doubletake/web shots <dir>` (Playwright, Chromium)
+the latin subsets of Figtree and JetBrains Mono from `@fontsource-variable` (one family for both
+the interface and the prose, ADR 0034) and the service worker precaches the `woff2` files with
+the rest of the shell, so an installed app renders the same offline. `pnpm --filter @doubletake/web shots <dir>` (Playwright, Chromium)
 screenshots every route of a running server at phone and desktop sizes in both colour schemes
 for design review; `DOUBLETAKE_URL` and `DOUBLETAKE_TOKEN_FILE` point it at the server.
 
@@ -403,7 +404,7 @@ asset and `GET /api/chats/:id/media/:mediaId` serves it behind the same device-t
 fetched with a bearer header into a blob URL so the token never appears in an `src`; typed
 text has no card), followed by the tag chips. Turns then run down the page: the owner's note
 and follow-up questions are a dated one-line label ("You wrote" / "You asked") over italic
-prose, and every answer is full-width prose (Newsreader, measure capped at 68 ch, GitHub-
+prose, and every answer is full-width prose (Figtree, measure capped at 68 ch, GitHub-
 flavoured Markdown via `react-markdown` + `remark-gfm`: tables with hairlines and a sticky
 first column on phones, task lists, blockquotes set as margin notes, code on `--code-bg`; raw
 HTML never renders). Three fenced blocks are drawn instead of shown as code

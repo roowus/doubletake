@@ -30,10 +30,10 @@ screens:
    screen. Nothing on this path asks a question the user cannot answer without leaving the
    feed.
 2. **Return (minutes to hours later, from a notification).** The user arrives with one
-   question: "what did it say?" The chat opens on the **answer** as a full-width page of
-   prose with the margin rail beside it; the clip and the owner's note sit above as context;
-   claims, things, sources and the run are tabs *under* the answer; the follow-up composer is
-   pinned at the bottom.
+   question: "what did it say?" The chat opens on the **answer** as a page: a one-line source
+   meta, the title, the prose, then the **Claims** and **Sources** reports printed underneath;
+   entities and run history sit behind one footer row; the follow-up composer is pinned at the
+   bottom.
 3. **Browse (occasionally, sitting down, often on a laptop).** **Inbox** is triage: search,
    then the list, unread first. Everything that used to be a chip row (collections, entity
    kinds, tags) lives in the **Library** tab as tiles and lists, and in the Inbox's **Filter**
@@ -42,8 +42,8 @@ screens:
 Cross-cutting rules:
 
 - **One primary action per screen**, where the thumb rests (bottom on phones).
-- **Progress over spinners.** A live run fills the margin rail top to bottom as steps
-  complete and shows its stage in the Run tab; skeletons hold the space of what is loading.
+- **Progress over spinners.** A live run shows its stage in the footer row and fills a hairline
+  progress rule under the prose; skeletons hold the space of what is loading.
 - **Errors keep the input** and stay inline where the action happened (`role="alert"`).
   Transient successes are toasts.
 - **First run is guided.** Welcome explains the product in one line and defaults to the right
@@ -53,20 +53,26 @@ Cross-cutting rules:
   `/settings/<section>`, `/?tag=`) work cold; list → page uses a View Transition when the
   browser has it.
 
-## 1. Signature element: the margin rail
+## 1. Signature element: the evidence report
 
-A 3 px vertical rule in `--rail` (the accent) runs down the left of every answer. On wide
-screens the run meta (platform · mode · adapter/model · duration · cost) is set in mono small
-caps *in* the margin beside the rule; on phones it collapses to one line above the title.
-Nothing else in the app has a coloured left rule, so the reader always knows where the answer
-starts. While a run is live the rule is a progress bar: it fills as run events arrive and
-settles to solid when the run is done. Blockquotes inside answers use a hairline `--border`
-rule, never the accent, so they read as margin notes rather than as another answer.
+The answer page is short on purpose. It opens with a one-line source meta (platform glyph ·
+host · date, plus the item's thumbnail when it has one), then the title, then the prose. What
+backs the prose is printed directly underneath as two reports:
 
-That exclusivity is the whole point, and the code had drifted from it: the Library To-do row
-and the toast had each grown their own 3 px accent bar, which diluted the one signal the
-reader is meant to trust. Both are gone (2026-10-14). If a surface needs emphasis, it is a
-card (`--radius-md`, `--shadow-sm`, `--lift` on hover) — not a second rail.
+- **Claims** — one row per checkable claim: its number, the claim, a verdict chip
+  (`--ok` / `--warn` / `--err` / muted), and a mono line naming where that claim came from, or
+  `no source found`. Any verdict other than `true` carries one line saying why.
+- **Sources** — the distinct URLs the claims cite, each with its host and the claim numbers
+  that point at it.
+
+Small superscript **marks** in the prose (`[[n]]` from the brain, rendered as a clay numeral)
+scroll to and briefly highlight the matching claim row. That link between sentence and evidence
+is the element the page is built around; nothing else in the app uses a coloured left rule or a
+numbered mark, so a reader always knows what is evidence and what is the app talking.
+
+The old 3 px margin rail is gone (ADR 0034). It marked where an answer started, which the page
+shape now does on its own, and it competed with the marks for attention. If a surface needs
+emphasis it is a card (`--radius-md`, `--shadow-sm`, `--lift` on hover).
 
 ## 2. Colour tokens
 
@@ -80,38 +86,38 @@ both themes. The palette is shared with the landing page — the token block at 
 `apps/web/src/styles.css` records the landing's `:root` and the reconciliation, and these
 values are the app's side of it.
 
-The accent is the landing's **clay**, not a pine. The landing ships `#C45A3C`, which is only
-3.89:1 on paper and 4.31:1 behind white text, so the app darkens it to `#a8432a` (5.4:1 and
-6.0:1): the same hue family, deep enough to be legible as text and as a button fill.
+The accent is the landing's **clay**, deepened. The landing ships `#C45A3C`, which is only
+3.89:1 on paper and 4.31:1 behind white text, so Soft Paper (ADR 0034) carries `#b0472c`: the
+same hue family, deep enough to be legible as text, as a button fill, and as an evidence mark.
 
 **Ink is warm, not blue.** The landing has no dark theme, so ink is the app's own — but it is
 built from the landing's paper family rather than from a neutral grey. The landing's papers sit
 at hue ~43° (warm amber); the first ink was `#101214`, hue 210° (cool blue-grey), which is the
 opposite temperature and read as a different product the moment the two were compared. Ink now
-runs hue 33–40°, mirroring the landing's lightness ladder onto a dark ground: `--bg` `#16130f`,
-`--surface` `#1e1a15`, `--surface-2` `#262119`. Shadows are warm-tinted too (`rgba(8,6,3,…)`) —
+runs hue 30–38°, mirroring the landing's lightness ladder onto a dark ground: `--bg` `#17130e`,
+`--surface` `#201b15`, `--surface-2` `#282218`. Shadows are warm-tinted too (`rgba(8,6,3,…)`) —
 a neutral black shadow over a warm surface reads grey.
 
 | Token | Paper (light) | Ink (dark) | Role |
 |---|---|---|---|
-| `--bg` | `#f7f3e9` | `#16130f` | app background |
-| `--surface` | `#fffdf7` | `#1e1a15` | cards, sheets, header |
-| `--surface-2` | `#f1ebdc` | `#262119` | inputs, code, nested rows |
-| `--surface-3` | `#eae2cf` | `#100e0b` | inset wells (segmented track, media placeholder) |
-| `--border` | `#e6e3d9` | `#352f26` | hairlines, dividers |
-| `--border-strong` | `#b9b09d` | `#4d453a` | control outlines |
-| `--text` | `#1c1b18` (15.7:1) | `#ece7dd` (15.0:1) | primary text |
-| `--text-muted` | `#6b675f` (5.5:1) | `#a49b8c` (6.7:1) | meta, secondary |
-| `--accent` | `#a8432a` clay (5.4:1) | `#e5805f` (6.8:1) | buttons, rail, active tab, focus |
+| `--bg` | `#f8f4ea` | `#17130e` | app background |
+| `--surface` | `#fffdf7` | `#201b15` | cards, sheets, header |
+| `--surface-2` | `#f2ecdd` | `#282218` | inputs, code, nested rows |
+| `--surface-3` | `#eae1ce` | `#100d09` | inset wells (segmented track, media placeholder) |
+| `--border` | `#e7e1d2` | `#372f24` | hairlines, dividers |
+| `--border-strong` | `#cfc5ae` | `#4f4636` | control outlines |
+| `--text` | `#1e1b16` (15.4:1) | `#eee8db` (15.0:1) | primary text |
+| `--text-muted` | `#6d675c` (5.4:1) | `#a89d8b` (6.6:1) | meta, secondary |
+| `--accent` | `#b0472c` clay (5.1:1) | `#e8865f` (6.7:1) | buttons, evidence marks, active tab, focus |
 | `--on-accent` | `#ffffff` (6.0:1) | `#2a1008` (6.5:1) | text on accent |
-| `--accent-text` | `#963a24` (6.5:1) | `#f0a184` (9.1:1) | links, accent text on surfaces |
-| `--accent-soft` | accent @ 12% | accent @ 18% | pressed chips, selected rows |
+| `--accent-text` | `#9c3d25` (6.2:1) | `#f2a984` (9.0:1) | links, accent text on surfaces |
+| `--accent-soft` | accent @ 11% | accent @ 16% | pressed chips, selected rows |
 | `--accent-2` | `#7d5a10` ochre | `#e2b53c` | **tag chips only**, never buttons |
 | `--ok` / `--warn` / `--err` | `#2f7a3d` / `#9a6a00` / `#b3261e` | `#6ccf7b` / `#e2b53c` / `#ff7b6e` | claim verdicts, run status, destructive |
 | `--focus` | `= --accent` | `= --accent` | focus ring — the ring only, never a radius |
 | `--scrim` | `rgba(28,27,24,.45)` | `rgba(0,0,0,.6)` | behind sheets and menus |
 | `--chart-1…8` | clay, ochre, slate, ochre-deep, plum, teal, brick, olive | lighter variants | chart series and legend swatches |
-| `--rail` | `= --accent` | `= --accent` | the margin rail |
+| `--rail` | `= --accent` | `= --accent` | legacy alias; no app rule uses it (ADR 0034) |
 
 `--accent-2` moved when clay became the primary: the old `#a8541e` was itself a clay, so a tag
 chip and a primary button read as the same ink. The ochre keeps the warm family and sits 1.2:1
@@ -127,13 +133,15 @@ visually hidden data table.
 
 ## 3. Typography
 
-Three faces, bundled from `@fontsource-variable` (latin subsets, `font-display: swap`,
-precached by the service worker), with system fallbacks so an uncached first paint is fine:
+Two faces, bundled from `@fontsource-variable` (latin subsets, `font-display: swap`,
+precached by the service worker), with system fallbacks so an uncached first paint is fine.
+**One family carries the interface and the prose** (ADR 0034): mixing a serif reading face with
+a sans UI read as a magazine, not as a reading tool.
 
 ```
---font-sans:  "Instrument Sans Variable", -apple-system, "Segoe UI", Roboto, sans-serif;  /* UI */
---font-prose: "Newsreader Variable", "Iowan Old Style", Georgia, serif;                   /* answers, notes */
---font-mono:  "JetBrains Mono Variable", ui-monospace, Menlo, Consolas, monospace;        /* meta, code */
+--font-sans:  "Figtree Variable", -apple-system, "Segoe UI", Roboto, sans-serif;  /* UI and prose */
+--font-prose: var(--font-sans);                                                   /* the same voice */
+--font-mono:  "JetBrains Mono Variable", ui-monospace, Menlo, Consolas, monospace; /* meta, code */
 ```
 
 | Step | Size | Use |
@@ -146,26 +154,27 @@ precached by the service worker), with system fallbacks so an uncached first pai
 | `--text-2xl` | 24 | page and answer titles (prose face, 600) |
 | `--text-3xl` | 32 | welcome headline |
 
-Prose: `--prose-size` 18 px / `--prose-leading` 1.6 on phones, 19 px / 1.65 from 768 px;
+Prose: `--prose-size` 17 px / `--prose-leading` 1.62 on phones, 18 px / 1.65 from 768 px;
 Settings → Appearance offers S/M/L (`data-prose="s|l"`). Measure capped at `--measure: 68ch`.
-Headings inside answers are the prose face at 600 with tight leading; tables and code are the
-sans/mono at `--text-sm`. UI labels are 500 with `letter-spacing: -0.005em`. Titles clamp to
-two lines, meta to one.
+Headings inside answers are Figtree at 600 with tight leading; tables and code are the sans/mono
+at `--text-sm`. UI labels are 500 with `letter-spacing: -0.005em`. Titles clamp to two lines,
+meta to one, and always in Figtree — the answer title is 600 at `--text-2xl`, never a serif.
 
 ## 4. Spacing, radii, surfaces
 
 ```
 --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px; --space-5: 20px;
 --space-6: 24px; --space-8: 32px; --space-12: 48px;
---radius-sm: 10px (controls); --radius-md: 16px (cards); --radius-lg: 24px (sheets, groups); --radius-pill: 999px (tag chips only)
---shadow-sm/md: 0 12px 40px -18px rgba(28,27,24,.18) (= landing --shadow-soft)
---shadow-lg:   0 24px 60px -24px rgba(28,27,24,.22), 0 4px 14px -6px rgba(28,27,24,.10) (= landing --shadow)
+--radius-sm: 10px (controls); --radius-md: 18px (cards); --radius-lg: 24px (sheets, groups); --radius-pill: 999px (tag chips only)
+--shadow-sm/md: 0 10px 30px -14px rgba(60,45,30,.20), 0 2px 6px -3px rgba(60,45,30,.08)
+--shadow-lg:   0 20px 44px -18px rgba(60,45,30,.26)
 --lift: -2px; --ease-out: cubic-bezier(.22,.9,.3,1)
 --tap: 44px; --header-h: 56px; --tabbar-h: 56px; --rail-w: 220px; --content-w: 760px
 ```
 
-Radii and shadows are the landing's (`--r-md` 16, `--r-lg` 24, `--shadow-soft`/`--shadow`), so
-a card in the app and a card on the landing are the same object. Cards carry `--shadow-sm` and
+Radii and shadows are Soft Paper's: 18 px cards and warm-tinted (`60,45,30`) shadows, so a card
+sits on the paper rather than floating over it. The landing keeps 16 px; the app runs a little
+rounder. Cards carry `--shadow-sm` and
 lift `--lift` on hover; the landing's `.key-card` does exactly this, and hover changes the
 *elevation* rather than swapping the background (a background swap reads as a state change, not
 as a surface responding to the pointer). Only the settings groups and tiles lift; dense table
@@ -245,7 +254,7 @@ in the prose or a table.
 
 `--dur-fast: 120ms; --dur: 200ms; --dur-slow: 280ms; --ease: cubic-bezier(.2,.8,.2,1)`.
 Only colour, opacity, transform and shadow animate. Sheets slide from the bottom on phones and
-fade-scale on desktop; the streaming answer shows a soft caret; the margin rail fills as a run
+fade-scale on desktop; the streaming answer shows a soft caret; a hairline rule under the prose fills as a run
 progresses. Under `prefers-reduced-motion: reduce` or `data-motion="reduce"` every duration
 drops to 1 ms and view transitions are skipped.
 

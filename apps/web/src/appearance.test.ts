@@ -7,8 +7,8 @@ describe('appearance', () => {
     localStorage.clear();
     for (const k of ['theme', 'prose', 'motion']) delete document.documentElement.dataset[k];
     document.head.innerHTML =
-      '<meta name="theme-color" media="(prefers-color-scheme: light)" content="#f7f3e9">' +
-      '<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#16130f">';
+      '<meta name="theme-color" media="(prefers-color-scheme: light)" content="#f8f4ea">' +
+      '<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#17130e">';
   });
 
   it('defaults to paper when nothing is stored or the stored value is junk', () => {
@@ -30,7 +30,7 @@ describe('appearance', () => {
     expect(h.motion).toBeUndefined();
     // A forced theme pins the browser chrome colour; system restores the media queries.
     const metas = () => [...document.querySelectorAll('meta[name="theme-color"]')];
-    expect(metas().every((m) => m.getAttribute('content') === '#16130f')).toBe(true);
+    expect(metas().every((m) => m.getAttribute('content') === '#17130e')).toBe(true);
     expect(metas().every((m) => !m.hasAttribute('media'))).toBe(true);
     writeAppearance({ theme: 'system' });
     expect(h.theme).toBeUndefined();

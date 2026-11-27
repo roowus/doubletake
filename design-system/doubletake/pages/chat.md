@@ -1,35 +1,38 @@
-# Chat / answer page (`/chat/:id`, `pages/Chat.tsx` and `components/{ChatHeader,ClipCard,Answer,AnswerTabs,FollowUp,RunTimeline}.tsx`)
+# Chat / answer page (`/chat/:id`, `pages/Chat.tsx` and `components/{ChatHeader,Answer,AnswerTabs,FollowUp,RunTimeline}.tsx`)
 
 Overrides [MASTER](../MASTER.md). This is the screen that matters most.
 
-**Job.** Read the answer. Everything else is secondary and placed accordingly.
+**Job.** Read the answer, and be able to check it. Everything else is secondary and placed
+accordingly.
 
 **Layout.**
-1. **Header**: back, title in the prose face (24 px), platform glyph, overflow menu (Tags…,
-   Collections…, Add a task… (see [todo](todo.md)), Research again deeper; Export and Delete are planned and will sit behind a
-   separator, Delete with Confirm). Cancel appears here while a run is live. Below it the run meta line
-   in mono small caps on phones; on wide screens the meta sits in the margin beside the rail.
-2. **Clip card**: the shared thing (thumbnail or uploaded photo/frame, title, domain) and the
-   owner's note in prose italics under a "you wrote" label. It is context, so it is quiet:
-   `--surface`, hairline, no accent.
-3. **Answer**: full-width `.prose` beside the **margin rail** (MASTER §1), measure 68 ch.
-   Markdown with GFM tables (sticky first column on phones, horizontal scroll inside the
-   table wrapper only), task lists, blockquote margin notes, ```chart, ```mermaid and ```svg
-   figures with captions. Never a bubble, never a card.
-4. **Tabs** under the answer (Base UI Tabs): **Claims** (verdict chip ✓ / ~ / ✗ in
-   `--ok/--warn/--err`, confidence bar, sources), **Things** (entity cards grouped by kind, each
-   with a bookmark that saves it to the [to-do list](todo.md); recommendations get the same),
-   **Sources** (transcript, OCR, frames, comments, page text, each collapsible), **Run**
-   (timeline of events with durations and cost; live while running). Counts in the tab label.
-5. **Follow-up composer**, sticky at the bottom above the safe area: one-line field growing
-   to six lines, a **Research** menu for mode and brain, Send. Later turns render as a dated
-   "You asked" line in the sans, muted, then another full-width prose answer with its own
-   rail segment.
+1. **Source line** at the very top: platform glyph, host, date, and the item's thumbnail when
+   it has one (a 44 px tile, not a card). Links to the original. The owner's note, when there
+   is one, is a single quiet line of prose under it. This replaces the old clip card.
+2. **Title**, Figtree 600, 24 px, balanced to two lines.
+3. **Answer prose**: full width, measure 68 ch, Figtree at `--prose-size`. GFM tables (sticky
+   first column on phones, horizontal scroll inside the table wrapper only), task lists,
+   blockquote margin notes, and ```chart / ```mermaid / ```svg figures with captions. Never a
+   bubble, never a card. Evidence marks (`[[n]]`) render as a small clay superscript that
+   scrolls to and highlights claim number `n`.
+4. **Claims report** (MASTER §1): a mono `CLAIMS` header with the tally
+   (`1 supported · 1 contested · 1 refuted`), then one row per claim: number, claim text,
+   verdict chip, and a mono line naming where it came from or `no source found`. A verdict
+   other than `true` adds one line of reason. Rows carry `id="claim-<n>"` for the marks.
+5. **Sources report**: the distinct URLs the claims cite, each with host and the claim numbers
+   that point at it. Empty state: "no sources cited".
+6. **Footer row**, one 56 px line: `8 things · run 12 s · $0.04` with a chevron. Opens a sheet
+   holding **Things** (entity cards grouped by kind, each with a bookmark that saves it to the
+   [to-do list](todo.md)) and **Run** (event timeline, live while running).
+7. **Follow-up composer**, sticky at the bottom above the safe area: one-line field growing to
+   six lines, a **Research** menu for mode and brain, Send. Later turns render as a dated
+   "You asked" line, muted, then another answer with its own claims report.
 
-**Live run.** Skeleton lines where the answer will be, the rail filling as events arrive, the
-Run tab appending steps, status text `aria-live="polite"`. On error the rail turns `--err` and
-the reason appears inline with a Retry button.
+**Live run.** Skeleton lines where the answer will be, a hairline progress rule filling as
+events arrive, the footer row naming the stage, status text `aria-live="polite"`. On error the
+rule turns `--err` and the reason appears inline with a Retry button.
 
-**Do not.** Bubble anything; show meta above the answer on desktop (it belongs in the margin);
-truncate the answer; hide sources behind a second navigation; colour anything else with the
-rail.
+**Do not.** Bubble anything; put the answer's evidence behind a tab the reader has to find;
+truncate the answer; hide sources behind a second navigation; soften the brain's prose because
+one of its claims came back false (the claim's report states it plainly, the prose stays the
+model's).

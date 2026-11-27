@@ -52,7 +52,7 @@ export function DevicesSettings() {
                 value={`${pair.url}/?code=${pair.code}`}
                 size={196}
                 bgColor="#ffffff"
-                fgColor="#1c1b18"
+                fgColor="#1e1b16"
                 includeMargin
               />
               {/* tokens-lint-ignore-end */}

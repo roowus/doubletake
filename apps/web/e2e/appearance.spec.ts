@@ -19,7 +19,7 @@ test('a fresh visitor gets paper even when the OS asks for dark', async ({ brows
     await page.evaluate(() =>
       getComputedStyle(document.documentElement).getPropertyValue('--bg').trim(),
     ),
-  ).toBe('#f7f3e9');
+  ).toBe('#f8f4ea');
   await ctx.close();
 });
 
@@ -37,13 +37,13 @@ test('choosing Ink is remembered on the next load', async ({ page }) => {
     await page.evaluate(() =>
       getComputedStyle(document.documentElement).getPropertyValue('--bg').trim(),
     ),
-  ).toBe('#16130f');
+  ).toBe('#17130e');
 });
 
 test('Match device follows the OS in both directions', async ({ browser }) => {
   for (const [scheme, want] of [
-    ['light', '#f7f3e9'],
-    ['dark', '#16130f'],
+    ['light', '#f8f4ea'],
+    ['dark', '#17130e'],
   ] as const) {
     const ctx = await browser.newContext({ colorScheme: scheme });
     const page = await ctx.newPage();
