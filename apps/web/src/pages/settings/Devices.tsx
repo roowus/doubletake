@@ -46,6 +46,8 @@ export function DevicesSettings() {
         {pair ? (
           <div className="pair-block">
             <div className="qr">
+              {/* tokens-lint-ignore-start: QR plates stay white in both themes; --qr-plate and
+                  --qr-ink exist for CSS, and these two props are the same values. */}
               <QRCodeSVG
                 value={`${pair.url}/?code=${pair.code}`}
                 size={196}
@@ -53,6 +55,7 @@ export function DevicesSettings() {
                 fgColor="#1c1b18"
                 includeMargin
               />
+              {/* tokens-lint-ignore-end */}
             </div>
             <div className="pair-code">
               <span className="sr-only">Pairing code </span>

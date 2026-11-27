@@ -21,6 +21,8 @@ jobs:
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
+      - name: design tokens (no raw colours, ink parity, chrome colours)
+        run: node scripts/check-tokens.mjs
   python:
     runs-on: ubuntu-latest
     defaults: { run: { working-directory: workers/media } }
@@ -52,6 +54,10 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @doubletake/web exec playwright install --with-deps chromium
       - run: pnpm --filter @doubletake/web build
+      # A 320 px phone in both themes is the cheapest way to catch a fix that only works at the
+      # width the developer happened to try. Runs against the same built dist as the shots.
+      - name: mobile audit (320 and 390, both themes)
+        run: pnpm --filter @doubletake/web audit:mobile
       - if: ${{ inputs.update_snapshots != true }}
         run: pnpm --filter @doubletake/web e2e
       - if: ${{ inputs.update_snapshots == true }}

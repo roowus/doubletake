@@ -98,8 +98,10 @@ packages/shared   zod schemas + types (Item, Run, Message, events, API DTOs, unt
 packages/brain-sdk BrainAdapter interface, ToolPolicy, contract test harness
 workers/media     Python 3.12 (uv): download, transcribe, OCR, frames, comments
 docs/             this file, adr/, guides
-design-system/    doubletake/MASTER.md: PWA experience principles, tokens, component rules
-scripts/          doctor.sh, dev.sh, install-service.sh, check-links.py
+design-system/    doubletake/MASTER.md: PWA experience principles, tokens, component rules;
+                  doubletake/tokens.json: generated mirror of the stylesheet tokens
+design-lab/       scratch preview page for choosing a direction (not built, not shipped)
+scripts/          doctor.sh, dev.sh, install-service.sh, check-links.py, check-tokens.mjs
 ```
 
 Toolchain: Node 22, pnpm 10, TypeScript 5 strict, Fastify 5, drizzle-orm + better-sqlite3
@@ -310,6 +312,21 @@ app renders the same offline. `pnpm --filter @doubletake/web shots <dir>` (Playw
 screenshots every route of a running server at phone and desktop sizes in both colour schemes
 for design review; `DOUBLETAKE_URL` and `DOUBLETAKE_TOKEN_FILE` point it at the server.
 
+**Token enforcement** ([ADR 0033](adr/0033-design-token-enforcement.md)):
+`scripts/check-tokens.mjs` runs inside `pnpm check` and the CI `typescript` job and fails on a
+raw colour literal outside the three token blocks, on `[data-theme="ink"]` and the
+`prefers-color-scheme: dark` block disagreeing on any property, on a `var(--x)` that nothing
+declares (Capacitor's `--safe-area-*`, Base UI's JS-set properties and the tab indicator's
+JS-set offsets are allow-listed by prefix), on `index.html`'s `theme-color` metas or
+`appearance.ts`'s `CHROME_BG` drifting from `--bg`, and on a stale
+`design-system/doubletake/tokens.json`. That file is generated (`node
+scripts/check-tokens.mjs --write`), never edited: it mirrors every token in both themes for
+tooling. A literal that must exist carries a `tokens-lint-ignore` comment with its reason, or
+sits inside a `tokens-lint-ignore-start` / `-end` region. `design-lab/index.html` is a scratch
+preview page (three candidate directions, a typeface switcher, a compare view) served with
+`python3 -m http.server 8099` from `design-lab/`; it is excluded from biome, is not built and
+is not a second design system.
+
 **Visual regression** (`apps/web/e2e/`, `pnpm --filter @doubletake/web e2e`): Playwright
 (`@playwright/test`, `playwright.config.ts`) starts `e2e/fixture-server.mjs`, a dependency-free
 `node:http` server that serves the built `dist/` and answers the `/api` routes the pages call
@@ -323,7 +340,12 @@ is present, then `toHaveScreenshot` (`maxDiffPixelRatio: 0.01`, animations disab
 are rendered on Linux only (`ignoreSnapshots` elsewhere unless `E2E_SNAPSHOTS=1`), committed
 under `e2e/__screenshots__/` and compared by the `web-visual` CI job; to re-record them run
 the workflow by hand with `update_snapshots=true`, download the `web-snapshots` artifact and
-commit it. On a failure the job uploads the Playwright report and traces. Two renderer bugs
+commit it. Before the snapshots the same job runs `pnpm --filter @doubletake/web audit:mobile`
+(`apps/web/scripts/audit-mobile.mjs`): Chromium at 320 and 390 wide in both colour schemes over
+eight routes, failing on horizontal scroll, a control under 40 px tall or 24 px wide, or text
+clipped with no ellipsis (deliberate ellipsis is a note). It needs no Linux rendering, so it
+also catches a narrow-width break locally before a snapshot is re-recorded. On a failure the
+job uploads the Playwright report and traces. Two renderer bugs
 this suite caught are now asserted: chart bars carry the `.bar` class that CSS colours by
 series, and Mermaid is initialised with both the top-level and the `flowchart` `htmlLabels:
 false`, because Mermaid 11 shape renderers read the top-level flag and otherwise emit node

@@ -27,6 +27,9 @@ function themeVariables() {
     (theme !== 'paper' &&
       typeof matchMedia === 'function' &&
       matchMedia('(prefers-color-scheme: dark)').matches);
+  // tokens-lint-ignore-start: the values below are fallbacks for a token read, not the token
+  // itself. `cssVar` returns the live custom property whenever the document has one; these
+  // only cover a diagram rendered before the stylesheet applies.
   return {
     darkMode: dark,
     // Fallbacks only — `cssVar` reads the live token first. They mirror styles.css so a diagram
@@ -42,6 +45,7 @@ function themeVariables() {
     fontFamily: cssVar('--font-sans', 'system-ui, sans-serif'),
     fontSize: '14px',
   };
+  // tokens-lint-ignore-end
 }
 
 let initialisedFor: string | null = null;

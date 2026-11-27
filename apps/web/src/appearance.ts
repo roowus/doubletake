@@ -74,6 +74,8 @@ export function writeAppearance(patch: Partial<Appearance>): Appearance {
  * drifted a design pass behind (the old cream/cool-grey pair), so a forced theme painted the
  * wrong colour into the browser chrome.
  */
+// tokens-lint-ignore: runs before the stylesheet paints, so it cannot read a custom property.
+// `scripts/check-tokens.mjs` fails if these two stop equalling --bg in styles.css.
 const CHROME_BG: Record<'paper' | 'ink', string> = { paper: '#f7f3e9', ink: '#16130f' };
 
 function updateThemeColor(theme: Theme): void {

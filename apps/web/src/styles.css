@@ -167,6 +167,32 @@
   --ease-out: cubic-bezier(0.22, 0.9, 0.3, 1);
   --lift: -2px;
 
+  /* Paper texture (body::before). The bloom is the accent at 5 %, the rules the ink at 1.2 %;
+     kept as their own tokens so the two dark blocks can re-point them without a second rule. */
+  --texture-bloom: rgba(196, 90, 60, 0.05);
+  --texture-rule: rgba(28, 27, 24, 0.012);
+
+  /* The map's own colours. `--map-filter` is `none` on paper and the tile invert on ink, so a
+     leaflet container needs no theme-specific rule. */
+  --map-filter: none;
+  --map-sea: #aad3df;
+
+  /* Text and plate on a filled destructive button. Not --on-accent: the error fill is a
+     different colour and needs its own contrast pairing (white clears 5.9:1 on --err). */
+  --on-danger: #ffffff;
+  /* Switch knob: the paper colour over the accent track, with a hairline shadow so it reads as
+     a raised object on both themes. */
+  --knob-bg: var(--bg);
+  --knob-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+
+  /* A mask gradient only needs an opaque stop; named so the lint has a token to point at. */
+  --mask-solid: #000;
+
+  /* QR codes are scanned by a camera, so their plate stays white and their ink near-black in
+     both themes (a dark plate defeats the scanner). Deliberately theme-independent. */
+  --qr-plate: #ffffff;
+  --qr-ink: #1c1b18;
+
   font-family: var(--font-sans);
   font-size: var(--text-md);
   line-height: 1.5;
@@ -184,8 +210,8 @@ body::before {
   pointer-events: none;
   z-index: 0;
   background:
-    radial-gradient(1200px 600px at 80% -10%, rgba(196, 90, 60, 0.05), transparent 60%),
-    repeating-linear-gradient(0deg, transparent 0 2px, rgba(28, 27, 24, 0.012) 2px 4px);
+    radial-gradient(1200px 600px at 80% -10%, var(--texture-bloom), transparent 60%),
+    repeating-linear-gradient(0deg, transparent 0 2px, var(--texture-rule) 2px 4px);
 }
 
 /* Ink */
@@ -226,6 +252,9 @@ body::before {
     --shadow-hover: 0 24px 60px -24px rgba(8, 6, 3, 0.66);
     --field-bg: var(--surface-2);
     --chrome-bg: rgba(22, 19, 15, 0.82);
+    --texture-bloom: rgba(229, 128, 95, 0.06);
+    --texture-rule: rgba(233, 230, 223, 0.014);
+    --on-danger: #2a1008;
     --map-filter: invert(1) hue-rotate(180deg) brightness(0.8) contrast(0.9) saturate(0.6);
     --map-sea: #2a2419;
   }
@@ -266,24 +295,15 @@ body::before {
   --shadow-hover: 0 24px 60px -24px rgba(8, 6, 3, 0.66);
   --field-bg: var(--surface-2);
   --chrome-bg: rgba(22, 19, 15, 0.82);
+  --texture-bloom: rgba(229, 128, 95, 0.06);
+  --texture-rule: rgba(233, 230, 223, 0.014);
+  --on-danger: #2a1008;
   --map-filter: invert(1) hue-rotate(180deg) brightness(0.8) contrast(0.9) saturate(0.6);
   --map-sea: #2a2419;
 }
 
-/* Ink keeps the landing's texture, re-pointed: the clay accent blooms and the ruled-paper
-   hairlines become light-on-dark. */
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="paper"]) body::before {
-    background:
-      radial-gradient(1200px 600px at 80% -10%, rgba(229, 128, 95, 0.06), transparent 60%),
-      repeating-linear-gradient(0deg, transparent 0 2px, rgba(233, 230, 223, 0.014) 2px 4px);
-  }
-}
-:root[data-theme="ink"] body::before {
-  background:
-    radial-gradient(1200px 600px at 80% -10%, rgba(229, 128, 95, 0.06), transparent 60%),
-    repeating-linear-gradient(0deg, transparent 0 2px, rgba(233, 230, 223, 0.014) 2px 4px);
-}
+/* Ink's texture is the same rule as paper's: the two dark token blocks re-point --texture-bloom
+   and --texture-rule, so body::before needs no theme-specific rule. */
 
 /* Prose size (Settings → Appearance). */
 :root[data-prose="s"] {
@@ -1255,7 +1275,7 @@ a.chip:hover {
   white-space: nowrap;
   font-size: var(--text-xs);
   color: var(--text-muted);
-  mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+  mask-image: linear-gradient(to right, var(--mask-solid) calc(100% - 28px), transparent);
 }
 .chatrow .meta:empty {
   display: none;
@@ -1406,7 +1426,7 @@ a.chip:hover {
 }
 button.danger.solid {
   background: var(--err);
-  color: #fff;
+  color: var(--on-danger);
   border-color: transparent;
 }
 
@@ -2958,7 +2978,7 @@ details.card > summary + .md {
   font: inherit;
   /* OSM ocean colour, so the band past the Mercator poles (no tiles) looks like sea; on ink
      it is the same colour the tile filter turns the sea into. */
-  background: var(--map-sea, #aad3df);
+  background: var(--map-sea);
 }
 .map.leaflet-container .leaflet-control-attribution {
   background: color-mix(in srgb, var(--surface) 85%, transparent);
@@ -3208,8 +3228,8 @@ input.switch {
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  background: var(--bg);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  background: var(--knob-bg);
+  box-shadow: var(--knob-shadow);
   transition: transform var(--dur) var(--ease);
 }
 .switch:checked {
@@ -3421,7 +3441,7 @@ input.switch {
   display: grid;
   place-items: center;
   padding: var(--space-3);
-  background: #ffffff;
+  background: var(--qr-plate);
   border-radius: var(--radius-md);
   align-self: center;
 }
@@ -3959,7 +3979,7 @@ input.switch {
   align-items: center;
   gap: 12px;
   margin: 12px 0;
-  color: var(--ink-3, #6b675e);
+  color: var(--text-muted);
   font-size: 0.8rem;
 }
 .or-rule::before,
@@ -3967,7 +3987,7 @@ input.switch {
   content: "";
   flex: 1;
   height: 1px;
-  background: var(--line, #ddd8cc);
+  background: var(--border);
 }
 .field-row {
   display: grid;
@@ -3975,7 +3995,7 @@ input.switch {
   gap: 12px;
 }
 .token-block {
-  border: 1px solid var(--line, #ddd8cc);
+  border: 1px solid var(--border);
   border-radius: 8px;
   padding: 10px;
   margin: 8px 0;

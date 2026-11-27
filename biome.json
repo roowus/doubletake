@@ -14,7 +14,8 @@
       "!apps/mobile/ios",
       "!workers",
       "!apps/server/drizzle/meta",
-      "!apps/server/drizzle-pg/meta"
+      "!apps/server/drizzle-pg/meta",
+      "!design-lab"
     ]
   },
   "formatter": {

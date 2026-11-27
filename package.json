@@ -17,7 +17,8 @@
     "test": "pnpm -r --if-present test",
     "py:lint": "cd workers/media && uv run ruff check . && uv run ruff format --check .",
     "py:test": "cd workers/media && uv run pytest -q",
-    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm py:lint && pnpm py:test"
+    "check:tokens": "node scripts/check-tokens.mjs",
+    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm py:lint && pnpm py:test && node scripts/check-tokens.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.12",
