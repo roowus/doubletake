@@ -152,10 +152,8 @@ export function Inbox() {
   const collectionsShown = collections.filter((c) => c.count > 0 || !c.auto);
 
   return (
-    <div className="page stack">
-      <div className="page-head">
-        <h1>Inbox</h1>
-      </div>
+    <div className="page stack inbox-page">
+      <h1 className="page-title">Inbox</h1>
       <search className="inbox-search">
         <form
           className="searchbar"
@@ -179,16 +177,17 @@ export function Inbox() {
               {asking ? 'Asking…' : 'Ask'}
             </button>
           )}
+          <button
+            type="button"
+            className={`search-filter${activeCount ? ' on' : ''}`}
+            aria-label={activeCount ? `Filters, ${activeCount} active` : 'Filters'}
+            aria-expanded={sheet}
+            onClick={() => setSheet(true)}
+          >
+            <Icon name="filter" size={18} />
+            {activeCount > 0 && <span className="n">{activeCount}</span>}
+          </button>
         </form>
-        <button
-          type="button"
-          className={`icon ${activeCount ? 'on' : 'ghost'}`}
-          aria-label={activeCount ? `Filters (${activeCount} active)` : 'Filters'}
-          aria-expanded={sheet}
-          onClick={() => setSheet(true)}
-        >
-          <Icon name="filter" size={20} />
-        </button>
       </search>
 
       {activeCount > 0 && (
@@ -201,9 +200,6 @@ export function Inbox() {
           >
             {summary}
             <Icon name="x" size={14} className="x" />
-          </button>
-          <button type="button" className="ghost small" onClick={() => setSheet(true)}>
-            Edit
           </button>
         </div>
       )}
@@ -289,7 +285,7 @@ export function Inbox() {
       {visible && visible.length === 0 && !err && (
         <div className="card quiet empty">
           <Icon name="inbox" size={28} />
-          {chats && chats.length > 0 ? (
+          {activeCount > 0 || (chats && chats.length > 0) ? (
             <>
               <strong>Nothing matches</strong>
               <span>Loosen the filters or search for something else.</span>

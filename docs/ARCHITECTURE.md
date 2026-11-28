@@ -367,18 +367,20 @@ collapsible **Done** section, and a **Task** button adds a free-text task
 (`components/TaskForm.tsx`). Entries get onto the list from the answer page: every row in the
 **Things** tab and every recommendation carries a bookmark button ("Save … to your list"),
 and the header menu's **Add a task…** opens a sheet with the same form, linked to the chat. **Inbox**
-(`pages/Inbox.tsx`): a search field over the FTS index whose **Ask** button turns the text into
-a `library` question and opens its chat, a funnel button beside it that opens the **Filter**
+(`pages/Inbox.tsx`): the page title, a single
+search field over the FTS index whose **Ask** button turns the text into a `library` question
+and opens its chat, and a funnel button at the field's right edge that opens the **Filter**
 sheet (`components/Sheet.tsx`, a Base UI `Dialog` drawn as a bottom sheet on phones and a
-centred dialog from 768 px: status, platform, collections and tags as pressed chips), and one
-removable **summary chip** ("Places to visit · #ski · YouTube") while filters are active. Tag
+centred dialog from 768 px: status, platform, collections and tags as pills in labelled
+groups) with the active filter count as a small badge on the funnel. One removable **summary
+chip** ("Places to visit · #ski · YouTube") sits under the field while filters are active. Tag
 and collection filters go to the server (`GET /api/chats?q=&tag=&collection=`); platform and
 status are applied client-side on the summaries. Filters live in the URL (`?tag=`,
 `?collection=`, `?platform=`, `?status=`) so Library tiles and shared links land on a filtered
-inbox. The list itself is split into an **Unread** section and the rest, each row showing the
-platform (or channel) glyph, the title in the prose face, a one-line meta row (status while a
-run is working or has failed, category, up to three tags in ochre) and the age with an unread
-count. Collections are managed from the Library tab: each tile has an overflow menu
+inbox. The list itself is split into an **Unread** section and the rest under mono uppercase
+section labels, each row a 30 px glyph tile, the title at `--text-md`, a mono meta line
+(status while a run is working or has failed, category, up to three tags in ochre) and the age
+with an unread count. Collections are managed from the Library tab: each tile has an overflow menu
 (`components/Menu.tsx`, Base UI Menu) with hide, **share** as a read-only page whose link is
 copied to the clipboard ([ADR 0025](adr/0025-shareable-collection-pages.md)) and delete, the
 latter behind an alert dialog (`components/Confirm.tsx`); the **New collection** form creates a
