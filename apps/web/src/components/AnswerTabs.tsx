@@ -1,14 +1,7 @@
 import { Tabs } from '@base-ui/react/tabs';
-import type {
-  Answer,
-  Entity,
-  EntityKind,
-  ExtractionDto,
-  RunDto,
-  RunEvent,
-} from '@doubletake/shared';
+import type { Entity, EntityKind, ExtractionDto, RunDto, RunEvent } from '@doubletake/shared';
 import { useState } from 'react';
-import { Claims, runMeta } from './Answer';
+import { runMeta } from './Answer';
 import { Icon } from './Icon';
 import { RunTimeline } from './RunTimeline';
 
@@ -204,12 +197,14 @@ function Runs({
 export const ACTIVE = new Set(['queued', 'extracting', 'classifying', 'researching']);
 
 /**
- * The four panels under the answer: Claims (verdicts and sources), Things (entities by kind),
- * Sources (extractions) and Run (timeline). Base UI Tabs gives the roving tabindex and aria
- * wiring; counts in the tab labels say what is inside before you tap.
+ * The detail sheet: Things (entities by kind), Sources (the raw text the brain read) and Run
+ * (the event timeline), opened from the footer row. The answer's Claims and the sources they
+ * cite used to be tabs here; they are printed under the answer now (ADR 0034), because
+ * evidence behind a tap is evidence nobody reads. What is left is machinery you look at on
+ * purpose: what was extracted, what text it read, what happened. Base UI Tabs gives the
+ * roving tabindex and aria wiring; counts in the tab labels say what is inside.
  */
 export function AnswerTabs({
-  claims,
   entities,
   extractions,
   runs,
@@ -218,7 +213,6 @@ export function AnswerTabs({
   onCancel,
   onSave,
 }: {
-  claims: Answer['claims'];
   entities: Entity[];
   extractions: ExtractionDto[];
   runs: RunDto[];
@@ -229,7 +223,7 @@ export function AnswerTabs({
   onSave?: (e: Entity) => void;
 }) {
   const live = runs.some((r) => ACTIVE.has(r.status));
-  const [value, setValue] = useState<string>(live ? 'run' : 'claims');
+  const [value, setValue] = useState<string>(live ? 'run' : 'things');
   const tab = (id: string, label: string, n: number) => (
     <Tabs.Tab className="atab" value={id}>
       {label}
@@ -239,7 +233,6 @@ export function AnswerTabs({
   return (
     <Tabs.Root className="atabs" value={value} onValueChange={(v) => setValue(String(v))}>
       <Tabs.List className="atab-list" aria-label="Answer details">
-        {tab('claims', 'Claims', claims.length)}
         {tab('things', 'Things', entities.length)}
         {tab('sources', 'Sources', extractions.length)}
         <Tabs.Tab className={`atab${live ? ' live' : ''}`} value="run">
@@ -248,9 +241,6 @@ export function AnswerTabs({
         </Tabs.Tab>
         <Tabs.Indicator className="atab-indicator" />
       </Tabs.List>
-      <Tabs.Panel className="apanel" value="claims">
-        <Claims claims={claims} />
-      </Tabs.Panel>
       <Tabs.Panel className="apanel" value="things">
         <Things entities={entities} onSave={onSave} />
       </Tabs.Panel>

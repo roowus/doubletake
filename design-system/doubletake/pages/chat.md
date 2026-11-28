@@ -21,16 +21,20 @@ accordingly.
    other than `true` adds one line of reason. Rows carry `id="claim-<n>"` for the marks.
 5. **Sources report**: the distinct URLs the claims cite, each with host and the claim numbers
    that point at it. Empty state: "no sources cited".
-6. **Footer row**, one 56 px line: `8 things · run 12 s · $0.04` with a chevron. Opens a sheet
-   holding **Things** (entity cards grouped by kind, each with a bookmark that saves it to the
-   [to-do list](todo.md)) and **Run** (event timeline, live while running).
+6. **Footer row**, one 56 px line: `8 things · 3 claims · run 12 s · $0.04` with a chevron.
+   Opens a sheet with three tabs: **Things** (entity cards grouped by kind, each with a
+   bookmark that saves it to the [to-do list](todo.md)), **Sources** (every extraction the
+   brain read, one chip per kind, flattened to text) and **Run** (event timeline, live while
+   running). A message that is nothing but the shared URL is not rendered as a turn; the
+   source line already names it. The owner's note that came with the share is the first
+   "You asked" line under the title.
 7. **Follow-up composer**, sticky at the bottom above the safe area: one-line field growing to
    six lines, a **Research** menu for mode and brain, Send. Later turns render as a dated
    "You asked" line, muted, then another answer with its own claims report.
 
-**Live run.** Skeleton lines where the answer will be, a hairline progress rule filling as
-events arrive, the footer row naming the stage, status text `aria-live="polite"`. On error the
-rule turns `--err` and the reason appears inline with a Retry button.
+**Live run.** Skeleton lines where the answer will be, the run's status and mode in a small
+label above them with a Cancel button, status text `aria-live="polite"`. On error the reason
+appears inline with a Retry button.
 
 **Do not.** Bubble anything; put the answer's evidence behind a tab the reader has to find;
 truncate the answer; hide sources behind a second navigation; soften the brain's prose because

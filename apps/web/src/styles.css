@@ -75,9 +75,6 @@
   --chart-6: #2a8f8f;
   --chart-7: #9a3b2e;
   --chart-8: #5f7a2e;
-  /* ADR 0030's signature element: the 3 px margin rule beside every answer. Bound to the accent,
-     so it is now the landing's clay — the same colour the landing calls --rail. */
-  --rail: var(--accent);
   /* Soft layered shadows; warm-tinted so a card sits on the paper rather than floating over it
      (`none` is kept as a valid value other rules rely on). */
   --shadow-sm: 0 10px 30px -14px rgba(60, 45, 30, 0.2), 0 2px 6px -3px rgba(60, 45, 30, 0.08);
@@ -1775,60 +1772,45 @@ button.danger.solid {
   border-color: var(--accent-2);
 }
 
-/* The clip: the shared thing itself. */
-.clip {
+/* The source line: platform glyph or thumbnail, host, date. It replaces the old clip card
+   (ADR 0034); the page is the answer, and the clip is context that fits in one line. */
+.m-source {
   display: flex;
-  gap: var(--space-3);
-  padding: var(--space-3);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  color: inherit;
-  text-decoration: none;
+  align-items: center;
+  gap: var(--space-2);
   min-width: 0;
-}
-a.clip:hover {
-  border-color: var(--border-strong);
-}
-.clip.upload {
-  flex-direction: column;
-  padding: var(--space-2);
-}
-.clip-thumb {
-  flex: 0 0 auto;
-  width: 96px;
-  height: 72px;
-  object-fit: cover;
-  border-radius: var(--radius-sm);
-  background: var(--surface-2);
-}
-.clip.portrait .clip-thumb {
-  width: 72px;
-  height: 96px;
-}
-.clip.upload .clip-thumb {
-  width: 100%;
-  /* A shared photo or frame is context, not the page: never taller than the reader's first fold. */
-  max-height: min(60vh, 400px);
-  height: auto;
-  object-fit: contain;
-  background: var(--surface-2);
-}
-.clip-body {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 4px;
-  min-width: 0;
-  font-size: var(--text-sm);
-}
-.clip-title {
-  font-weight: 500;
-  overflow-wrap: anywhere;
-}
-.clip-url {
+  font-family: var(--font-mono);
   font-size: var(--text-xs);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   color: var(--text-muted);
+}
+.m-source > svg {
+  flex: 0 0 auto;
+  opacity: 0.75;
+}
+.m-source a {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+  text-decoration: none;
+}
+.m-source a:hover {
+  color: var(--text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.m-source .sep {
+  opacity: 0.5;
+}
+.m-source-thumb {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  object-fit: cover;
+  border-radius: 6px;
+  background: var(--surface-2);
 }
 
 /* Turns: the owner's lines and the brain's answers, no bubbles. The rail marks the answer. */
@@ -1885,68 +1867,10 @@ a.clip:hover {
 .turn.system.error {
   color: var(--err);
 }
-/* The margin rail: a 3 px accent rule down the left of every answer. */
+/* The answer is the page: no rule beside it, no label above it (ADR 0034). While a run is
+   live the skeleton is the only signal it needs. */
 .turn.answer {
-  position: relative;
-  padding-left: var(--space-4);
-}
-.turn.answer::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 3px;
-  border-radius: 2px;
-  background: var(--rail);
-}
-/* While a run is live the rail is a track that fills as the phases complete. */
-.turn.answer.live::before {
-  background: color-mix(in srgb, var(--rail) 22%, transparent);
-}
-.turn.answer.live::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: 3px;
-  height: var(--rail-fill, 10%);
-  border-radius: 2px;
-  background: var(--rail);
-  transition: height var(--dur-slow) var(--ease);
-}
-.rail[data-rail-pct="0"] .turn.answer.live::after {
-  --rail-fill: 4%;
-}
-.rail[data-rail-pct="10"] .turn.answer.live::after {
-  --rail-fill: 10%;
-}
-.rail[data-rail-pct="20"] .turn.answer.live::after {
-  --rail-fill: 20%;
-}
-.rail[data-rail-pct="30"] .turn.answer.live::after {
-  --rail-fill: 30%;
-}
-.rail[data-rail-pct="40"] .turn.answer.live::after {
-  --rail-fill: 40%;
-}
-.rail[data-rail-pct="50"] .turn.answer.live::after {
-  --rail-fill: 50%;
-}
-.rail[data-rail-pct="60"] .turn.answer.live::after {
-  --rail-fill: 60%;
-}
-.rail[data-rail-pct="70"] .turn.answer.live::after {
-  --rail-fill: 70%;
-}
-.rail[data-rail-pct="80"] .turn.answer.live::after {
-  --rail-fill: 80%;
-}
-.rail[data-rail-pct="90"] .turn.answer.live::after {
-  --rail-fill: 90%;
-}
-.rail[data-rail-pct="100"] .turn.answer.live::after {
-  --rail-fill: 100%;
+  min-width: 0;
 }
 
 /* Prose: the answer set like a page, not a message. */
@@ -2043,6 +1967,7 @@ a.clip:hover {
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--text-muted);
+  white-space: nowrap;
   border-bottom: 1px solid var(--border-strong);
 }
 .prose .md th,
@@ -2062,6 +1987,8 @@ a.clip:hover {
   left: 0;
   z-index: 1;
   font-weight: 500;
+  /* The first column is row labels: keep them on one line, the data columns can wrap. */
+  white-space: nowrap;
   box-shadow: 1px 0 0 var(--border);
 }
 .prose .md td:not(:first-child) {
@@ -2205,15 +2132,9 @@ a.clip:hover {
   .skeleton .sk {
     animation: none;
   }
-  .turn.answer.live::after {
-    transition: none;
-  }
 }
 :root[data-motion="reduce"] .skeleton .sk {
   animation: none;
-}
-:root[data-motion="reduce"] .turn.answer.live::after {
-  transition: none;
 }
 
 /* Detail tabs under the answer: Claims / Things / Sources / Run. */
@@ -2302,56 +2223,145 @@ a.clip:hover {
   color: var(--text-muted);
 }
 
-/* Claims: verdict, the claim itself, confidence bar and numbered sources. */
+/* The evidence reports: claims and sources printed under the answer (ADR 0034). They are the
+   page's one signed element, so they are ruled like a table, not boxed like a card. */
+.report {
+  margin-top: var(--space-4);
+}
+.report-h {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.report-c {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0 12px;
+}
+.report-c > * {
+  white-space: nowrap;
+}
+
+/* A claim row: number, the claim, its verdict, where it was checked, and the reason whenever
+   the verdict is anything but plainly true. */
 .claims {
   list-style: none;
   margin: 0;
   padding: 0;
-  display: flex;
-  flex-direction: column;
 }
 .claim {
-  display: flex;
-  gap: var(--space-3);
-  padding: var(--space-3) 0;
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  column-gap: var(--space-2);
+  row-gap: 3px;
+  align-items: baseline;
+  padding: var(--space-2) 0;
   border-bottom: 1px solid var(--border);
+  scroll-margin-top: 72px;
 }
 .claim:last-child {
   border-bottom: 0;
 }
-.claim-body {
-  flex: 1;
-  min-width: 0;
+.claim-n {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--accent-text);
+  line-height: 1.6;
 }
-.claim-body p {
+.claim-body {
+  display: contents;
+}
+.claim-text {
   margin: 0;
+  min-width: 0;
   font-size: var(--text-md);
   line-height: 1.45;
+  color: var(--text);
 }
 .claim-meta {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px 10px;
-  margin-top: 6px;
-  font-size: var(--text-xs);
+  display: contents;
+}
+.claim-src {
+  grid-column: 2 / 4;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+.claim-reason {
+  grid-column: 2 / 4;
+  margin: 2px 0 0;
+  font-size: var(--text-sm);
+  line-height: 1.45;
   color: var(--text-muted);
 }
+/* An evidence mark in the prose jumps to its claim; the row flashes so the eyes can find it. */
+.claim:target {
+  animation: claim-flash 1.6s var(--ease);
+}
+@keyframes claim-flash {
+  0%,
+  35% {
+    background: var(--accent-soft);
+  }
+  to {
+    background: transparent;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .claim:target {
+    animation: none;
+    background: var(--accent-soft);
+  }
+}
+:root[data-motion="reduce"] .claim:target {
+  animation: none;
+  background: var(--accent-soft);
+}
+
+/* The inline evidence mark: a small superscript number, quiet until you look at it. */
+.mark a {
+  display: inline-block;
+  margin-left: 2px;
+  padding: 0 1px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--accent-text);
+  text-decoration: none;
+  vertical-align: super;
+}
+.mark a:hover,
+.mark a:focus-visible {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 .verdict {
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  height: 22px;
-  padding: 0 8px;
-  border-radius: var(--radius-pill);
-  font-size: var(--text-xs);
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 5px;
+  font-size: 9.5px;
   font-weight: 600;
-  text-transform: capitalize;
+  letter-spacing: 0.02em;
   white-space: nowrap;
   --c: var(--text-muted);
   color: var(--c);
-  background: color-mix(in srgb, var(--c) 14%, transparent);
+  background: color-mix(in srgb, var(--c) 13%, transparent);
 }
 .verdict.true {
   --c: var(--ok);
@@ -2362,57 +2372,95 @@ a.clip:hover {
 .verdict.mixed {
   --c: var(--warn);
 }
-.confidence {
-  display: inline-block;
-  width: 64px;
-  height: 4px;
-  border-radius: 2px;
-  background: var(--surface-2);
-  overflow: hidden;
+.verdict.unverified {
+  --c: var(--text-muted);
 }
-.confidence .bar {
-  display: block;
-  height: 100%;
-  background: var(--text-muted);
-  width: var(--pct, 0%);
+
+/* The sources report: one row per distinct URL, with the claim numbers that cite it. */
+.srclist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
 }
-.confidence .bar[data-pct="10"] {
-  --pct: 10%;
+.srclist li {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--border);
+  min-width: 0;
 }
-.confidence .bar[data-pct="20"] {
-  --pct: 20%;
+.srclist li:last-child {
+  border-bottom: 0;
 }
-.confidence .bar[data-pct="30"] {
-  --pct: 30%;
-}
-.confidence .bar[data-pct="40"] {
-  --pct: 40%;
-}
-.confidence .bar[data-pct="50"] {
-  --pct: 50%;
-}
-.confidence .bar[data-pct="60"] {
-  --pct: 60%;
-}
-.confidence .bar[data-pct="70"] {
-  --pct: 70%;
-}
-.confidence .bar[data-pct="80"] {
-  --pct: 80%;
-}
-.confidence .bar[data-pct="90"] {
-  --pct: 90%;
-}
-.confidence .bar[data-pct="100"] {
-  --pct: 100%;
-}
-.claim-meta .ref {
-  font-family: var(--font-mono);
-  color: var(--accent-text);
+.srclist a {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 8px;
+  min-width: 0;
+  color: inherit;
   text-decoration: none;
 }
-.claim-meta .ref:hover {
+.srclist a:hover .src-url {
+  color: var(--text);
   text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.src-host {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--text);
+}
+.src-url {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  color: var(--text-muted);
+}
+.src-n {
+  flex: 0 0 auto;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  color: var(--accent-text);
+}
+
+/* The one detail row under the reports: things, claims, run time and cost. It opens the
+   Things and Runs sheet, so every capability the old tabs had keeps a door. */
+.m-detail {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  min-height: var(--tap);
+  margin-top: var(--space-3);
+  padding: 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+  text-align: left;
+  font-family: var(--font-sans);
+  font-size: var(--text-md);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.m-detail > span + span::before {
+  content: "·";
+  margin-right: var(--space-2);
+  opacity: 0.6;
+}
+.m-detail:hover {
+  color: var(--text);
+}
+.m-detail-chev {
+  flex: 0 0 auto;
+  margin-left: auto;
+  color: var(--border-strong);
 }
 
 /* Things: entities grouped by kind, one line each. */

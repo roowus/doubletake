@@ -1,15 +1,15 @@
-import type { ChatDetail, Entity, Mode, RunEvent } from '@doubletake/shared';
+import type { ChatDetail, Entity, Mode, RunDto, RunEvent } from '@doubletake/shared';
 import { useEffect, useRef, useState } from 'react';
 import { ApiError, api } from '../api';
-import { AnswerSkeleton, Turn } from '../components/Answer';
+import { AnswerSkeleton, Claims, isBareShare, SourcesReport, Turn } from '../components/Answer';
 import { ACTIVE, AnswerTabs } from '../components/AnswerTabs';
 import { ChatHeader } from '../components/ChatHeader';
-import { ClipCard } from '../components/ClipCard';
 import { FollowUp } from '../components/FollowUp';
 import { Icon } from '../components/Icon';
 import type { MenuAction } from '../components/Menu';
 import { Sheet } from '../components/Sheet';
 import { ListSkeleton } from '../components/Skeleton';
+import { SourceLine } from '../components/SourceLine';
 import { TagEditor } from '../components/TagEditor';
 import { TaskForm } from '../components/TaskForm';
 import { toast } from '../components/Toast';
@@ -18,25 +18,29 @@ import { useLive } from '../live';
 import { navigate } from '../router';
 import { CollectionPicker } from './Entities';
 
-/** Phases a run passes through, for the margin rail's fill while it is live. */
-const PHASE_PCT: Record<string, number> = {
-  queued: 5,
-  extracting: 25,
-  classifying: 45,
-  researching: 70,
-};
+/** "run 12 s · $0.04" for the footer row: the run's duration and what it cost. */
+function runFooter(run: RunDto): string {
+  const parts: string[] = [];
+  if (run.startedAt && run.finishedAt) {
+    const s = Math.round(
+      (new Date(run.finishedAt).getTime() - new Date(run.startedAt).getTime()) / 1000,
+    );
+    parts.push(s >= 90 ? `run ${Math.round(s / 60)} min` : `run ${s} s`);
+  }
+  if (run.costUsd != null) parts.push(`$${run.costUsd.toFixed(2)}`);
+  return parts.join(' · ');
+}
 
 /**
- * The answer page: a notebook page about one shared thing. Clip on top, the owner's note,
- * then the brain's answer as full-width prose beside the margin rail (the accent rule that
- * marks where the answer starts and fills while a run is live), the four detail tabs, and
- * the follow-up composer stuck to the bottom.
+ * The answer page (ADR 0034): a source line, the title, the prose with its evidence marks, the
+ * claims and sources reports printed underneath, one footer row for everything else, and the
+ * follow-up composer stuck to the bottom. No turn labels on the answer, no rail, no tabs.
  */
 export function Chat({ id }: { id: string }) {
   const [detail, setDetail] = useState<ChatDetail | null>(null);
   const [events, setEvents] = useState<Record<string, RunEvent[]>>({});
   const [err, setErr] = useState<string | null>(null);
-  const [sheet, setSheet] = useState<'tags' | 'collections' | 'task' | null>(null);
+  const [sheet, setSheet] = useState<'tags' | 'collections' | 'task' | 'detail' | null>(null);
   const bottom = useRef<HTMLDivElement>(null);
 
   const loadEvents = (runId: string) => {
@@ -115,18 +119,12 @@ export function Chat({ id }: { id: string }) {
 
   const { chat, item, messages, runs, entities, extractions } = detail;
   const active = runs.filter((r) => ACTIVE.has(r.status));
-  const totalCost = runs.reduce((s, r) => s + (r.costUsd ?? 0), 0);
   const lastAnswer = [...messages].reverse().find((m) => m.kind === 'answer')?.structured ?? null;
   const capped = runs.some((r) => r.status === 'capped') && active.length === 0;
   const runOf = (runId: string | null | undefined) => runs.find((r) => r.id === runId);
   const liveRun = active[0];
-  // Rail fill: the phase gives a floor, tool events nudge it towards the top of the phase.
-  const railPct = liveRun
-    ? Math.min(
-        95,
-        (PHASE_PCT[liveRun.status] ?? 10) + Math.min(20, (events[liveRun.id]?.length ?? 0) * 2),
-      )
-    : 100;
+  // The newest finished run speaks for the footer row; a live one takes precedence.
+  const lastRun = liveRun ?? [...runs].filter((r) => r.finishedAt).at(-1) ?? runs.at(-1);
   const hasAnswer = messages.some((m) => m.role === 'assistant');
 
   // Hosted run failures carry a reason (ADR 0032); map it to copy that names the fix.
@@ -190,8 +188,7 @@ export function Chat({ id }: { id: string }) {
     <div className="page narrow notebook" data-live={liveRun ? '' : undefined}>
       <ChatHeader
         chat={chat}
-        item={item}
-        totalCost={totalCost}
+        source={<SourceLine chat={chat} item={item} at={chat.createdAt} />}
         onBack={() => navigate('/')}
         actions={actions}
       />
@@ -211,28 +208,16 @@ export function Chat({ id }: { id: string }) {
         </div>
       )}
 
-      <ClipCard chat={chat} item={item} />
-      {chat.tags.length > 0 && (
-        <ul className="chips chat-tags" aria-label="Tags">
-          {chat.tags.map((t) => (
-            <li key={t}>
-              <button type="button" className="tag" onClick={() => setSheet('tags')}>
-                {t}
-              </button>
-            </li>
+      <div className="turns">
+        {messages
+          .filter(
+            (m) =>
+              m.role !== 'user' ||
+              !isBareShare(m.content, [item.canonicalUrl, item.sourceUrl, chat.sourceUrl]),
+          )
+          .map((m) => (
+            <Turn msg={m} key={m.id} onSaveTask={(t) => void saveTask(t, null)} />
           ))}
-        </ul>
-      )}
-
-      <div className="turns rail" data-rail-pct={Math.round(railPct / 10) * 10}>
-        {messages.map((m) => (
-          <Turn
-            msg={m}
-            run={runOf(m.runId)}
-            key={m.id}
-            onSaveTask={(t) => void saveTask(t, null)}
-          />
-        ))}
         {liveRun && (
           <div className="turn answer live">
             <div className="turn-label">
@@ -260,16 +245,32 @@ export function Chat({ id }: { id: string }) {
         <div ref={bottom} />
       </div>
 
-      <AnswerTabs
-        claims={lastAnswer?.claims ?? []}
-        entities={entities}
-        extractions={extractions}
-        runs={runs}
-        events={events}
-        onOpenRun={loadEvents}
-        onCancel={(runId) => api.cancelRun(runId).then(load).catch(fail)}
-        onSave={(e) => void saveThing(e)}
-      />
+      {lastAnswer && lastAnswer.claims.length > 0 && <Claims claims={lastAnswer.claims} />}
+      {lastAnswer && <SourcesReport claims={lastAnswer.claims} />}
+
+      {chat.tags.length > 0 && (
+        <ul className="chips chat-tags" aria-label="Tags">
+          {chat.tags.map((t) => (
+            <li key={t}>
+              <button type="button" className="tag" onClick={() => setSheet('tags')}>
+                {t}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <button
+        type="button"
+        className="m-detail"
+        onClick={() => setSheet('detail')}
+        aria-label="Open this page's detail: things, sources and the run log"
+      >
+        <span>{entities.length > 0 ? `${entities.length} things` : 'No things'}</span>
+        {lastAnswer && <span>{lastAnswer.claims.length} claims</span>}
+        {lastRun && <span>{runFooter(lastRun)}</span>}
+        <Icon name="chevron-down" size={14} className="m-detail-chev" />
+      </button>
 
       <FollowUp onSend={send} onResearch={research} busy={active.length > 0} />
 
@@ -314,6 +315,22 @@ export function Chat({ id }: { id: string }) {
         description="Something to do about this page. It lands on your list with a link back here."
       >
         <TaskForm onSave={saveTask} />
+      </Sheet>
+      <Sheet
+        open={sheet === 'detail'}
+        onOpenChange={(o) => setSheet(o ? 'detail' : null)}
+        title="This page's detail"
+        description="What the brain pulled out of this one, the text it read, and every run it took to answer."
+      >
+        <AnswerTabs
+          entities={entities}
+          extractions={extractions}
+          runs={runs}
+          events={events}
+          onOpenRun={loadEvents}
+          onCancel={(runId) => void api.cancelRun(runId).then(load).catch(fail)}
+          onSave={(e) => void saveThing(e)}
+        />
       </Sheet>
     </div>
   );

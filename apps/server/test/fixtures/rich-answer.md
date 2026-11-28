@@ -1,4 +1,4 @@
-**Short version:** the Osmo Pocket 3 is the better travel camera for most people; the Insta360 Ace Pro 2 wins only if you mostly shoot action or in the rain.
+**Short version:** the Osmo Pocket 3 is the better travel camera for most people[[1]]; the Insta360 Ace Pro 2 wins only if you mostly shoot action or in the rain[[2]]. One thing the videos get wrong: the Pocket 3 is not the cheaper of the two[[3]].
 
 ## How they compare
 
@@ -6,7 +6,7 @@
 |---|---|---|
 | Sensor | 1-inch | 1/1.3-inch |
 | Stabilisation | 3-axis gimbal | Electronic |
-| Waterproof | No | 12 m |
+| Waterproof | No | 12 m with the dive case |
 | Street price | $519 | $399 |
 
 ```chart
@@ -29,5 +29,5 @@ flowchart TD
 Sources: https://www.dji.com/osmo-pocket-3 https://www.insta360.com/product/insta360-ace-pro-2
 
 ```answer
-{"summary":"Pocket 3 for travel vlogs, Ace Pro 2 for action and rain.","category":"tech","entities":[{"kind":"product","name":"DJI Osmo Pocket 3","attributes":{"price":"$519"},"url":"https://www.dji.com/osmo-pocket-3","confidence":0.9},{"kind":"product","name":"Insta360 Ace Pro 2","attributes":{"price":"$399"},"url":"https://www.insta360.com/product/insta360-ace-pro-2","confidence":0.9}],"claims":[{"claim":"The Pocket 3 has a 1-inch sensor.","verdict":"true","confidence":0.95,"sources":["https://www.dji.com/osmo-pocket-3"]}],"recommendations":["Buy the Pocket 3 creator kit if you record talking-head clips."],"tags":["camera","travel","vlog"]}
+{"summary":"Pocket 3 for travel vlogs, Ace Pro 2 for action and rain.","category":"tech","entities":[{"kind":"product","name":"DJI Osmo Pocket 3","attributes":{"price":"$519"},"url":"https://www.dji.com/osmo-pocket-3","confidence":0.9},{"kind":"product","name":"Insta360 Ace Pro 2","attributes":{"price":"$399"},"url":"https://www.insta360.com/product/insta360-ace-pro-2","confidence":0.9}],"claims":[{"claim":"The Pocket 3 has a 1-inch sensor.","verdict":"true","confidence":0.95,"sources":["https://www.dji.com/osmo-pocket-3"]},{"claim":"The Ace Pro 2 is waterproof to 12 m.","verdict":"mixed","confidence":0.6,"sources":["https://www.insta360.com/product/insta360-ace-pro-2"],"reason":"Insta360 rates the camera to 10 m on its own; 12 m is the figure with the dive case fitted."},{"claim":"The Pocket 3 is cheaper than the Ace Pro 2.","verdict":"false","confidence":0.9,"sources":["https://www.dji.com/osmo-pocket-3","https://www.insta360.com/product/insta360-ace-pro-2"],"reason":"It costs more: $519 against $399 for the body alone."}],"recommendations":["Buy the Pocket 3 creator kit if you record talking-head clips."],"tags":["camera","travel","vlog"]}
 ```

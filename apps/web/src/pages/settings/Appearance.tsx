@@ -67,14 +67,14 @@ export function AppearanceSettings() {
         />
         <div className="srow preview">
           <p className="prose-sample">
-            The quick brown fox jumps over the lazy dog, and the margin rail marks where the answer
-            starts.
+            The quick brown fox jumps over the lazy dog, and a small mark says which claim backs the
+            sentence.
           </p>
         </div>
       </Group>
       <Group
         title="Motion"
-        foot="On removes sheet slides, tab fades and the rail's fill. Your system setting is honoured either way."
+        foot="On removes sheet slides, tab fades and the claim flash. Your system setting is honoured either way."
       >
         <Row
           label="Reduce motion"

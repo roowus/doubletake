@@ -1,21 +1,10 @@
 import type { Answer as AnswerT, MessageDto, RunDto } from '@doubletake/shared';
 import { Icon } from './Icon';
 import { Markdown } from './Markdown';
+import { hostOf } from './SourceLine';
 
-/** "Sep 4, 14:02" for the dateline above each turn. */
-export function dateline(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
-
-/** Run meta set in mono small caps: mode, brain (when pinned), cost, duration. */
-export function runMeta(run: RunDto | undefined): string[] {
-  if (!run) return [];
+/** Run meta set in mono small caps: mode, brain (when pinned), duration, cost. */
+export function runMeta(run: RunDto): string[] {
   const out: string[] = [run.mode];
   if (run.pinned) out.push(`${run.adapter}${run.model ? `@${run.model}` : ''}`);
   if (run.startedAt && run.finishedAt) {
@@ -28,18 +17,51 @@ export function runMeta(run: RunDto | undefined): string[] {
   return out;
 }
 
+/** "Sep 7" for the source line; the year only when it is not this one. */
+export function dateline(iso: string): string {
+  const d = new Date(iso);
+  const sameYear = d.getFullYear() === new Date().getFullYear();
+  return d.toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    ...(sameYear ? {} : { year: 'numeric' }),
+  });
+}
+
 /**
- * One turn of the notebook. The owner's questions and notes are a dated single line in the
- * UI face ("You asked"); the brain's answers are full-width prose in the reading face with
- * the run's meta set in the margin. No bubbles: the page is the answer.
+ * The owner's own words: a quiet dated one-liner and the text. Used for the note that came
+ * with the share and for every follow-up question. The shared URL itself is never repeated
+ * here; the source line above the title already names it.
+ */
+export function AskLine({ text, at }: { text: string; at: string }) {
+  return (
+    <div className="turn you">
+      <div className="turn-label">
+        <span>You asked</span>
+        <time dateTime={at}>{dateline(at)}</time>
+      </div>
+      <p className="you-text">{text}</p>
+    </div>
+  );
+}
+
+/** True for a message that is nothing but the shared link, which the source line covers. */
+export function isBareShare(content: string, urls: (string | null | undefined)[]): boolean {
+  const text = content.trim();
+  if (!/^https?:\/\/\S+$/.test(text)) return false;
+  return urls.some((u) => !!u && u.trim() === text);
+}
+
+/**
+ * One turn of the page. The owner's lines are a quiet one-liner ("You asked", a date, the
+ * text); the brain's answers are the page itself: full-width prose, no label, no bubble, no
+ * meta above it. The run's meta lives in the footer row now (ADR 0034).
  */
 export function Turn({
   msg,
-  run,
   onSaveTask,
 }: {
   msg: MessageDto;
-  run?: RunDto | undefined;
   /** Keep one recommendation as a task on the saved list (ADR 0031). */
   onSaveTask?: ((text: string) => void) | undefined;
 }) {
@@ -50,27 +72,9 @@ export function Turn({
         <span>{msg.content}</span>
       </div>
     );
-  if (msg.role === 'user')
-    return (
-      <div className="turn you">
-        <div className="turn-label">
-          <span>{msg.kind === 'question' ? 'You wrote' : 'You asked'}</span>
-          <time dateTime={msg.createdAt}>{dateline(msg.createdAt)}</time>
-        </div>
-        <p className="you-text">{msg.content}</p>
-      </div>
-    );
-  const meta = runMeta(run);
+  if (msg.role === 'user') return <AskLine text={msg.content} at={msg.createdAt} />;
   return (
     <article className="turn answer">
-      {meta.length > 0 && (
-        <div className="turn-label">
-          {meta.map((m) => (
-            <span key={m}>{m}</span>
-          ))}
-          <time dateTime={msg.createdAt}>{dateline(msg.createdAt)}</time>
-        </div>
-      )}
       <div className="prose">
         <Markdown>{msg.content}</Markdown>
         {msg.structured && msg.kind === 'answer' && (
@@ -114,37 +118,107 @@ function Recommendations({
   );
 }
 
-/** Verdict chips for the Claims tab: ✓ true, ~ mixed, ✗ false, ? unverified, with sources. */
+const VERDICT_LABEL: Record<string, string> = {
+  true: 'supported',
+  mixed: 'contested',
+  false: 'refuted',
+  unverified: 'unverified',
+};
+
+/** "1 supported · 1 contested · 1 refuted", in claim order, skipping empty counts. */
+function tally(claims: AnswerT['claims']): string {
+  const counts = new Map<string, number>();
+  for (const c of claims) counts.set(c.verdict, (counts.get(c.verdict) ?? 0) + 1);
+  return [...counts.entries()].map(([v, n]) => `${n} ${VERDICT_LABEL[v] ?? v}`).join(' · ');
+}
+
+function sourceHosts(urls: string[]): string {
+  const hosts = [...new Set(urls.map((u) => hostOf(u) ?? u))];
+  return hosts.length > 0 ? hosts.join(', ') : 'no source found';
+}
+
+/** The part of a URL after the host, so the sources report does not print the host twice. */
+function pathOf(url: string): string {
+  try {
+    const u = new URL(url);
+    return `${u.pathname}${u.search}`.replace(/\/$/, '') || '/';
+  } catch {
+    return url;
+  }
+}
+
+/**
+ * The claims report: what backs the answer, printed under it. Each row is a claim, the verdict
+ * the brain reached, where it looked, and (when the verdict is not plainly true) the reason it
+ * gives. Rows carry `id="claim-n"` so an evidence mark in the prose can jump to them.
+ */
 export function Claims({ claims }: { claims: AnswerT['claims'] }) {
   if (claims.length === 0)
-    return <p className="muted small empty-note">This answer made no checkable claims.</p>;
+    return (
+      <p className="muted small empty-note">
+        This answer made no checkable claims, so there was nothing to verify.
+      </p>
+    );
   return (
-    <ol className="claims">
-      {claims.map((c) => (
-        <li className="claim" key={c.claim}>
-          <span className={`verdict ${c.verdict}`} title={`Verdict: ${c.verdict}`}>
-            <Icon
-              size={12}
-              name={c.verdict === 'true' ? 'check' : c.verdict === 'false' ? 'x' : 'info'}
-            />
-            {c.verdict}
-          </span>
-          <div className="claim-body">
-            <p>{c.claim}</p>
-            <div className="claim-meta">
-              <span className="confidence" title={`confidence ${Math.round(c.confidence * 100)}%`}>
-                <span className="bar" data-pct={Math.round(c.confidence * 10) * 10} />
-              </span>
-              {c.sources.map((s, i) => (
-                <a key={s} href={s} target="_blank" rel="noopener noreferrer" className="ref">
-                  [{i + 1}]
-                </a>
-              ))}
+    <div className="report">
+      <div className="report-h">
+        <span>Claims</span>
+        <span className="report-c">{tally(claims)}</span>
+      </div>
+      <ol className="claims">
+        {claims.map((c, i) => (
+          <li className="claim" key={c.claim} id={`claim-${i + 1}`}>
+            <span className="claim-n">{i + 1}</span>
+            <div className="claim-body">
+              <p className="claim-text">{c.claim}</p>
+              <div className="claim-meta">
+                <span className={`verdict ${c.verdict}`} title={`Verdict: ${c.verdict}`}>
+                  {c.verdict}
+                </span>
+                <span className="claim-src">{sourceHosts(c.sources)}</span>
+              </div>
+              {c.reason && <p className="claim-reason">{c.reason}</p>}
             </div>
-          </div>
-        </li>
-      ))}
-    </ol>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
+/**
+ * The sources report: the distinct URLs the claims cite, each with the claim numbers that
+ * point at it. The host leads and the path follows in mono, so the same host is not printed
+ * twice. Answers without citations say so rather than rendering an empty list.
+ */
+export function SourcesReport({ claims }: { claims: AnswerT['claims'] }) {
+  const byUrl = new Map<string, number[]>();
+  claims.forEach((c, i) => {
+    for (const url of c.sources) byUrl.set(url, [...(byUrl.get(url) ?? []), i + 1]);
+  });
+  const rows = [...byUrl.entries()];
+  return (
+    <div className="report">
+      <div className="report-h">
+        <span>Sources</span>
+        <span>{rows.length > 0 ? `${rows.length} cited` : ''}</span>
+      </div>
+      {rows.length === 0 ? (
+        <p className="muted small empty-note">No sources were cited for this answer.</p>
+      ) : (
+        <ul className="srclist">
+          {rows.map(([url, ns]) => (
+            <li key={url}>
+              <a href={url} target="_blank" rel="noopener noreferrer">
+                <span className="src-host">{hostOf(url) ?? url}</span>
+                <span className="src-url">{pathOf(url)}</span>
+              </a>
+              <span className="src-n">{ns.map((n) => `[${n}]`).join(' ')}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 

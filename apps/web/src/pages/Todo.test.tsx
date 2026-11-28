@@ -2,7 +2,7 @@
 
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { type Entity, type MessageDto, parseAnswerBlock, type RunDto } from '@doubletake/shared';
+import { type Entity, type MessageDto, parseAnswerBlock } from '@doubletake/shared';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import { Turn } from '../components/Answer';
@@ -25,19 +25,6 @@ const entities: Entity[] = [
   { kind: 'tool', name: 'ripgrep', attributes: {}, confidence: 0.8 },
 ];
 
-const run: RunDto = {
-  id: 'r1',
-  kind: 'research',
-  mode: 'standard',
-  adapter: 'claude',
-  model: null,
-  pinned: false,
-  status: 'done',
-  costUsd: null,
-  startedAt: '2026-09-07T10:00:00Z',
-  finishedAt: '2026-09-07T10:00:30Z',
-  error: null,
-};
 const msg: MessageDto = {
   id: 'm1',
   role: 'assistant',
@@ -62,10 +49,10 @@ describe('saving things to the list (ADR 0031)', () => {
   });
 
   it('recommendations offer "save as a task" when the turn gets onSaveTask', () => {
-    const html = renderToStaticMarkup(<Turn msg={msg} run={run} onSaveTask={() => {}} />);
+    const html = renderToStaticMarkup(<Turn msg={msg} onSaveTask={() => {}} />);
     expect(html).toContain('<h3>Recommendations</h3>');
     expect(html).toContain('aria-label="Save this recommendation as a task"');
-    const plain = renderToStaticMarkup(<Turn msg={msg} run={run} />);
+    const plain = renderToStaticMarkup(<Turn msg={msg} />);
     expect(plain).not.toContain('Save this recommendation as a task');
   });
 });

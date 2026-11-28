@@ -335,8 +335,9 @@ is not a second design system.
 hand-written fixtures; the chat is `apps/server/test/fixtures/rich-answer.md`, so the GFM
 table, the ```chart bar chart and the ```mermaid flowchart are exercised end to end, including
 the lazy Mermaid chunk and the SVG sanitizer. `visual.spec.ts` opens Inbox, the filter sheet,
-Library, the chat and its Claims tab, Compose, Settings, Appearance and Welcome in three
-projects (phone 390×844 light and dark at 2×, desktop 1280×860 light), asserts the key content
+Library, the chat with its printed evidence report and detail sheet, Compose, Settings,
+Appearance and Welcome in three projects (phone 390×844 light and dark at 2×, desktop
+1280×860 light), asserts the key content
 is present, then `toHaveScreenshot` (`maxDiffPixelRatio: 0.01`, animations disabled). Snapshots
 are rendered on Linux only (`ignoreSnapshots` elsewhere unless `E2E_SNAPSHOTS=1`), committed
 under `e2e/__screenshots__/` and compared by the `web-visual` CI job; to re-record them run
@@ -394,17 +395,17 @@ linking to its chat, a collapsible list of unlocated places with a Maps search l
 own stylesheet arrives with the lazy chunk, so the theme overrides for controls, popups and
 attribution are scoped under `.map` to win, and the ink theme darkens the OpenStreetMap tiles
 with a CSS filter (`--map-filter`, `--map-sea`) instead of a second tile provider. The chat view is a **notebook page** about one shared thing, not a chat
-transcript (`pages/Chat.tsx`, split into `components/ChatHeader.tsx`, `ClipCard.tsx`,
+transcript (`pages/Chat.tsx`, split into `components/ChatHeader.tsx`, `SourceLine.tsx`,
 `Answer.tsx`, `AnswerTabs.tsx` and `FollowUp.tsx`): nothing sits in a bubble. The header is
-back, the status badge and an overflow menu (Tags…, Collections…, **Research again, deeper**),
-then the title in the prose face with the platform glyph and one mono small-caps meta line
-(mode, category, host, total cost). The **clip card** shows what was shared (thumbnail, image
-or sampled frame, title, canonical link; `item.preview` on `GET /api/chats/:id` names the
-asset and `GET /api/chats/:id/media/:mediaId` serves it behind the same device-token gate,
-fetched with a bearer header into a blob URL so the token never appears in an `src`; typed
-text has no card), followed by the tag chips. Turns then run down the page: the owner's note
-and follow-up questions are a dated one-line label ("You wrote" / "You asked") over italic
-prose, and every answer is full-width prose (Figtree, measure capped at 68 ch, GitHub-
+back, the status badge and an overflow menu (Tags…, Collections…, Add a task…, **Research
+again, deeper**), then one **source line** (platform glyph or 22 px thumbnail · host · date)
+and the title in the prose face. The source line replaces the old clip card (ADR 0034): the
+thumbnail is `item.preview` on `GET /api/chats/:id` and `GET /api/chats/:id/media/:mediaId`
+serves it behind the same device-token gate, fetched with a bearer header into a blob URL so
+the token never appears in an `src`; typed text and uploads without a host say "Shared photo
+/ video". Turns then run down the page: the owner's note and follow-up questions are a dated
+one-line label ("You wrote" / "You asked") over italic prose, and every answer is full-width
+prose with no label and no rule beside it (Figtree, measure capped at 68 ch, GitHub-
 flavoured Markdown via `react-markdown` + `remark-gfm`: tables with hairlines and a sticky
 first column on phones, task lists, blockquotes set as margin notes, code on `--code-bg`; raw
 HTML never renders). Three fenced blocks are drawn instead of shown as code
@@ -423,19 +424,24 @@ parse; \`\`\`svg is a small diagram the brain drew itself, inlined only after th
 `cleanSvg` profile (no styles either). The system prompt documents all three and when to use
 which (numbers → chart, structure → mermaid, spatial → svg) and forbids facts that live only
 in a picture (`apps/server/src/brains/prompts.ts`, `test/prompts.test.ts`, fixture
-`test/fixtures/rich-answer.md` shared with the web render test). The prose sits beside the **margin rail**, the app's signature element: a 3 px rule in the accent colour that
-marks where an answer starts, with the run's meta (mode, brain when pinned, duration, cost,
-time) in mono small caps above it. While a run is live the rail is drawn faded and fills
-top-to-bottom as the run moves through queued → extracting → classifying → researching (a
-`data-rail-pct` attribute mapped to CSS, nudged by the number of tool events), skeleton lines
-stand in for the answer and a Cancel button sits in the label. Under the turns four segmented
-tabs (Base UI `Tabs`) hold the detail: **Claims** (verdict chip in `--ok/--warn/--err`, a
-confidence bar, numbered source links), **Things** (entities grouped by kind with their
-attributes and links), **Sources** (every extraction the brain saw — transcript, on-screen
-text, frame descriptions, caption, comments, thread, page text — flattened to readable text by
-`extract/flatten.ts`, one collapsible per extraction) and **Run** (each run as a disclosure with
-its status, mode, duration and cost, and the live or backfilled event timeline from
-`GET /api/chats/:id/runs/:runId/events` and the `/api/events` WebSocket). Tags and collections
+`test/fixtures/rich-answer.md` shared with the web render test). Inline evidence is **real
+data, not client-side guessing**: the prompt tells the brain to write the claim's 1-based
+index in double square brackets (`[[2]]`), and `Markdown.tsx` turns each mark into a `<sup
+class="mark">` that links to `#claim-n`; a trailing literal `Sources: …` paragraph is dropped
+because the report owns it. Under the prose the **claims report** prints every claim with its
+verdict chip (`--ok/--warn/--err`), the hosts it was checked against, and — for any verdict
+that is not plainly true — the one-line `reason` the brain gives; the **sources report**
+prints each distinct cited URL once with the claim numbers that cite it. The brain is
+instructed to be blunt: state the refutation in its own sentence, keep the claim with
+`verdict: false`, and say plainly when nothing could be verified. The last row on the page is
+a single **detail row** (`8 things · 3 claims · run 12 s · $0.04`) that opens a sheet
+(`AnswerTabs.tsx`) with three tabs: **Things** (entities grouped by kind with their attributes
+and links), **Sources** (every extraction the brain saw — transcript, on-screen text, frame
+descriptions, caption, comments, thread, page text — flattened to readable text by
+`extract/flatten.ts`) and **Run** (each run as a disclosure with its status, mode, duration
+and cost, and the live or backfilled event timeline from
+`GET /api/chats/:id/runs/:runId/events` and the `/api/events` WebSocket). While a run is live
+skeleton lines stand in for the answer and a Cancel button sits above them. Tags and collections
 are edited from bottom sheets opened by the tag chips or the overflow menu (`TagEditor.tsx`,
 `CollectionPicker` from `pages/Entities.tsx`; every tag edit re-indexes FTS and re-exports the
 Markdown note). The follow-up composer is a sticky bar at the foot of the page: a one-line
@@ -476,8 +482,8 @@ window and navigates to `/chat/<id>`, else opens one) handlers. First run (`page
 pairing code shown as a QR. A failed `health` probe assumes an owner exists (so both the password
 and the pairing-code paths stay reachable) and shows the error inline rather than leaving the
 submit button disabled. The page is two columns from 900 px (the brand statement and the
-three-step "how it works" list set against the margin rail, the form beside it) and one column
-on phones. Android wraps this in Capacitor and adds the native share activity and FCM.
+three-step "how it works" list, the form beside it) and one column on phones. Android wraps
+this in Capacitor and adds the native share activity and FCM.
 Desktop uses the installed PWA over Tailscale.
 
 ### API surface (M1 + M2 + M4 + M6)

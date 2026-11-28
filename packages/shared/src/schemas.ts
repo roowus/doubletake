@@ -114,6 +114,8 @@ export const Claim = z.object({
   ),
   confidence: z.number().min(0).max(1).default(0.5),
   sources: z.array(z.string()).default([]),
+  /** One line saying why, for any verdict that is not plainly true (ADR 0034). */
+  reason: z.string().optional(),
 });
 export type Claim = z.infer<typeof Claim>;
 

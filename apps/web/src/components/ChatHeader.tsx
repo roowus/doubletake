@@ -1,28 +1,26 @@
 import type { ChatDetail } from '@doubletake/shared';
-import { hostOf } from './ClipCard';
-import { Icon, platformIcon } from './Icon';
+import type React from 'react';
+import { Icon } from './Icon';
 import { Menu, type MenuAction } from './Menu';
 
 /**
- * Top of a notebook page: back, the title in the reading face, the status, and a meta line
- * set in mono (source host, mode, question type, spend). The overflow menu holds the
- * occasional actions so they do not compete with the answer.
+ * The top of the answer page: back, status while a run is working, the overflow menu, then the
+ * source line, then the title. Nothing else: the run's mode/cost sits in the footer row
+ * (ADR 0034), so the header is a control row and two lines of type, and the answer starts
+ * immediately under it.
  */
 export function ChatHeader({
   chat,
-  item,
-  totalCost,
+  source,
   onBack,
   actions,
 }: {
   chat: ChatDetail['chat'];
-  item: ChatDetail['item'];
-  totalCost: number;
+  /** The source line (host, date, thumbnail) rendered under the controls, above the title. */
+  source?: React.ReactNode;
   onBack: () => void;
   actions: (MenuAction | 'separator')[];
 }) {
-  const url = item.canonicalUrl ?? chat.sourceUrl;
-  const host = hostOf(url);
   return (
     <header className="chat-head">
       <div className="chat-head-row">
@@ -33,22 +31,8 @@ export function ChatHeader({
         <span className="grow" />
         <Menu label="More actions" trigger={<Icon name="more" />} items={actions} />
       </div>
-      <h1 className="chat-title">
-        <Icon name={platformIcon(chat.platform)} size={18} className="glyph" />
-        {chat.title}
-      </h1>
-      <div className="mono-meta chat-meta">
-        {host && url && (
-          <a href={url} target="_blank" rel="noopener noreferrer">
-            {host}
-            <Icon name="external-link" size={12} />
-          </a>
-        )}
-        {item.modeEffective && <span>{item.modeEffective}</span>}
-        {item.questionType && <span>{item.questionType.replace(/_/g, ' ')}</span>}
-        {chat.category && <span>{chat.category}</span>}
-        {totalCost > 0 && <span>${totalCost.toFixed(3)}</span>}
-      </div>
+      {source}
+      <h1 className="chat-title">{chat.title}</h1>
     </header>
   );
 }

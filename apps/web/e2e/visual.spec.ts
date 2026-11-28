@@ -50,11 +50,22 @@ test('chat with table, chart and diagram', async ({ page }) => {
   await expect(page).toHaveScreenshot('chat.png', { fullPage: true });
 });
 
-test('chat claims tab', async ({ page }) => {
+test('chat prints the evidence report and the detail row', async ({ page }) => {
   await open(page, `/chat/${CHAT}`);
-  await page.getByRole('tab', { name: /Claims/ }).click();
+  // The claims and sources reports are printed under the answer, not hidden behind tabs.
   await expect(page.getByText('1-inch sensor')).toBeVisible();
-  await expect(page).toHaveScreenshot('chat-claims.png', { fullPage: true });
+  await expect(page.locator('.report .claim')).toHaveCount(3);
+  await expect(page.locator('.report .verdict.false')).toHaveText('false');
+  await expect(page.locator('.srclist li').first()).toBeVisible();
+  // The marks in the prose point at those rows.
+  await expect(page.locator('.prose sup.mark a[href="#claim-1"]')).toBeVisible();
+  // One footer row opens things and runs in a sheet.
+  const detail = page.locator('.m-detail');
+  await expect(detail).toBeVisible();
+  await detail.click();
+  await expect(page.getByRole('dialog')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page).toHaveScreenshot('chat-report.png', { fullPage: true });
 });
 
 test('compose', async ({ page }) => {

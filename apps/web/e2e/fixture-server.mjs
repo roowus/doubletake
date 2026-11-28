@@ -124,10 +124,12 @@ const detail = {
   },
   messages: [
     {
+      // The note that came with the share. The shared URL itself is not a message: the source
+      // line above the title names it (ADR 0034).
       id: 'm1',
       role: 'user',
-      kind: 'share',
-      content: 'https://www.youtube.com/watch?v=fixture01',
+      kind: 'question',
+      content: 'Which one should I take on the Portugal trip? Mostly walking around and food.',
       structured: null,
       runId: null,
       createdAt: T(10, 0),
